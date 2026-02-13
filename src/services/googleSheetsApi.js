@@ -168,6 +168,40 @@ class GoogleSheetsService {
     // On garde les noms de colonnes EXACTS du Google Sheet
     // et on ajoute des champs calculés
 
+    // Normaliser les types de biens pour éviter les doublons (Villa/villa, Studio/studio, etc.)
+    normalizePropertyType(type) {
+        if (!type) return '';
+
+        // Convertir en minuscules pour la comparaison
+        const lowerType = type.toLowerCase().trim();
+
+        // Mapping des types normalisés (première lettre en majuscule)
+        const typeMapping = {
+            'villa': 'Villa',
+            'studio': 'Studio',
+            'appartement': 'Appartement',
+            'duplex': 'Duplex',
+            'maison': 'Maison',
+            'bureau': 'Bureau',
+            'local commercial': 'Local commercial',
+            'terrain': 'Terrain',
+            'immeuble': 'Immeuble',
+            'entrepôt': 'Entrepôt',
+            'entrepot': 'Entrepôt',
+            'chambre': 'Chambre',
+            'résidence': 'Résidence',
+            'residence': 'Résidence',
+            'loft': 'Loft',
+            'penthouse': 'Penthouse',
+            'rez-de-chaussée': 'Rez-de-chaussée',
+            'rez de chaussee': 'Rez-de-chaussée',
+            'rez-de-chaussee': 'Rez-de-chaussée'
+        };
+
+        // Retourner le type normalisé ou capitaliser la première lettre
+        return typeMapping[lowerType] || type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+    }
+
     transformProperty(raw, index) {
         const priceStr = raw['Prix'] || '0';
         const rawPrice = parseInt(priceStr.replace(/[\s.,]/g, '')) || 0;
@@ -183,8 +217,8 @@ class GoogleSheetsService {
 
         return {
             id: index + 1,
-            // Données brutes du sheet
-            typeBien: raw['Type de bien'] || '',
+            // Données brutes du sheet (avec normalisation du type)
+            typeBien: this.normalizePropertyType(raw['Type de bien']),
             typeOffre: raw["Type d'offre"] || '',
             zone: raw['Zone géographique précise'] || '',
             commune: raw['Commune'] || '',
