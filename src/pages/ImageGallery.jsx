@@ -306,6 +306,7 @@ const ImageGallery = () => {
     const [filters, setFilters] = useState({
         type: 'all',
         commune: 'all',
+        quartier: 'all',
         pieces: 'all',
         minPrice: '',
         maxPrice: '',
@@ -342,6 +343,7 @@ const ImageGallery = () => {
     // Extraire les options uniques
     const uniqueTypes = [...new Set(properties.map(p => p.typeBien).filter(Boolean))].sort();
     const uniqueCommunes = [...new Set(properties.map(p => p.commune).filter(Boolean))].sort();
+    const uniqueQuartiers = [...new Set(properties.map(p => p.zone).filter(Boolean))].sort();
     const uniquePieces = [...new Set(properties.map(p => p.chambres).filter(p => p > 0))].sort((a, b) => a - b);
 
     const filteredProperties = properties.filter(property => {
@@ -365,11 +367,13 @@ const ImageGallery = () => {
 
         const matchesCommune = filters.commune === 'all' || property.commune === filters.commune;
 
+        const matchesQuartier = filters.quartier === 'all' || property.zone === filters.quartier;
+
         let matchesPrice = true;
         if (filters.minPrice && property.rawPrice < parseFloat(filters.minPrice)) matchesPrice = false;
         if (filters.maxPrice && property.rawPrice > parseFloat(filters.maxPrice)) matchesPrice = false;
 
-        return matchesSearch && matchesType && matchesStatus && matchesMeuble && matchesPieces && matchesCommune && matchesPrice;
+        return matchesSearch && matchesType && matchesStatus && matchesMeuble && matchesPieces && matchesCommune && matchesQuartier && matchesPrice;
     });
 
     const handleViewDetails = (property) => {
@@ -378,7 +382,7 @@ const ImageGallery = () => {
     };
 
     const resetFilters = () => {
-        setFilters({ type: 'all', status: 'all', meuble: 'all', pieces: 'all', commune: 'all' });
+        setFilters({ type: 'all', status: 'all', meuble: 'all', pieces: 'all', commune: 'all', quartier: 'all' });
         setSearchTerm('');
     };
 
@@ -418,7 +422,7 @@ const ImageGallery = () => {
                         <Search size={18} />
                         <input
                             type="text"
-                            placeholder="Rechercher (commune, type, mot-clé)..."
+                            placeholder="Rechercher (commune, quartier, type, mot-clé)..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -454,7 +458,7 @@ const ImageGallery = () => {
                     >
                         <Filter size={18} />
                         Filtres
-                        {(filters.type !== 'all' || filters.commune !== 'all') && (
+                        {(filters.type !== 'all' || filters.commune !== 'all' || filters.quartier !== 'all') && (
                             <span className="filter-badge" style={{
                                 background: filterOpen ? 'white' : 'var(--primary)',
                                 color: filterOpen ? 'var(--primary)' : 'white',
@@ -518,6 +522,19 @@ const ImageGallery = () => {
                                 <option value="all">Toutes les communes</option>
                                 {uniqueCommunes.map(commune => (
                                     <option key={commune} value={commune}>{commune}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="filter-group">
+                            <label>Quartier</label>
+                            <select
+                                value={filters.quartier}
+                                onChange={(e) => setFilters({ ...filters, quartier: e.target.value })}
+                            >
+                                <option value="all">Tous les quartiers</option>
+                                {uniqueQuartiers.map(quartier => (
+                                    <option key={quartier} value={quartier}>{quartier}</option>
                                 ))}
                             </select>
                         </div>

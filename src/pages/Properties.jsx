@@ -303,6 +303,7 @@ const Properties = () => {
     const [filters, setFilters] = useState({
         type: 'all',
         commune: 'all',
+        quartier: 'all',
         pieces: 'all',
         minPrice: '',
         maxPrice: '',
@@ -336,11 +337,13 @@ const Properties = () => {
     // Extraire les options uniques depuis les données réelles
     const uniqueTypes = [...new Set(properties.map(p => p.typeBien).filter(Boolean))].sort();
     const uniqueCommunes = [...new Set(properties.map(p => p.commune).filter(Boolean))].sort();
+    const uniqueQuartiers = [...new Set(properties.map(p => p.zone).filter(Boolean))].sort();
     const uniquePieces = [...new Set(properties.map(p => p.chambres).filter(p => p > 0))].sort((a, b) => a - b);
 
     const filteredProperties = properties.filter(property => {
         const matchesSearch =
             (property.commune || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (property.zone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (property.typeBien || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (property.publiePar || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (property.caracteristiques || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -359,11 +362,13 @@ const Properties = () => {
 
         const matchesCommune = filters.commune === 'all' || property.commune === filters.commune;
 
+        const matchesQuartier = filters.quartier === 'all' || property.zone === filters.quartier;
+
         let matchesPrice = true;
         if (filters.minPrice && property.rawPrice < parseFloat(filters.minPrice)) matchesPrice = false;
         if (filters.maxPrice && property.rawPrice > parseFloat(filters.maxPrice)) matchesPrice = false;
 
-        return matchesSearch && matchesType && matchesStatus && matchesMeuble && matchesPieces && matchesCommune && matchesPrice;
+        return matchesSearch && matchesType && matchesStatus && matchesMeuble && matchesPieces && matchesCommune && matchesQuartier && matchesPrice;
     });
 
     const handleViewDetails = (property) => {
@@ -386,7 +391,7 @@ const Properties = () => {
     };
 
     const resetFilters = () => {
-        setFilters({ type: 'all', status: 'all', meuble: 'all', pieces: 'all', commune: 'all' });
+        setFilters({ type: 'all', status: 'all', meuble: 'all', pieces: 'all', commune: 'all', quartier: 'all' });
         setSearchTerm('');
     };
 
@@ -469,6 +474,16 @@ const Properties = () => {
                                 <option value="all">Toutes</option>
                                 {uniqueCommunes.map(commune => (
                                     <option key={commune} value={commune}>{commune}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="filter-group">
+                            <label>Quartier</label>
+                            <select value={filters.quartier} onChange={(e) => setFilters({ ...filters, quartier: e.target.value })}>
+                                <option value="all">Tous</option>
+                                {uniqueQuartiers.map(quartier => (
+                                    <option key={quartier} value={quartier}>{quartier}</option>
                                 ))}
                             </select>
                         </div>
