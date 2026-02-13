@@ -1,5 +1,6 @@
 .properties-v2 {
-    padding: 2rem;
+    padding: 2rem 2rem 2rem 2.5rem;
+    /* Ajout de padding-left pour éviter le collage à la sidebar */
     max-width: 1400px;
     margin: 0 auto;
 }
@@ -9,18 +10,35 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 2rem;
+    gap: 2rem;
+    /* Espace entre gauche et droite */
+}
+
+.header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    /* Espace vertical entre titre et compteur */
 }
 
 .header-left h2 {
-    font-size: 1.75rem;
-    font-weight: 800;
+    font-size: var(--text-3xl);
+    /* 30px */
+    font-weight: var(--font-extrabold);
     color: var(--text-primary);
-    margin-bottom: 0.25rem;
+    margin: 0;
+    /* Supprime la marge par défaut */
+    line-height: var(--leading-tight);
+    letter-spacing: var(--tracking-tight);
 }
 
 .properties-count {
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
+    /* 14px */
     color: var(--text-secondary);
+    font-weight: var(--font-medium);
+    display: block;
+    /* Force le passage à la ligne */
 }
 
 /* Toolbar */

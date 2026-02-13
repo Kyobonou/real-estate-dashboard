@@ -4,8 +4,9 @@
     min-height: 100vh;
     background-color: var(--bg-primary);
     color: var(--text-primary);
-    padding: 2rem;
-    font-family: 'Inter', sans-serif;
+    padding: 2rem 2rem 2rem 2.5rem;
+    /* Ajout de padding-left pour éviter le collage à la sidebar */
+    font-family: var(--font-body);
 }
 
 .gallery-header {
@@ -17,17 +18,19 @@
 .header-content {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 1.5rem;
 }
 
 .header-content h1 {
-    font-size: 1.8rem;
-    font-weight: 700;
+    font-size: var(--text-3xl);
+    font-weight: var(--font-extrabold);
     margin: 0;
     background: var(--gradient-primary);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
+    line-height: var(--leading-tight);
+    letter-spacing: var(--tracking-tight);
 }
 
 .back-btn {
