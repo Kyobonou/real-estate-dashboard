@@ -391,3 +391,40 @@ pre {
     padding: 0.4rem 0.75rem;
     font-size: 0.8125rem;
 }
+
+/* Mobile Touch Target Optimization */
+@media (max-width: 640px) {
+
+    /* Ensure all buttons meet 44x44px minimum touch target */
+    .btn {
+        min-height: 44px;
+        padding: 0.75rem 1rem;
+    }
+
+    .btn-sm {
+        min-height: 44px;
+        padding: 0.625rem 0.875rem;
+    }
+
+    /* Icon buttons - 44x44px minimum */
+    .icon-btn,
+    button[class*="icon"],
+    [role="button"] {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    /* Inputs - 16px minimum to prevent iOS zoom */
+    input,
+    select,
+    textarea {
+        min-height: 44px;
+        font-size: 16px !important;
+    }
+
+    /* Ensure clickable areas are adequately spaced */
+    button+button,
+    .btn+.btn {
+        margin-left: 0.5rem;
+    }
+}

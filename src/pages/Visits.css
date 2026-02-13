@@ -235,14 +235,14 @@
 /* Mobile Compact View */
 @media (max-width: 640px) {
     .visits-page {
-        padding: 1rem;
+        padding: 1.25rem;
     }
 
     .visits-header {
         flex-direction: column;
         align-items: flex-start;
         gap: 1rem;
-        margin-bottom: 1rem;
+        margin-bottom: 1.25rem;
     }
 
     .visits-header h1 {

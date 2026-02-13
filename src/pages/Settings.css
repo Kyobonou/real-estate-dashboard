@@ -491,14 +491,25 @@
 
 /* Responsive */
 @media (max-width: 768px) {
+    .settings-page {
+        padding: 1.25rem;
+    }
+
     .settings-layout {
         grid-template-columns: 1fr;
+        gap: 1.25rem;
     }
 
     .settings-tabs {
         flex-direction: row;
         overflow-x: auto;
         position: static;
+        padding: 0.75rem;
+    }
+
+    .settings-tab {
+        min-width: 44px;
+        min-height: 44px;
     }
 
     .settings-tab span {
@@ -507,9 +518,38 @@
 
     .form-grid {
         grid-template-columns: 1fr;
+        gap: 1rem;
     }
 
     .integration-info {
         grid-template-columns: 1fr;
+    }
+
+    .settings-panel {
+        padding: 1.25rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .settings-page {
+        padding: 1.25rem;
+    }
+
+    .settings-panel {
+        padding: 1.25rem;
+    }
+
+    .panel-actions {
+        flex-direction: column;
+    }
+
+    .panel-actions button {
+        width: 100%;
+        min-height: 44px;
+    }
+
+    .profile-avatar-section {
+        flex-direction: column;
+        text-align: center;
     }
 }

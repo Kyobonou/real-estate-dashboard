@@ -348,6 +348,8 @@
         display: flex !important;
         margin-right: 0.5rem;
         color: var(--text-primary);
+        min-width: 44px;
+        min-height: 44px;
     }
 
     /* Hide desktop toggler if visible */
@@ -388,7 +390,7 @@
     }
 
     .top-header {
-        padding: 0 1rem;
+        padding: 0 1.25rem;
         height: 64px;
         position: sticky;
         top: 0;
@@ -404,8 +406,13 @@
     }
 
     .page-content {
-        padding: 1rem;
+        padding: 1.25rem;
         padding-bottom: 5rem;
-        /* Space for bottom nav if we add one, or scrolling */
+    }
+
+    /* Icon buttons touch targets */
+    .icon-btn {
+        min-width: 44px;
+        min-height: 44px;
     }
 }
