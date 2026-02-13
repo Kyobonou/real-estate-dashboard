@@ -11,17 +11,8 @@ export default defineConfig({
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'charts': ['recharts'],
           'animations': ['framer-motion'],
-          'icons': ['lucide-react'],
-          'date': ['date-fns']
+          'icons': ['lucide-react']
         }
-      }
-    },
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true,
-        pure_funcs: ['console.log', 'console.info', 'console.debug']
       }
     },
     chunkSizeWarningLimit: 600
