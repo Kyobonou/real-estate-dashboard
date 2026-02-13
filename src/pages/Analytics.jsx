@@ -19,6 +19,7 @@ const tooltipStyle = {
     borderRadius: '12px',
     padding: '12px 16px',
     boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+    color: '#ffffff', // Force White Text
 };
 
 const Analytics = () => {
@@ -195,7 +196,7 @@ const Analytics = () => {
                                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                                 <XAxis dataKey="name" stroke="#6b7280" fontSize={11} angle={-15} textAnchor="end" height={60} />
                                 <YAxis stroke="#6b7280" fontSize={12} allowDecimals={false} />
-                                <Tooltip contentStyle={tooltipStyle} />
+                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
                                 <Bar dataKey="value" name="Biens" radius={[8, 8, 0, 0]}>
                                     {zoneData.map((entry, index) => (
                                         <Cell key={index} fill={entry.color} />
@@ -223,7 +224,7 @@ const Analytics = () => {
                                         <Cell key={index} fill={entry.color} />
                                     ))}
                                 </Pie>
-                                <Tooltip contentStyle={tooltipStyle} />
+                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
                                 <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '12px', color: '#b8bfce' }} />
                             </PieChart>
                         </ResponsiveContainer>
@@ -250,7 +251,7 @@ const Analytics = () => {
                                         <Cell key={index} fill={entry.color} />
                                     ))}
                                 </Pie>
-                                <Tooltip contentStyle={tooltipStyle} />
+                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
                             </PieChart>
                         </ResponsiveContainer>
                     ) : (
@@ -273,7 +274,7 @@ const Analytics = () => {
                                         <Cell key={index} fill={entry.color} />
                                     ))}
                                 </Pie>
-                                <Tooltip contentStyle={tooltipStyle} />
+                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
                             </PieChart>
                         </ResponsiveContainer>
                     ) : (
@@ -297,7 +298,7 @@ const Analytics = () => {
                                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                                 <XAxis dataKey="name" stroke="#6b7280" fontSize={12} />
                                 <YAxis stroke="#6b7280" fontSize={12} allowDecimals={false} />
-                                <Tooltip contentStyle={tooltipStyle} />
+                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
                                 <Bar dataKey="value" name="Biens" radius={[8, 8, 0, 0]}>
                                     {chambresData.map((entry, index) => (
                                         <Cell key={index} fill={entry.color} />
@@ -323,7 +324,7 @@ const Analytics = () => {
                                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                                 <XAxis dataKey="name" stroke="#6b7280" fontSize={11} />
                                 <YAxis stroke="#6b7280" fontSize={12} allowDecimals={false} />
-                                <Tooltip contentStyle={tooltipStyle} />
+                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
                                 <Bar dataKey="value" name="Biens" radius={[8, 8, 0, 0]}>
                                     {priceData.map((entry, index) => (
                                         <Cell key={index} fill={entry.color} />

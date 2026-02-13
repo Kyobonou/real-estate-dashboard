@@ -5,6 +5,7 @@
 const SHEET_CSV_BASE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRqwrLIv6E-PjF4mA6qj9EdGqJPbnnzl-g53KXsUYHC_TB9nyMDIQK75MYp7H5z06aLT4b98jOhLSXQ/pub';
 const GID_LOCAUX = 0;
 const GID_VISITES = 50684091;
+const GID_IMAGES = 1059453156;
 
 class GoogleSheetsService {
     constructor() {
@@ -13,6 +14,21 @@ class GoogleSheetsService {
         this.isOnline = false;
         this.listeners = new Map();
         this.pollingInterval = null;
+        this.isPageVisible = !document.hidden;
+        this.setupVisibilityListener();
+    }
+
+    setupVisibilityListener() {
+        document.addEventListener('visibilitychange', () => {
+            this.isPageVisible = !document.hidden;
+            if (this.isPageVisible) {
+                // Page became visible - resume polling if it was active
+                if (this.pollingInterval) {
+                    this.pollData(); // Immediate refresh
+                }
+            }
+            // When page is hidden, polling continues but we could optimize further
+        });
     }
 
     // === FETCH & PARSE ===
@@ -21,11 +37,11 @@ class GoogleSheetsService {
         return `${SHEET_CSV_BASE}?gid=${gid}&single=true&output=csv`;
     }
 
-    async fetchSheetCsv(gid, sheetName) {
+    async fetchSheetCsv(gid, sheetName, forceRefresh = false) {
         const cacheKey = `sheet_${gid}`;
         const cached = this.cache.get(cacheKey);
 
-        if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
+        if (!forceRefresh && cached && Date.now() - cached.timestamp < this.cacheTimeout) {
             return cached.data;
         }
 
@@ -57,16 +73,61 @@ class GoogleSheetsService {
     }
 
     parseCsv(csvText) {
-        const lines = csvText.trim().split('\n');
-        if (lines.length < 2) return [];
+        const rows = [];
+        let currentRow = [];
+        let currentField = '';
+        let inQuotes = false;
 
-        const headers = this.parseCsvLine(lines[0]);
+        for (let i = 0; i < csvText.length; i++) {
+            const char = csvText[i];
+            const nextChar = csvText[i + 1];
+
+            if (char === '"') {
+                if (inQuotes && nextChar === '"') {
+                    // Double quote = escaped quote
+                    currentField += '"';
+                    i++;
+                } else {
+                    // Toggle quote mode
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === ',' && !inQuotes) {
+                // End of field
+                currentRow.push(currentField.trim());
+                currentField = '';
+            } else if ((char === '\n' || char === '\r') && !inQuotes) {
+                // End of row (handle both \n and \r\n)
+                if (char === '\r' && nextChar === '\n') {
+                    i++; // Skip the \n in \r\n
+                }
+                if (currentField || currentRow.length > 0) {
+                    currentRow.push(currentField.trim());
+                    if (currentRow.some(f => f.length > 0)) {
+                        rows.push(currentRow);
+                    }
+                    currentRow = [];
+                    currentField = '';
+                }
+            } else {
+                currentField += char;
+            }
+        }
+
+        // Push last field and row
+        if (currentField || currentRow.length > 0) {
+            currentRow.push(currentField.trim());
+            if (currentRow.some(f => f.length > 0)) {
+                rows.push(currentRow);
+            }
+        }
+
+        if (rows.length === 0) return [];
+
+        const headers = rows[0];
+
         const data = [];
-
-        for (let i = 1; i < lines.length; i++) {
-            const values = this.parseCsvLine(lines[i]);
-            if (values.length === 0 || values.every(v => !v.trim())) continue;
-
+        for (let i = 1; i < rows.length; i++) {
+            const values = rows[i];
             const obj = {};
             headers.forEach((header, index) => {
                 obj[header.trim()] = (values[index] || '').trim();
@@ -126,6 +187,7 @@ class GoogleSheetsService {
             typeBien: raw['Type de bien'] || '',
             typeOffre: raw["Type d'offre"] || '',
             zone: raw['Zone géographique précise'] || '',
+            commune: raw['Commune'] || '',
             prix: priceStr,
             rawPrice,
             telephone: raw['Téléphone'] || '',
@@ -211,6 +273,57 @@ class GoogleSheetsService {
             .map((raw, i) => this.transformVisit(raw, i))
             .filter(v => v.nomPrenom); // Filtrer lignes vides
         return { success: true, data: visits, source: this.isOnline ? 'live' : 'cache' };
+    }
+
+    // Nouvelle méthode pour la page Images Immobilier
+    async getImagesProperties(forceRefresh = false) {
+        const rawData = await this.fetchSheetCsv(GID_IMAGES, 'Images Immobilier', forceRefresh);
+        const properties = rawData
+            .map((raw, i) => this.transformImageProperty(raw, i))
+            .filter(p => p.typeBien);
+        return { success: true, data: properties, source: this.isOnline ? 'live' : 'cache' };
+    }
+
+    transformImageProperty(raw, index) {
+        // La feuille "Images Immobilier" a des noms de colonnes différents (avec underscores)
+        const priceStr = raw['Prix'] || '0';
+        const rawPrice = parseInt(priceStr.replace(/[\s.,]/g, '')) || 0;
+        const disponible = (raw['Disponible'] || '').toLowerCase();
+        const isAvailable = disponible === 'oui' || disponible === 'true';
+        const meubles = (raw['Meubles'] || '').toLowerCase();
+        const isFurnished = meubles === 'oui' || meubles === 'true';
+
+        // Parser les caractéristiques en liste
+        const caracStr = raw['Caracteristiques'] || '';
+        const features = caracStr ? caracStr.split(',').map(f => f.trim()).filter(Boolean) : [];
+        if (features.length === 0 && caracStr) features.push(caracStr);
+
+        // Récupérer l'URL de l'image - essayer différentes variantes
+        const imageUrl = raw['image_url'] || raw['Image'] || raw['Photo'] || raw['url_image'] || '';
+
+        return {
+            id: index + 1,
+            // Données du sheet (noms avec underscores)
+            typeBien: raw['Type_de_bien'] || raw['Type de bien'] || '',
+            typeOffre: raw['Type_offre'] || raw["Type d'offre"] || '',
+            zone: raw['Zone_geographique'] || raw['Zone géographique précise'] || raw['Quartier'] || '',
+            commune: raw['Commune'] || '',
+            prix: priceStr,
+            rawPrice,
+            telephone: raw['Telephone'] || raw['Téléphone'] || '',
+            caracteristiques: caracStr,
+            features,
+            publiePar: raw['Publier par'] || 'Non spécifié',
+            meuble: isFurnished,
+            chambres: parseInt(raw['Chambre']) || 0,
+            disponible: isAvailable,
+            datePublication: raw['timestamp'] || raw['Date de publication'] || '',
+            // Image URL
+            imageUrl: imageUrl,
+            // Champs calculés
+            status: isAvailable ? 'Disponible' : 'Occupé',
+            prixFormate: rawPrice > 0 ? this.formatPrice(rawPrice) : priceStr,
+        };
     }
 
     async getStats() {
@@ -333,6 +446,11 @@ class GoogleSheetsService {
     }
 
     async pollData() {
+        // Skip polling if page is not visible
+        if (!this.isPageVisible) {
+            return;
+        }
+
         try {
             const [properties, visits, stats] = await Promise.all([
                 this.getProperties(),

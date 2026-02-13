@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     MapPin, Tag, Grid, List, Search, Filter, X, Phone, Eye,
-    Download, Share2, Heart, Home, Key, Loader, RefreshCw, Bed, Building
+    Share2, Home, Key, Loader, Bed, Building, RefreshCw
 } from 'lucide-react';
-import apiService from '../services/api';
-import Modal from '../components/Modal';
+import apiService from '../services/googleSheetsApi';
 import { useToast } from '../components/Toast';
+import Modal from '../components/Modal';
 import './Properties.css';
 
 const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
@@ -21,13 +21,13 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
 
     const handleWhatsApp = () => {
         const phone = property.telephone.replace(/\s/g, '');
-        const message = encodeURIComponent(`Bonjour, je suis intéressé par votre bien: ${property.typeBien} à ${property.zone} (${property.prixFormate})`);
+        const message = encodeURIComponent(`Bonjour, je suis intéressé par votre bien vu dans la galerie: ${property.typeBien} à ${property.zone} (${property.prixFormate})`);
         window.open(`https://wa.me/225${phone}?text=${message}`, '_blank');
         addToast({ type: 'success', title: 'WhatsApp', message: 'Ouverture de WhatsApp...' });
     };
 
     const handleShare = () => {
-        const text = `${property.typeBien} à ${property.zone} - ${property.prixFormate}\nContact: ${property.telephone}`;
+        const text = `${property.typeBien} à ${property.zone} - ${property.prixFormate}\nContact: ${property.telephone}\nImage: ${property.imageUrl}`;
         if (navigator.clipboard) {
             navigator.clipboard.writeText(text);
             addToast({ type: 'info', title: 'Copié !', message: 'Infos du bien copiées dans le presse-papier' });
@@ -41,11 +41,15 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
             <div className="property-details-modal">
                 <div className="property-details-header">
                     <div className="property-image-large" style={{
-                        background: `linear-gradient(135deg, ${property.id % 2 === 0 ? '#667eea' : '#f093fb'} 0%, ${property.id % 2 === 0 ? '#764ba2' : '#f5576c'} 100%)`
+                        background: property.imageUrl
+                            ? `url(${property.imageUrl}) center/cover no-repeat`
+                            : `linear-gradient(135deg, ${property.id % 2 === 0 ? '#667eea' : '#f093fb'} 0%, ${property.id % 2 === 0 ? '#764ba2' : '#f5576c'} 100%)`
                     }}>
-                        <div className="property-overlay">
-                            <h2>{property.typeBien}</h2>
-                        </div>
+                        {!property.imageUrl && (
+                            <div className="property-overlay">
+                                <h2>{property.typeBien}</h2>
+                            </div>
+                        )}
                     </div>
 
                     <div className="property-quick-info">
@@ -64,7 +68,7 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
 
                 <div className="property-details-body">
                     <div className="details-section">
-                        <h4>Informations du Google Sheet</h4>
+                        <h4>Informations</h4>
                         <div className="info-grid">
                             <div className="info-item">
                                 <MapPin size={18} />
@@ -128,25 +132,14 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
                         </div>
                     )}
 
-                    {property.datePublication && (
-                        <div className="details-section">
-                            <h4>Date de publication</h4>
-                            <p className="property-full-description">{property.datePublication}</p>
-                        </div>
-                    )}
-
                     <div className="modal-actions">
                         <button className="btn btn-ghost" onClick={handleShare}>
                             <Share2 size={18} />
-                            Copier les infos
+                            Copier
                         </button>
                         <button className="btn btn-whatsapp" onClick={handleWhatsApp}>
                             <Phone size={18} />
                             WhatsApp
-                        </button>
-                        <button className="btn btn-primary" onClick={handleContact}>
-                            <Phone size={18} />
-                            Appeler
                         </button>
                     </div>
                 </div>
@@ -155,7 +148,7 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
     );
 };
 
-const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
+const ImagePropertyCard = ({ property, index, viewMode, onViewDetails }) => {
     const [isHovered, setIsHovered] = useState(false);
     const { addToast } = useToast();
     const statusColor = property.disponible ? 'var(--success)' : 'var(--danger)';
@@ -164,10 +157,12 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
         e.stopPropagation();
         if (property.telephone) {
             const phone = property.telephone.replace(/\s/g, '');
-            const message = encodeURIComponent(`Bonjour, je suis intéressé par: ${property.typeBien} à ${property.zone}`);
+            const message = encodeURIComponent(`Bonjour, je suis intéressé par ce bien vu sur la galerie: ${property.typeBien} à ${property.zone}`);
             window.open(`https://wa.me/225${phone}?text=${message}`, '_blank');
+            addToast({ type: 'success', title: 'Contact', message: 'Ouverture de WhatsApp...' });
+        } else {
+            addToast({ type: 'error', title: 'Erreur', message: 'Numéro de téléphone non disponible' });
         }
-        addToast({ type: 'success', title: 'Contact', message: `WhatsApp vers ${property.telephone}` });
     };
 
     if (viewMode === 'list') {
@@ -180,6 +175,14 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
                 whileHover={{ x: 4 }}
                 onClick={() => onViewDetails(property)}
             >
+                <div className="property-list-image" style={{ width: '120px', height: '120px', marginRight: '1rem', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
+                    <div style={{
+                        width: '100%', height: '100%',
+                        background: property.imageUrl
+                            ? `url(${property.imageUrl}) center/cover no-repeat`
+                            : `linear-gradient(135deg, ${property.id % 2 === 0 ? '#667eea' : '#f093fb'} 0%, ${property.id % 2 === 0 ? '#764ba2' : '#f5576c'} 100%)`
+                    }}></div>
+                </div>
                 <div className="property-list-info">
                     <div className="property-list-header">
                         <h3>{property.typeBien} {property.typeOffre ? `— ${property.typeOffre}` : ''}</h3>
@@ -196,7 +199,6 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
                     <div className="property-features-inline">
                         {property.chambres > 0 && <span className="feature-badge">{property.chambres} ch.</span>}
                         {property.meuble && <span className="feature-badge">Meublé</span>}
-                        <span className="feature-badge">{property.publiePar}</span>
                     </div>
                 </div>
                 <div className="property-list-actions">
@@ -228,12 +230,16 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
                 <div
                     className="property-image"
                     style={{
-                        background: `linear-gradient(135deg, ${property.id % 2 === 0 ? '#667eea' : '#f093fb'} 0%, ${property.id % 2 === 0 ? '#764ba2' : '#f5576c'} 100%)`
+                        background: property.imageUrl
+                            ? `url(${property.imageUrl}) center/cover no-repeat`
+                            : `linear-gradient(135deg, ${property.id % 2 === 0 ? '#667eea' : '#f093fb'} 0%, ${property.id % 2 === 0 ? '#764ba2' : '#f5576c'} 100%)`
                     }}
                 >
-                    <div className="property-overlay">
-                        <span className="property-type">{property.typeBien}</span>
-                    </div>
+                    {!property.imageUrl && (
+                        <div className="property-overlay">
+                            <span className="property-type">{property.typeBien}</span>
+                        </div>
+                    )}
                 </div>
                 <div className="property-badges">
                     <span className="badge-status" style={{ background: statusColor }}>
@@ -258,18 +264,15 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
 
                 <div className="property-features">
                     {property.chambres > 0 && (
-                        <motion.span className="feature-tag" initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }}>
+                        <span className="feature-tag">
                             <Bed size={12} /> {property.chambres} ch.
-                        </motion.span>
+                        </span>
                     )}
                     {property.meuble && (
-                        <motion.span className="feature-tag" initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}>
+                        <span className="feature-tag">
                             <Home size={12} /> Meublé
-                        </motion.span>
+                        </span>
                     )}
-                    <motion.span className="feature-tag" initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.5 }}>
-                        <Tag size={12} /> {property.publiePar}
-                    </motion.span>
                 </div>
 
                 <motion.div
@@ -290,7 +293,7 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
     );
 };
 
-const Properties = () => {
+const ImageGallery = () => {
     const [properties, setProperties] = useState([]);
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState('grid');
@@ -312,28 +315,31 @@ const Properties = () => {
 
     useEffect(() => {
         loadProperties();
-
-        const unsubscribe = apiService.subscribe('dataUpdate', ({ properties: p }) => {
-            if (p?.success) setProperties(p.data);
-        });
-
-        return () => unsubscribe();
     }, []);
 
-    const loadProperties = async () => {
+    const loadProperties = async (force = false) => {
+        setLoading(true);
         try {
-            const response = await apiService.getProperties();
+            const response = await apiService.getImagesProperties(force);
             if (response.success) {
                 setProperties(response.data);
+                if (force) {
+                    addToast({ type: 'success', title: 'Actualisé', message: 'La galerie a été mise à jour' });
+                }
             }
         } catch (error) {
-            console.error('Error loading properties:', error);
+            console.error('Erreur chargement galerie:', error);
+            addToast({ type: 'error', title: 'Erreur', message: 'Impossible de charger la galerie' });
         } finally {
             setLoading(false);
         }
     };
 
-    // Extraire les options uniques depuis les données réelles
+    const handleRefresh = () => {
+        loadProperties(true);
+    };
+
+    // Extraire les options uniques
     const uniqueTypes = [...new Set(properties.map(p => p.typeBien).filter(Boolean))].sort();
     const uniqueCommunes = [...new Set(properties.map(p => p.commune).filter(Boolean))].sort();
     const uniquePieces = [...new Set(properties.map(p => p.chambres).filter(p => p > 0))].sort((a, b) => a - b);
@@ -341,8 +347,8 @@ const Properties = () => {
     const filteredProperties = properties.filter(property => {
         const matchesSearch =
             (property.commune || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (property.zone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (property.typeBien || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (property.publiePar || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (property.caracteristiques || '').toLowerCase().includes(searchTerm.toLowerCase());
 
         const matchesType = filters.type === 'all' || property.typeBien === filters.type;
@@ -371,20 +377,6 @@ const Properties = () => {
         setModalOpen(true);
     };
 
-    const handleExport = () => {
-        const headers = ['Type', 'Offre', 'Zone', 'Prix', 'Téléphone', 'Caractéristiques', 'Publié par', 'Meublé', 'Chambres', 'Disponible'];
-        const rows = filteredProperties.map(p => [
-            p.typeBien, p.typeOffre, p.zone, p.prix, p.telephone, p.caracteristiques, p.publiePar, p.meuble ? 'Oui' : 'Non', p.chambres, p.disponible ? 'Oui' : 'Non'
-        ]);
-        const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `biens_immobiliers_${new Date().toISOString().split('T')[0]}.csv`;
-        link.click();
-        addToast({ type: 'success', title: 'Export réussi', message: `${filteredProperties.length} biens exportés en CSV` });
-    };
-
     const resetFilters = () => {
         setFilters({ type: 'all', status: 'all', meuble: 'all', pieces: 'all', commune: 'all' });
         setSearchTerm('');
@@ -392,9 +384,9 @@ const Properties = () => {
 
     if (loading) {
         return (
-            <div className="dashboard-loading">
-                <Loader className="spinner" size={40} />
-                <p>Chargement des biens depuis Google Sheets...</p>
+            <div className="gallery-loading">
+                <div className="spinner"></div>
+                <p>Chargement de la galerie...</p>
             </div>
         );
     }
@@ -403,13 +395,19 @@ const Properties = () => {
         <div className="properties-v2">
             <div className="properties-header">
                 <div className="header-left">
-                    <h2>Biens Immobiliers</h2>
-                    <span className="properties-count">{filteredProperties.length} bien(s) trouvé(s) sur {properties.length}</span>
+                    <h2>Galerie Immobilière</h2>
+                    <span className="properties-count">{filteredProperties.length} bien(s) affiché(s) sur {properties.length}</span>
                 </div>
                 <div className="header-actions">
-                    <button className="btn btn-secondary" onClick={handleExport}>
-                        <Download size={18} />
-                        Exporter CSV
+                    <button
+                        className="btn btn-secondary"
+                        onClick={handleRefresh}
+                        disabled={loading}
+                        title="Actualiser les données"
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                        <RefreshCw size={18} className={loading ? 'spin' : ''} />
+                        <span className="hide-mobile">Actualiser</span>
                     </button>
                 </div>
             </div>
@@ -420,43 +418,91 @@ const Properties = () => {
                         <Search size={18} />
                         <input
                             type="text"
-                            placeholder="Rechercher par commune, type, publieur..."
+                            placeholder="Rechercher (commune, type, mot-clé)..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                         {searchTerm && (
-                            <button onClick={() => setSearchTerm('')}>
-                                <X size={16} />
+                            <button
+                                className="clear-search"
+                                onClick={() => setSearchTerm('')}
+                                style={{
+                                    border: 'none',
+                                    background: 'transparent',
+                                    cursor: 'pointer',
+                                    color: 'var(--text-muted)'
+                                }}
+                            >
+                                <X size={14} />
                             </button>
                         )}
                     </div>
-
                     <button
-                        className={`btn btn-secondary filter-btn ${filterOpen ? 'active' : ''}`}
+                        className={`btn-filter ${filterOpen ? 'active' : ''}`}
                         onClick={() => setFilterOpen(!filterOpen)}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            padding: '0.6rem 1rem',
+                            background: filterOpen ? 'var(--primary)' : 'var(--bg-tertiary)',
+                            color: filterOpen ? 'white' : 'var(--text-primary)',
+                            border: '1px solid var(--glass-border)',
+                            borderRadius: 'var(--radius-sm)',
+                            cursor: 'pointer'
+                        }}
                     >
                         <Filter size={18} />
                         Filtres
+                        {(filters.type !== 'all' || filters.commune !== 'all') && (
+                            <span className="filter-badge" style={{
+                                background: filterOpen ? 'white' : 'var(--primary)',
+                                color: filterOpen ? 'var(--primary)' : 'white',
+                                padding: '2px 6px',
+                                borderRadius: '10px',
+                                fontSize: '0.7em',
+                                marginLeft: '0.5rem'
+                            }}>!</span>
+                        )}
                     </button>
                 </div>
 
-                <div className="view-toggle">
-                    <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')}>
-                        <Grid size={18} />
-                    </button>
-                    <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')}>
-                        <List size={18} />
-                    </button>
+                <div className="toolbar-right" style={{ display: 'flex', gap: '0.5rem' }}>
+                    <div className="view-toggle">
+                        <button
+                            className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                            onClick={() => setViewMode('grid')}
+                            title="Vue Grille"
+                        >
+                            <Grid size={18} />
+                        </button>
+                        <button
+                            className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
+                            onClick={() => setViewMode('list')}
+                            title="Vue Liste"
+                        >
+                            <List size={18} />
+                        </button>
+                    </div>
                 </div>
             </div>
 
             <AnimatePresence>
                 {filterOpen && (
-                    <motion.div className="filters-panel" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
+                    <motion.div
+                        className="filters-panel"
+                        initial={{ height: 0, opacity: 0, marginBottom: 0 }}
+                        animate={{ height: 'auto', opacity: 1, marginBottom: '2rem' }}
+                        exit={{ height: 0, opacity: 0, marginBottom: 0 }}
+                        style={{ overflow: 'hidden' }}
+                    >
                         <div className="filter-group">
                             <label>Type de bien</label>
-                            <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })}>
-                                <option value="all">Tous</option>
+                            <select
+                                value={filters.type}
+                                onChange={(e) => setFilters({ ...filters, type: e.target.value })}
+                            >
+                                <option value="all">Tous les types</option>
                                 {uniqueTypes.map(type => (
                                     <option key={type} value={type}>{type}</option>
                                 ))}
@@ -465,8 +511,11 @@ const Properties = () => {
 
                         <div className="filter-group">
                             <label>Commune</label>
-                            <select value={filters.commune} onChange={(e) => setFilters({ ...filters, commune: e.target.value })}>
-                                <option value="all">Toutes</option>
+                            <select
+                                value={filters.commune}
+                                onChange={(e) => setFilters({ ...filters, commune: e.target.value })}
+                            >
+                                <option value="all">Toutes les communes</option>
                                 {uniqueCommunes.map(commune => (
                                     <option key={commune} value={commune}>{commune}</option>
                                 ))}
@@ -474,103 +523,91 @@ const Properties = () => {
                         </div>
 
                         <div className="filter-group">
-                            <label>Nombre de pièces</label>
-                            <select value={filters.pieces} onChange={(e) => setFilters({ ...filters, pieces: e.target.value })}>
-                                <option value="all">Tous</option>
+                            <label>Pièces</label>
+                            <select
+                                value={filters.pieces}
+                                onChange={(e) => setFilters({ ...filters, pieces: e.target.value })}
+                            >
+                                <option value="all">Peu importe</option>
                                 {uniquePieces.map(piece => (
-                                    <option key={piece} value={piece}>{piece} Pièce(s)</option>
+                                    <option key={piece} value={piece}>{piece} Pièces</option>
                                 ))}
                             </select>
                         </div>
 
                         <div className="filter-group">
-                            <label>Prix Min (FCFA)</label>
+                            <label>Budget Max</label>
                             <input
                                 type="number"
-                                placeholder="Ex: 50000"
-                                value={filters.minPrice}
-                                onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
-                                style={{
-                                    background: 'var(--bg-tertiary)',
-                                    border: '1px solid var(--glass-border)',
-                                    color: 'var(--text-primary)',
-                                    padding: '0.625rem',
-                                    borderRadius: 'var(--radius-sm)',
-                                    outline: 'none',
-                                    width: '100%',
-                                    fontFamily: 'inherit'
-                                }}
-                            />
-                        </div>
-
-                        <div className="filter-group">
-                            <label>Prix Max (FCFA)</label>
-                            <input
-                                type="number"
-                                placeholder="Ex: 500000"
+                                placeholder="Prix max..."
                                 value={filters.maxPrice}
                                 onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })}
                                 style={{
                                     background: 'var(--bg-tertiary)',
                                     border: '1px solid var(--glass-border)',
-                                    color: 'var(--text-primary)',
                                     padding: '0.625rem',
                                     borderRadius: 'var(--radius-sm)',
-                                    outline: 'none',
-                                    width: '100%',
-                                    fontFamily: 'inherit'
+                                    color: 'var(--text-primary)',
+                                    width: '100%'
                                 }}
                             />
                         </div>
 
-                        <div className="filter-group">
-                            <label>Statut</label>
-                            <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
-                                <option value="all">Tous</option>
-                                <option value="Disponible">Disponible</option>
-                                <option value="Occupé">Occupé</option>
-                            </select>
+                        <div className="filter-group" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                            <button
+                                onClick={resetFilters}
+                                style={{
+                                    background: 'transparent',
+                                    border: '1px solid var(--glass-border)',
+                                    color: 'var(--text-secondary)',
+                                    padding: '0.625rem',
+                                    borderRadius: 'var(--radius-sm)',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '0.5rem'
+                                }}
+                            >
+                                <X size={16} /> Réinitialiser
+                            </button>
                         </div>
-
-                        <div className="filter-group">
-                            <label>Meublé</label>
-                            <select value={filters.meuble} onChange={(e) => setFilters({ ...filters, meuble: e.target.value })}>
-                                <option value="all">Tous</option>
-                                <option value="oui">Meublé</option>
-                                <option value="non">Non meublé</option>
-                            </select>
-                        </div>
-
-                        <button className="btn btn-ghost" onClick={resetFilters}>
-                            Réinitialiser
-                        </button>
                     </motion.div>
                 )}
             </AnimatePresence>
 
             <div className={`properties-container ${viewMode}`}>
-                <AnimatePresence mode="wait">
-                    {filteredProperties.map((property, index) => (
-                        <PropertyCard
-                            key={property.id}
+                {filteredProperties.length > 0 ? (
+                    filteredProperties.map((property, index) => (
+                        <ImagePropertyCard
+                            key={index}
                             property={property}
                             index={index}
                             viewMode={viewMode}
                             onViewDetails={handleViewDetails}
                         />
-                    ))}
-                </AnimatePresence>
+                    ))
+                ) : (
+                    <div className="empty-state">
+                        <Home size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
+                        <p>Aucun bien ne correspond à vos critères.</p>
+                        <button
+                            onClick={resetFilters}
+                            style={{
+                                marginTop: '1rem',
+                                background: 'var(--primary)',
+                                color: 'white',
+                                border: 'none',
+                                padding: '0.5rem 1rem',
+                                borderRadius: 'var(--radius-sm)',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            Effacer les filtres
+                        </button>
+                    </div>
+                )}
             </div>
-
-            {filteredProperties.length === 0 && (
-                <motion.div className="empty-state" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    <Building size={48} />
-                    <p>Aucun bien trouvé avec ces critères</p>
-                    <button className="btn btn-primary" onClick={resetFilters}>
-                        Réinitialiser les filtres
-                    </button>
-                </motion.div>
-            )}
 
             <PropertyDetailsModal
                 property={selectedProperty}
@@ -581,4 +618,4 @@ const Properties = () => {
     );
 };
 
-export default Properties;
+export default ImageGallery;

@@ -79,7 +79,7 @@ const VisitCard = ({ visit, index }) => {
                     <button className="btn btn-secondary btn-sm" onClick={handleCall}>
                         <Phone size={14} /> Appeler
                     </button>
-                    <button className="btn btn-primary btn-sm" onClick={handleWhatsApp}>
+                    <button className="btn btn-whatsapp btn-sm" onClick={handleWhatsApp}>
                         WhatsApp
                     </button>
                 </div>

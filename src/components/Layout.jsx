@@ -13,19 +13,23 @@ import {
     TrendingUp,
     LogOut,
     Wifi,
-    WifiOff
+    WifiOff,
+    Sun,
+    Moon
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import apiService from '../services/api';
 import './Layout.css';
 
 const Layout = () => {
-    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
     const [notifications, setNotifications] = useState(3);
     const [isOnline, setIsOnline] = useState(true);
     const location = useLocation();
     const navigate = useNavigate();
     const { user, logout } = useAuth();
+    const { theme, toggleTheme } = useTheme();
 
     useEffect(() => {
         const unsub = apiService.subscribe('connectionChange', ({ online }) => {
@@ -41,9 +45,17 @@ const Layout = () => {
         };
     }, []);
 
+    // Close sidebar on mobile navigation
+    useEffect(() => {
+        if (window.innerWidth <= 768) {
+            setSidebarOpen(false);
+        }
+    }, [location]);
+
     const navItems = [
         { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
         { path: '/properties', icon: Building, label: 'Biens' },
+        { path: '/gallery', icon: Building, label: 'Galerie' },
         { path: '/visits', icon: Calendar, label: 'Visites' },
         { path: '/analytics', icon: TrendingUp, label: 'Analytiques' },
     ];
@@ -65,12 +77,17 @@ const Layout = () => {
 
     return (
         <div className="layout">
+            {/* Overlay for mobile */}
+            {sidebarOpen && (
+                <div
+                    className="sidebar-overlay"
+                    onClick={() => setSidebarOpen(false)}
+                />
+            )}
+
             {/* Sidebar */}
-            <motion.aside
+            <aside
                 className={`sidebar ${sidebarOpen ? 'open' : 'closed'}`}
-                initial={{ x: -300 }}
-                animate={{ x: 0 }}
-                transition={{ type: 'spring', stiffness: 100 }}
             >
                 <div className="sidebar-header">
                     <motion.div
@@ -163,12 +180,18 @@ const Layout = () => {
                         </div>
                     </motion.button>
                 </div>
-            </motion.aside>
+            </aside>
 
             {/* Main Content */}
             <div className="main-content">
                 <header className="top-header">
                     <div className="header-left">
+                        <button
+                            className="mobile-menu-btn icon-btn"
+                            onClick={() => setSidebarOpen(!sidebarOpen)}
+                        >
+                            <Menu size={24} />
+                        </button>
                         <motion.h2
                             className="page-title"
                             initial={{ opacity: 0, y: -20 }}
@@ -187,6 +210,16 @@ const Layout = () => {
                             <Search size={18} />
                             <input type="text" placeholder="Rechercher..." />
                         </motion.div>
+
+                        <motion.button
+                            className="icon-btn"
+                            onClick={toggleTheme}
+                            whileHover={{ scale: 1.1, rotate: 180 }}
+                            whileTap={{ scale: 0.9 }}
+                            title={theme === 'dark' ? 'Passer en mode clair' : 'Passer en mode sombre'}
+                        >
+                            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+                        </motion.button>
 
                         <motion.button
                             className="icon-btn"

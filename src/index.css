@@ -1,42 +1,74 @@
 :root {
-    /* Colors */
+    /* Colors - Modern Dark Palette (Default) */
+    --brand-purple: #667eea;
+    /* Marque Violette (statique) */
     --primary: #667eea;
-    --primary-light: #a3bffa;
-    --secondary: #764ba2;
-    --accent: #f093fb;
-    --success: #10b981;
-    --danger: #ef4444;
-    --warning: #f59e0b;
+    --primary-light: #764ba2;
+    --primary-dark: #5a3f9e;
 
-    /* Backgrounds */
     --bg-primary: #0f172a;
     --bg-secondary: #1e293b;
     --bg-tertiary: #334155;
 
-    /* Glassmorphism */
-    --glass-bg: rgba(255, 255, 255, 0.05);
-    --glass-border: rgba(255, 255, 255, 0.1);
-    --glass-blur: blur(20px);
-
-    /* Text */
     --text-primary: #f8fafc;
-    --text-secondary: #94a3b8;
-    --text-muted: #64748b;
+    --text-secondary: #cbd5e1;
+    --text-muted: #94a3b8;
+
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --info: #3b82f6;
+
+    /* Glassmorphism */
+    --glass-bg: rgba(30, 41, 59, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-blur: blur(12px);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 
     /* Gradients */
     --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    --gradient-secondary: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-    --gradient-success: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+    --gradient-secondary: linear-gradient(135deg, #fce38a 0%, #f38181 100%);
+    --gradient-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
 
-    /* Geometry */
+    /* Utils */
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 16px;
     --radius-xl: 24px;
 
-    /* Transitions */
     --transition-fast: 0.2s ease;
     --transition-normal: 0.3s ease;
+}
+
+/* Light Theme Variables - Hybride Style */
+body.light {
+    --primary: #128C7E;
+    /* Boutons et Accents en VERT (WhatsApp) */
+    --primary-light: #25D366;
+    --primary-dark: #075E54;
+
+    --bg-primary: #ffffff;
+    /* Blanc Pur */
+    --bg-secondary: #f8fafc;
+    /* Quasi Blanc */
+    --bg-tertiary: #f1f5f9;
+    /* Gris clair */
+
+    --text-primary: #111827;
+    /* Noir Profond (Gray-900) */
+    --text-secondary: #374151;
+    /* Gris Anthracite (Gray-700) - Unifié */
+    --text-muted: #4B5563;
+    /* Gris Sustenu (Gray-600) - Plus lisible */
+
+    --success: #16a34a;
+    /* Vert Vif Confiance */
+
+    --glass-bg: rgba(255, 255, 255, 0.98);
+    /* Opaque pour contraste */
+    --glass-border: rgba(0, 0, 0, 0.08);
+    /* Bordure subtile */
+    --glass-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
 * {
@@ -55,6 +87,14 @@ body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
+}
+
+/* MOBILE SCALING */
+@media (max-width: 768px) {
+    html {
+        font-size: 13px !important;
+        /* Réduit drastiquement l'échelle pour tout faire tenir */
+    }
 }
 
 code {

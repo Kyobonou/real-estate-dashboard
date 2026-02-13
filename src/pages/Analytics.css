@@ -333,3 +333,19 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* Force Tooltip Text White Override */
+.recharts-default-tooltip {
+    background-color: rgba(30, 33, 57, 0.95) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 12px !important;
+    padding: 12px 16px !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+}
+
+.recharts-tooltip-label,
+.recharts-tooltip-item,
+ul.recharts-tooltip-item-list li,
+.recharts-default-tooltip * {
+    color: #ffffff !important;
+}

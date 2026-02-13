@@ -1,15 +1,19 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { ToastProvider } from './components/Toast';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Properties from './pages/Properties';
-import Visits from './pages/Visits';
-import Analytics from './pages/Analytics';
-import Settings from './pages/Settings';
+
+// Lazy load pages for better performance
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Properties = lazy(() => import('./pages/Properties'));
+const Visits = lazy(() => import('./pages/Visits'));
+const Analytics = lazy(() => import('./pages/Analytics'));
+const Settings = lazy(() => import('./pages/Settings'));
+const ImageGallery = lazy(() => import('./pages/ImageGallery'));
 
 const AppRoutes = () => {
     const { isAuthenticated, loading } = useAuth();
@@ -57,11 +61,48 @@ const AppRoutes = () => {
                     </ProtectedRoute>
                 }
             >
-                <Route index element={<Dashboard />} />
-                <Route path="properties" element={<Properties />} />
-                <Route path="visits" element={<Visits />} />
-                <Route path="analytics" element={<Analytics />} />
-                <Route path="settings" element={<Settings />} />
+                <Route index element={
+                    <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+                        <div className="spinner" style={{ width: '40px', height: '40px', border: '3px solid rgba(102, 126, 234, 0.2)', borderTopColor: '#667eea', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
+                    </div>}>
+                        <Dashboard />
+                    </Suspense>
+                } />
+                <Route path="properties" element={
+                    <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+                        <div className="spinner" style={{ width: '40px', height: '40px', border: '3px solid rgba(102, 126, 234, 0.2)', borderTopColor: '#667eea', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
+                    </div>}>
+                        <Properties />
+                    </Suspense>
+                } />
+                <Route path="gallery" element={
+                    <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+                        <div className="spinner" style={{ width: '40px', height: '40px', border: '3px solid rgba(102, 126, 234, 0.2)', borderTopColor: '#667eea', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
+                    </div>}>
+                        <ImageGallery />
+                    </Suspense>
+                } />
+                <Route path="visits" element={
+                    <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+                        <div className="spinner" style={{ width: '40px', height: '40px', border: '3px solid rgba(102, 126, 234, 0.2)', borderTopColor: '#667eea', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
+                    </div>}>
+                        <Visits />
+                    </Suspense>
+                } />
+                <Route path="analytics" element={
+                    <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+                        <div className="spinner" style={{ width: '40px', height: '40px', border: '3px solid rgba(102, 126, 234, 0.2)', borderTopColor: '#667eea', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
+                    </div>}>
+                        <Analytics />
+                    </Suspense>
+                } />
+                <Route path="settings" element={
+                    <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+                        <div className="spinner" style={{ width: '40px', height: '40px', border: '3px solid rgba(102, 126, 234, 0.2)', borderTopColor: '#667eea', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
+                    </div>}>
+                        <Settings />
+                    </Suspense>
+                } />
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
         </Routes>
@@ -71,11 +112,13 @@ const AppRoutes = () => {
 function App() {
     return (
         <AuthProvider>
-            <ToastProvider>
-                <BrowserRouter>
-                    <AppRoutes />
-                </BrowserRouter>
-            </ToastProvider>
+            <ThemeProvider>
+                <ToastProvider>
+                    <BrowserRouter>
+                        <AppRoutes />
+                    </BrowserRouter>
+                </ToastProvider>
+            </ThemeProvider>
         </AuthProvider>
     );
 }
