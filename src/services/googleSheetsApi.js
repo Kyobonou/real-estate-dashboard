@@ -1,0 +1,376 @@
+// Google Sheets Public API Service - Real Estate Dashboard
+// Connects to published Google Sheet (no API key needed!)
+// TOUTES les données proviennent UNIQUEMENT du Google Sheet
+
+const SHEET_CSV_BASE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRqwrLIv6E-PjF4mA6qj9EdGqJPbnnzl-g53KXsUYHC_TB9nyMDIQK75MYp7H5z06aLT4b98jOhLSXQ/pub';
+const GID_LOCAUX = 0;
+const GID_VISITES = 50684091;
+
+class GoogleSheetsService {
+    constructor() {
+        this.cache = new Map();
+        this.cacheTimeout = 30000; // 30s
+        this.isOnline = false;
+        this.listeners = new Map();
+        this.pollingInterval = null;
+    }
+
+    // === FETCH & PARSE ===
+
+    getSheetCsvUrl(gid) {
+        return `${SHEET_CSV_BASE}?gid=${gid}&single=true&output=csv`;
+    }
+
+    async fetchSheetCsv(gid, sheetName) {
+        const cacheKey = `sheet_${gid}`;
+        const cached = this.cache.get(cacheKey);
+
+        if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
+            return cached.data;
+        }
+
+        try {
+            const response = await fetch(this.getSheetCsvUrl(gid), {
+                method: 'GET',
+                signal: AbortSignal.timeout(10000),
+            });
+
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const csvText = await response.text();
+
+            const wasOffline = !this.isOnline;
+            this.isOnline = true;
+            if (wasOffline) this.notifyListeners('connectionChange', { online: true });
+
+            const data = this.parseCsv(csvText);
+            this.cache.set(cacheKey, { data, timestamp: Date.now() });
+            return data;
+        } catch (error) {
+            console.warn(`Google Sheets fetch failed (${sheetName}):`, error.message);
+            const wasOnline = this.isOnline;
+            this.isOnline = false;
+            if (wasOnline) this.notifyListeners('connectionChange', { online: false });
+
+            if (cached) return cached.data;
+            return [];
+        }
+    }
+
+    parseCsv(csvText) {
+        const lines = csvText.trim().split('\n');
+        if (lines.length < 2) return [];
+
+        const headers = this.parseCsvLine(lines[0]);
+        const data = [];
+
+        for (let i = 1; i < lines.length; i++) {
+            const values = this.parseCsvLine(lines[i]);
+            if (values.length === 0 || values.every(v => !v.trim())) continue;
+
+            const obj = {};
+            headers.forEach((header, index) => {
+                obj[header.trim()] = (values[index] || '').trim();
+            });
+            data.push(obj);
+        }
+        return data;
+    }
+
+    parseCsvLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            const nextChar = line[i + 1];
+
+            if (char === '"') {
+                if (inQuotes && nextChar === '"') {
+                    current += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === ',' && !inQuotes) {
+                result.push(current.trim());
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        result.push(current.trim());
+        return result;
+    }
+
+    // === DATA TRANSFORMATION ===
+    // On garde les noms de colonnes EXACTS du Google Sheet
+    // et on ajoute des champs calculés
+
+    transformProperty(raw, index) {
+        const priceStr = raw['Prix'] || '0';
+        const rawPrice = parseInt(priceStr.replace(/[\s.,]/g, '')) || 0;
+        const disponible = (raw['Disponible'] || '').toLowerCase();
+        const isAvailable = disponible === 'oui' || disponible === 'true';
+        const meubles = (raw['Meubles'] || '').toLowerCase();
+        const isFurnished = meubles === 'oui' || meubles === 'true';
+
+        // Parser les caractéristiques en liste
+        const caracStr = raw['Caractéristiques'] || '';
+        const features = caracStr ? caracStr.split(',').map(f => f.trim()).filter(Boolean) : [];
+        if (features.length === 0 && caracStr) features.push(caracStr);
+
+        return {
+            id: index + 1,
+            // Données brutes du sheet
+            typeBien: raw['Type de bien'] || '',
+            typeOffre: raw["Type d'offre"] || '',
+            zone: raw['Zone géographique précise'] || '',
+            prix: priceStr,
+            rawPrice,
+            telephone: raw['Téléphone'] || '',
+            caracteristiques: caracStr,
+            features,
+            publiePar: raw['Publier par'] || '',
+            meuble: isFurnished,
+            chambres: parseInt(raw['Chambre']) || 0,
+            disponible: isAvailable,
+            groupeWhatsApp: raw['Groupe WhatsApp origine'] || '',
+            datePublication: raw['Date de publication'] || '',
+            // Champs calculés pour l'affichage
+            status: isAvailable ? 'Disponible' : 'Occupé',
+            prixFormate: rawPrice > 0 ? this.formatPrice(rawPrice) : priceStr,
+        };
+    }
+
+    transformVisit(raw, index) {
+        const dateStr = raw['Date-rv'] || '';
+        const parsedDate = this.parseDate(dateStr);
+        const visitProg = (raw['Visite prog'] || '').toLowerCase();
+        const isScheduled = visitProg === 'oui' || visitProg === 'true';
+
+        return {
+            id: index + 1,
+            // Données brutes du sheet
+            nomPrenom: raw['Nom et Prenom'] || '',
+            numero: raw['Numero'] || '',
+            dateRv: dateStr,
+            localInteresse: raw['Local interesse'] || '',
+            visiteProg: isScheduled,
+            // Champs calculés
+            parsedDate,
+            status: this.getVisitStatus(parsedDate, isScheduled),
+        };
+    }
+
+    formatPrice(amount) {
+        if (amount >= 1000000) {
+            return `${(amount / 1000000).toFixed(amount % 1000000 === 0 ? 0 : 1)}M FCFA`;
+        }
+        return `${amount.toLocaleString('fr-FR')} FCFA`;
+    }
+
+    parseDate(dateStr) {
+        if (!dateStr) return null;
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+            const day = parseInt(parts[0]);
+            const month = parseInt(parts[1]) - 1;
+            const year = parseInt(parts[2]);
+            return new Date(year, month, day, 10, 0, 0);
+        }
+        const date = new Date(dateStr);
+        return isNaN(date.getTime()) ? null : date;
+    }
+
+    getVisitStatus(date, isScheduled) {
+        if (!isScheduled) return 'Non confirmée';
+        if (!date) return 'En attente';
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const visitDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+        if (visitDay < today) return 'Terminée';
+        if (visitDay.getTime() === today.getTime()) return "Aujourd'hui";
+        return 'Programmée';
+    }
+
+    // === API PUBLIQUES ===
+
+    async getProperties() {
+        const rawData = await this.fetchSheetCsv(GID_LOCAUX, 'Locaux');
+        const properties = rawData
+            .map((raw, i) => this.transformProperty(raw, i))
+            .filter(p => p.typeBien); // Filtrer lignes vides
+        return { success: true, data: properties, source: this.isOnline ? 'live' : 'cache' };
+    }
+
+    async getVisits() {
+        const rawData = await this.fetchSheetCsv(GID_VISITES, 'Visite programmé');
+        const visits = rawData
+            .map((raw, i) => this.transformVisit(raw, i))
+            .filter(v => v.nomPrenom); // Filtrer lignes vides
+        return { success: true, data: visits, source: this.isOnline ? 'live' : 'cache' };
+    }
+
+    async getStats() {
+        const [propertiesRes, visitsRes] = await Promise.all([
+            this.getProperties(),
+            this.getVisits(),
+        ]);
+
+        const properties = propertiesRes.data;
+        const visits = visitsRes.data;
+
+        // Stats calculées UNIQUEMENT depuis les données du Sheet
+        const totalBiens = properties.length;
+        const biensDisponibles = properties.filter(p => p.disponible).length;
+        const biensOccupes = properties.filter(p => !p.disponible).length;
+        const totalVisites = visits.length;
+        const visitesConfirmees = visits.filter(v => v.visiteProg).length;
+        const visitesAujourdhui = visits.filter(v => v.status === "Aujourd'hui").length;
+        const visitesProgrammees = visits.filter(v => v.status === 'Programmée').length;
+        const visitesTerminees = visits.filter(v => v.status === 'Terminée').length;
+
+        // Distribution par type de bien
+        const parType = {};
+        properties.forEach(p => {
+            const type = p.typeBien || 'Autre';
+            parType[type] = (parType[type] || 0) + 1;
+        });
+
+        // Distribution par zone
+        const parZone = {};
+        properties.forEach(p => {
+            // Extraire la ville/quartier principal
+            const zone = (p.zone.split(',')[0] || 'Autre').trim();
+            parZone[zone] = (parZone[zone] || 0) + 1;
+        });
+
+        // Distribution par disponibilité
+        const parDisponibilite = {
+            'Disponible': biensDisponibles,
+            'Occupé': biensOccupes,
+        };
+
+        // Biens meublés vs non meublés
+        const meubles = properties.filter(p => p.meuble).length;
+        const nonMeubles = properties.filter(p => !p.meuble).length;
+
+        // Prix moyen, min, max
+        const prixList = properties.map(p => p.rawPrice).filter(p => p > 0);
+        const prixMoyen = prixList.length > 0 ? prixList.reduce((a, b) => a + b, 0) / prixList.length : 0;
+        const prixMin = prixList.length > 0 ? Math.min(...prixList) : 0;
+        const prixMax = prixList.length > 0 ? Math.max(...prixList) : 0;
+
+        // Nombre de chambres moyen
+        const chambresList = properties.map(p => p.chambres).filter(c => c > 0);
+        const chambresMoyen = chambresList.length > 0 ? chambresList.reduce((a, b) => a + b, 0) / chambresList.length : 0;
+
+        return {
+            success: true,
+            data: {
+                totalBiens,
+                biensDisponibles,
+                biensOccupes,
+                totalVisites,
+                visitesConfirmees,
+                visitesAujourdhui,
+                visitesProgrammees,
+                visitesTerminees,
+                parType,
+                parZone,
+                parDisponibilite,
+                meubles,
+                nonMeubles,
+                prixMoyen,
+                prixMin,
+                prixMax,
+                chambresMoyen,
+                prixList,
+            },
+            source: this.isOnline ? 'live' : 'cache',
+        };
+    }
+
+    // === AUTH ===
+
+    async login(email, password) {
+        const validUsers = [
+            { email: 'admin@immodash.ci', password: 'Admin2026!', name: 'Agent Immo', role: 'admin', avatar: 'AI' },
+            { email: 'agent@immodash.ci', password: 'Agent2026!', name: 'Agent Terrain', role: 'agent', avatar: 'AT' },
+            { email: 'demo@immodash.ci', password: 'Demo2026!', name: 'Utilisateur Demo', role: 'viewer', avatar: 'UD' },
+        ];
+
+        const user = validUsers.find(u => u.email === email && u.password === password);
+        if (user) {
+            const token = btoa(JSON.stringify({ email: user.email, role: user.role, exp: Date.now() + 86400000 }));
+            return { success: true, token, user: { name: user.name, email: user.email, role: user.role, avatar: user.avatar } };
+        }
+        return { success: false, error: 'Email ou mot de passe incorrect' };
+    }
+
+    validateToken(token) {
+        try {
+            const payload = JSON.parse(atob(token));
+            return payload.exp > Date.now();
+        } catch {
+            return false;
+        }
+    }
+
+    getToken() {
+        return localStorage.getItem('auth_token');
+    }
+
+    // === POLLING ===
+
+    startPolling(interval = 30000) {
+        this.stopPolling();
+        // Fetch initial data
+        this.pollData();
+        this.pollingInterval = setInterval(() => this.pollData(), interval);
+    }
+
+    async pollData() {
+        try {
+            const [properties, visits, stats] = await Promise.all([
+                this.getProperties(),
+                this.getVisits(),
+                this.getStats(),
+            ]);
+            this.notifyListeners('dataUpdate', { properties, visits, stats });
+        } catch (error) {
+            console.warn('Polling error:', error);
+        }
+    }
+
+    stopPolling() {
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+            this.pollingInterval = null;
+        }
+    }
+
+    // === EVENTS ===
+
+    subscribe(event, callback) {
+        if (!this.listeners.has(event)) {
+            this.listeners.set(event, []);
+        }
+        this.listeners.get(event).push(callback);
+        return () => {
+            const callbacks = this.listeners.get(event);
+            const index = callbacks.indexOf(callback);
+            if (index > -1) callbacks.splice(index, 1);
+        };
+    }
+
+    notifyListeners(event, data) {
+        const callbacks = this.listeners.get(event) || [];
+        callbacks.forEach(cb => cb(data));
+    }
+}
+
+export const googleSheetsApi = new GoogleSheetsService();
+export default googleSheetsApi;
