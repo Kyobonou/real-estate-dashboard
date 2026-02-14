@@ -1,0 +1,52 @@
+/* SKELETON LOADING ANIMATION */
+.skeleton {
+    background-color: var(--slate-200);
+    /* Fallback */
+    background: linear-gradient(90deg,
+            var(--slate-100) 25%,
+            var(--slate-200) 50%,
+            var(--slate-100) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s infinite;
+    border-radius: var(--radius-sm);
+}
+
+/* Dark Mode Support */
+body.dark .skeleton {
+    background-color: var(--slate-800);
+    background: linear-gradient(90deg,
+            var(--slate-800) 25%,
+            var(--slate-700) 50%,
+            var(--slate-800) 75%);
+}
+
+@keyframes skeleton-loading {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* Variants */
+.skeleton-text {
+    height: 1em;
+    width: 100%;
+    margin-bottom: 0.5rem;
+    border-radius: var(--radius-sm);
+}
+
+.skeleton-rect {
+    width: 100%;
+    height: 100%;
+    border-radius: var(--radius-md);
+}
+
+.skeleton-circle {
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+}

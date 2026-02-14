@@ -36,6 +36,11 @@ class ApiService {
         return this.sheetsApi.getImagesProperties(forceRefresh);
     }
 
+    // Clients - extraits des visites
+    async getClients(forceRefresh = false) {
+        return this.sheetsApi.getClients(forceRefresh);
+    }
+
     // Real-time
     startPolling(interval = 30000) {
         this.sheetsApi.startPolling(interval);

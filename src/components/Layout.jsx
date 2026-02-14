@@ -15,7 +15,8 @@ import {
     Wifi,
     WifiOff,
     Sun,
-    Moon
+    Moon,
+    Users
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -26,7 +27,6 @@ import './Layout.css';
 
 const Layout = () => {
     const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
-    // REMOVED local state for notifications: const [notifications, setNotifications] = useState(3);
     const [showNotifications, setShowNotifications] = useState(false);
     const [isOnline, setIsOnline] = useState(true);
     const location = useLocation();
@@ -40,7 +40,7 @@ const Layout = () => {
             setIsOnline(online);
         });
 
-        // Start polling for real-time data — this is the SINGLE source of polling
+        // Start polling for real-time data
         apiService.startPolling(30000);
 
         return () => {
@@ -57,32 +57,22 @@ const Layout = () => {
     }, [location]);
 
     const navItems = [
-        { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
-        { path: '/properties', icon: Building, label: 'Biens' },
-        { path: '/gallery', icon: Building, label: 'Galerie' },
-        { path: '/visits', icon: Calendar, label: 'Visites' },
-        { path: '/analytics', icon: TrendingUp, label: 'Analytiques' },
-    ];
+        { path: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'agent', 'viewer'] },
+        { path: '/properties', icon: Building, label: 'Biens', roles: ['admin', 'agent', 'viewer'] },
+        { path: '/gallery', icon: Building, label: 'Galerie', roles: ['admin', 'agent', 'viewer'] },
+        { path: '/visits', icon: Calendar, label: 'Visites', roles: ['admin', 'agent'] },
+        { path: '/clients', icon: Users, label: 'Clients', roles: ['admin', 'agent'] },
+        { path: '/analytics', icon: TrendingUp, label: 'Analytiques', roles: ['admin'] },
+    ].filter(item => !item.roles || item.roles.includes(user?.role || 'admin'));
 
     const allPages = [
         ...navItems,
-        { path: '/settings', label: 'Paramètres' }
-    ];
+        { path: '/settings', label: 'Paramètres', roles: ['admin', 'agent', 'viewer'] }
+    ].filter(item => !item.roles || item.roles.includes(user?.role || 'admin'));
 
     const handleLogout = () => {
         logout();
-        navigate('/login');
-    };
-
-    const handleNotifications = () => {
-        // Simple mock behavior: clear count or show message
-        if (notifications > 0) {
-            setNotifications(0);
-            // Could add a toast here if ToastContext was used in Layout
-            alert("Toutes les notifications ont été lues !"); // Temporary simple feedback
-        } else {
-            alert("Aucune nouvelle notification.");
-        }
+        navigate('/');
     };
 
     const getRoleLabel = (role) => {
@@ -140,7 +130,7 @@ const Layout = () => {
                         animate={{ opacity: 1 }}
                     >
                         {isOnline ? <Wifi size={12} /> : <WifiOff size={12} />}
-                        <span>{isOnline ? 'Connecté à n8n' : 'Mode hors ligne'}</span>
+                        <span>{isOnline ? 'Connecté' : 'Mode hors ligne'}</span>
                     </motion.div>
                 )}
 
@@ -279,9 +269,6 @@ const Layout = () => {
                 </header>
 
                 <main className="page-content">
-                    {/* REMOVED AnimatePresence mode="wait" — this was causing white screens
-                        because it waits for the exit animation to complete before mounting
-                        the next lazy-loaded component, causing a blank gap. */}
                     <Outlet />
                 </main>
             </div>

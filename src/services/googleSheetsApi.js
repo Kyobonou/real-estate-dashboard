@@ -485,6 +485,108 @@ class GoogleSheetsService {
         };
     }
 
+    // === CLIENTS - Extraits des visites ===
+    async getClients(forceRefresh = false) {
+        try {
+            // Utiliser getVisits pour avoir les données déjà transformées et propres
+            const visitsRes = await this.getVisits(forceRefresh);
+
+            if (!visitsRes.success || !visitsRes.data) {
+                return { success: false, data: [], source: 'cache' };
+            }
+
+            const visits = visitsRes.data;
+            const clientsMap = new Map();
+
+            visits.forEach(visit => {
+                if (!visit.nomPrenom) return;
+
+                // Clé de déduplication : Numéro (nettoyé) ou Nom
+                const cleanPhone = visit.numero ? visit.numero.replace(/\s/g, '').replace(/-/g, '') : '';
+                const key = cleanPhone || visit.nomPrenom.toLowerCase().trim();
+
+                if (!clientsMap.has(key)) {
+                    clientsMap.set(key, {
+                        nomPrenom: visit.nomPrenom,
+                        numero: visit.numero,
+                        totalVisites: 0,
+                        visitesConfirmees: 0,
+                        zonesInteret: new Set(), // Set pour éviter les doublons
+                        visites: [],
+                        premiereVisite: null,
+                        derniereVisite: null,
+                        statut: 'Nouveau'
+                    });
+                }
+
+                const client = clientsMap.get(key);
+
+                // Agrégation des données
+                client.totalVisites++;
+                if (visit.visiteProg) client.visitesConfirmees++;
+
+                if (visit.localInteresse) {
+                    // Nettoyer un peu la zone (enlever les détails superflus si besoin)
+                    const zone = visit.localInteresse.split(',')[0].trim();
+                    client.zonesInteret.add(zone);
+                }
+
+                client.visites.push(visit);
+
+                // Calcul dates min/max
+                const vDate = visit.parsedDate;
+                if (vDate) {
+                    if (!client.premiereVisite || vDate < client.premiereVisite) client.premiereVisite = vDate;
+                    if (!client.derniereVisite || vDate > client.derniereVisite) client.derniereVisite = vDate;
+                }
+            });
+
+            // Transformation finale en tableau
+            const clients = Array.from(clientsMap.values()).map((c, index) => {
+                // Règles de gestion pour le statut
+                let statut = 'Nouveau';
+                if (c.visitesConfirmees > 0 || c.totalVisites > 2) {
+                    statut = 'Actif';
+                }
+
+                // Inactif si dernière visite > 3 mois
+                if (c.derniereVisite) {
+                    const threeMonthsAgo = new Date();
+                    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+                    if (c.derniereVisite < threeMonthsAgo) {
+                        statut = 'Inactif';
+                    }
+                }
+
+                return {
+                    id: index + 1,
+                    nomPrenom: c.nomPrenom,
+                    numero: c.numero,
+                    statut: statut,
+                    totalVisites: c.totalVisites,
+                    visitesConfirmees: c.visitesConfirmees,
+                    zonesInteret: Array.from(c.zonesInteret), // Convertir Set en Array
+                    visites: c.visites.sort((a, b) => (b.parsedDate || 0) - (a.parsedDate || 0)),
+                    premiereVisite: c.premiereVisite,
+                    derniereVisite: c.derniereVisite,
+                };
+            });
+
+            // Tri par date de dernière visite décroissante
+            clients.sort((a, b) => {
+                const dateA = a.derniereVisite || new Date(0);
+                const dateB = b.derniereVisite || new Date(0);
+                return dateB - dateA;
+            });
+
+            return { success: true, data: clients, source: this.isOnline ? 'live' : 'cache' };
+
+        } catch (error) {
+            console.error('Error calculating clients:', error);
+            return { success: false, error: error.message, data: [] };
+        }
+    }
+
     // === AUTH ===
 
     async login(email, password) {

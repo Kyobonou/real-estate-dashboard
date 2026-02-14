@@ -9,11 +9,110 @@ import {
     PieChart, Pie, Cell, BarChart, Bar
 } from 'recharts';
 import apiService from '../services/api';
+import Skeleton from '../components/Skeleton';
 import './Dashboard.css';
+
+const DashboardSkeleton = () => (
+    <div className="dashboard-v2">
+        <header className="dashboard-header">
+            <div className="header-text">
+                <Skeleton width="200px" height="32px" style={{ marginBottom: '0.5rem' }} />
+                <Skeleton width="300px" height="20px" />
+            </div>
+            <Skeleton width="120px" height="40px" />
+        </header>
+
+        <div className="kpi-grid">
+            {[1, 2, 3, 4].map(i => (
+                <div key={i} className="stat-card-v2" style={{ height: '140px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <Skeleton className="skeleton-circle" width="48px" height="48px" />
+                        <Skeleton width="40px" height="20px" />
+                    </div>
+                    <div>
+                        <Skeleton width="80px" height="16px" style={{ marginBottom: '8px' }} />
+                        <Skeleton width="120px" height="32px" />
+                    </div>
+                </div>
+            ))}
+        </div>
+
+        <div className="dashboard-layout">
+            <div className="charts-column">
+                <div className="glass-panel chart-container">
+                    <div className="panel-header">
+                        <Skeleton width="150px" height="24px" />
+                    </div>
+                    <div className="chart-wrapper h-300">
+                        <Skeleton type="rect" height="100%" />
+                    </div>
+                </div>
+
+                <div className="two-col-grid">
+                    <div className="glass-panel p-6">
+                        <div className="panel-header">
+                            <Skeleton width="120px" height="24px" />
+                        </div>
+                        <div className="chart-wrapper h-250" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Skeleton className="skeleton-circle" width="180px" height="180px" />
+                        </div>
+                    </div>
+
+                    <div className="glass-panel p-6">
+                        <div className="panel-header">
+                            <Skeleton width="120px" height="24px" />
+                        </div>
+                        <div className="availability-summary" style={{ marginTop: '1rem', gap: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+                            <Skeleton type="rect" height="60px" />
+                            <Skeleton type="rect" height="60px" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="activity-column">
+                <div className="glass-panel activity-list">
+                    <div className="panel-header">
+                        <Skeleton width="150px" height="24px" />
+                    </div>
+                    <div className="items-list">
+                        {[1, 2, 3, 4, 5].map(i => (
+                            <div key={i} className="item-row">
+                                <Skeleton className="skeleton-circle" width="32px" height="32px" />
+                                <div style={{ flex: 1 }}>
+                                    <Skeleton width="60%" height="16px" style={{ marginBottom: '4px' }} />
+                                    <Skeleton width="40%" height="12px" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="glass-panel activity-list mt-6">
+                    <div className="panel-header">
+                        <Skeleton width="150px" height="24px" />
+                    </div>
+                    <div className="items-list">
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className="item-row">
+                                <Skeleton className="skeleton-circle" width="32px" height="32px" />
+                                <div style={{ flex: 1 }}>
+                                    <Skeleton width="60%" height="16px" style={{ marginBottom: '4px' }} />
+                                    <Skeleton width="40%" height="12px" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+);
+
 
 const StatCard = ({ title, value, icon: Icon, trend, trendValue, color }) => (
     <motion.div
-        className="stat-card-v2"
+        className="card stat-card-v2"
         whileHover={{ y: -5 }}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -23,13 +122,15 @@ const StatCard = ({ title, value, icon: Icon, trend, trendValue, color }) => (
         </div>
         <div className="stat-content">
             <span className="stat-label">{title}</span>
-            <h3 className="stat-title">{value}</h3>
-            {trend && (
-                <div className={`stat-trend ${trend === 'up' ? 'trend-up' : 'trend-down'}`}>
-                    {trend === 'up' ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                    <span>{trendValue}%</span>
-                </div>
-            )}
+            <div className="stat-value-group" style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                <h3 className="stat-title">{value}</h3>
+                {trend && (
+                    <div className={`stat-trend ${trend === 'up' ? 'trend-up' : 'trend-down'}`}>
+                        {trend === 'up' ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                        <span>{trendValue}%</span>
+                    </div>
+                )}
+            </div>
         </div>
         <div className="stat-glow" style={{ backgroundColor: color }}></div>
     </motion.div>
@@ -37,7 +138,7 @@ const StatCard = ({ title, value, icon: Icon, trend, trendValue, color }) => (
 
 const WelcomeBanner = ({ onClose }) => (
     <motion.div
-        className="welcome-banner glass-panel"
+        className="welcome-banner card"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, height: 0 }}
@@ -47,8 +148,8 @@ const WelcomeBanner = ({ onClose }) => (
                 <Home size={32} />
             </div>
             <div className="welcome-text">
-                <h3>Bienvenue sur ImmoDash ! 👋</h3>
-                <p>Votre tableau de bord pour gérer vos biens immobiliers en toute simplicité.</p>
+                <h3>Tableau de Bord Pro 👋</h3>
+                <p>Bienvenue sur votre espace de gestion immobilière optimisé.</p>
             </div>
             <button className="btn-close-banner" onClick={onClose}><X size={20} /></button>
         </div>
@@ -122,12 +223,7 @@ const Dashboard = () => {
     };
 
     if (loading) {
-        return (
-            <div className="dashboard-loading">
-                <div className="loader-ring"></div>
-                <p>Chargement de votre espace...</p>
-            </div>
-        );
+        return <DashboardSkeleton />;
     }
 
     // Pre-process data for charts
@@ -160,7 +256,13 @@ const Dashboard = () => {
     };
 
     return (
-        <div className="dashboard-v2">
+        <motion.div
+            className="dashboard-v2"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+        >
+
             <header className="dashboard-header">
                 <div className="header-text">
                     <h1>Tableau de Bord</h1>
@@ -211,7 +313,7 @@ const Dashboard = () => {
             <div className="dashboard-layout">
                 {/* Main Charts Area */}
                 <div className="charts-column">
-                    <div className="glass-panel chart-container">
+                    <div className="card chart-container">
                         <div className="panel-header">
                             <h3>Répartition par Zone</h3>
                             <Activity size={18} className="text-secondary" />
@@ -246,7 +348,7 @@ const Dashboard = () => {
                     </div>
 
                     <div className="two-col-grid">
-                        <div className="glass-panel p-6">
+                        <div className="card p-6">
                             <div className="panel-header">
                                 <h3>Types de Biens</h3>
                             </div>
@@ -286,7 +388,7 @@ const Dashboard = () => {
                             )}
                         </div>
 
-                        <div className="glass-panel p-6">
+                        <div className="card p-6">
                             {/* ... Disponibilité (inchangé ou presque) ... */}
                             <div className="panel-header">
                                 <h3>Disponibilité</h3>
@@ -325,7 +427,7 @@ const Dashboard = () => {
 
                 {/* Recent Activity Sidebar */}
                 <div className="activity-column">
-                    <div className="glass-panel activity-list">
+                    <div className="card activity-list">
                         <div className="panel-header">
                             <h3>Derniers Biens</h3>
                         </div>
@@ -353,7 +455,7 @@ const Dashboard = () => {
                         </div>
                     </div>
 
-                    <div className="glass-panel activity-list mt-6">
+                    <div className="card activity-list mt-6">
                         <div className="panel-header">
                             <h3>Visites à venir</h3>
                         </div>
@@ -371,11 +473,7 @@ const Dashboard = () => {
                                         <strong>{v.nomPrenom}</strong>
                                         <span className="subtext"><Clock size={10} /> {v.dateRv}</span>
                                     </div>
-                                    <div className="status-mini-badge" style={{
-                                        background: v.visiteProg ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                                        color: v.visiteProg ? '#10b981' : '#f59e0b',
-                                        fontSize: '10px', padding: '2px 6px', borderRadius: '4px'
-                                    }}>
+                                    <div className={`badge ${v.visiteProg ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '10px' }}>
                                         {v.visiteProg ? 'Prog.' : 'Tent.'}
                                     </div>
                                 </div>
@@ -386,7 +484,7 @@ const Dashboard = () => {
                     </div>
                 </div>
             </div>
-        </div>
+        </motion.div>
     );
 };
 

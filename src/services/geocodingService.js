@@ -1,275 +1,159 @@
-// Geocoding Service - Convert addresses to GPS coordinates
-// Uses OpenStreetMap Nominatim API (free, no API key needed)
+/**
+ * Service de géocodage optimisé pour Abidjan (Mock/Local)
+ * Fournit des coordonnées instantanées sans dépendre d'API externes lentes
+ */
+
+// Base de données des coordonnées des communes et quartiers d'Abidjan
+const ABIDJAN_COORDS = {
+    // Communes Principales
+    'cocody': { lat: 5.349, lng: -3.985 },
+    'marcory': { lat: 5.304, lng: -3.978 },
+    'treichville': { lat: 5.294, lng: -4.010 },
+    'koumassi': { lat: 5.298, lng: -3.948 },
+    'port-bouet': { lat: 5.253, lng: -3.955 },
+    'port-bouët': { lat: 5.253, lng: -3.955 },
+    'yopougon': { lat: 5.342, lng: -4.083 },
+    'abobo': { lat: 5.416, lng: -4.019 },
+    'plateau': { lat: 5.321, lng: -4.020 },
+    'le plateau': { lat: 5.321, lng: -4.020 },
+    'adjame': { lat: 5.362, lng: -4.027 },
+    'adjamé': { lat: 5.362, lng: -4.027 },
+    'attecoube': { lat: 5.334, lng: -4.038 },
+    'attécoubé': { lat: 5.334, lng: -4.038 },
+    'bingerville': { lat: 5.356, lng: -3.896 },
+    'songon': { lat: 5.309, lng: -4.249 },
+    'anyama': { lat: 5.494, lng: -4.051 },
+
+    // Quartiers Spécifiques (Cocody)
+    'riviera': { lat: 5.353, lng: -3.966 },
+    'riviera 2': { lat: 5.353, lng: -3.966 },
+    'riviera 3': { lat: 5.364, lng: -3.952 },
+    'riviera 4': { lat: 5.346, lng: -3.972 },
+    'riviera golf': { lat: 5.336, lng: -3.982 },
+    'riviera palmeraie': { lat: 5.372, lng: -3.959 },
+    'palmeraie': { lat: 5.372, lng: -3.959 },
+    'angre': { lat: 5.390, lng: -3.985 },
+    'angré': { lat: 5.390, lng: -3.985 },
+    'deux plateaux': { lat: 5.359, lng: -3.998 },
+    '2 plateaux': { lat: 5.359, lng: -3.998 },
+    'vallon': { lat: 5.347, lng: -3.992 },
+    'agban': { lat: 5.350, lng: -4.010 },
+
+    // Quartiers Spécifiques (Marcory)
+    'bietry': { lat: 5.289, lng: -3.978 },
+    'biétry': { lat: 5.289, lng: -3.978 },
+    'zone 4': { lat: 5.297, lng: -3.969 },
+    'zone 4c': { lat: 5.297, lng: -3.969 },
+    'residentiel': { lat: 5.295, lng: -3.980 },
+    'résidentiel': { lat: 5.295, lng: -3.980 },
+
+    // Autres
+    'bassam': { lat: 5.206, lng: -3.738 },
+    'grand-bassam': { lat: 5.206, lng: -3.738 },
+    'assinie': { lat: 5.148, lng: -3.287 },
+
+    // Par défaut (Centre Abidjan)
+    'abidjan': { lat: 5.321, lng: -4.020 }
+};
 
 class GeocodingService {
     constructor() {
         this.cache = new Map();
-        this.loadCacheFromStorage();
-
-        // Coordonnées par défaut pour les principales communes d'Abidjan
-        this.defaultCoordinates = {
-            'Cocody': { lat: 5.3364, lng: -3.9811 },
-            'Yopougon': { lat: 5.3453, lng: -4.0891 },
-            'Abobo': { lat: 5.4167, lng: -4.0167 },
-            'Adjamé': { lat: 5.3515, lng: -4.0208 },
-            'Plateau': { lat: 5.3200, lng: -4.0083 },
-            'Marcory': { lat: 5.2833, lng: -3.9833 },
-            'Treichville': { lat: 5.2833, lng: -4.0000 },
-            'Koumassi': { lat: 5.2833, lng: -3.9500 },
-            'Port-Bouët': { lat: 5.2500, lng: -3.9167 },
-            'Attécoubé': { lat: 5.3333, lng: -4.0500 },
-            'Bingerville': { lat: 5.3550, lng: -3.8950 },
-            'Songon': { lat: 5.3167, lng: -4.2667 },
-            'Anyama': { lat: 5.4950, lng: -3.9500 },
-            'Abidjan': { lat: 5.3364, lng: -4.0267 }, // Centre d'Abidjan
-        };
     }
 
-    loadCacheFromStorage() {
-        try {
-            const saved = localStorage.getItem('geocoding_cache');
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                parsed.forEach(([key, value]) => {
-                    this.cache.set(key, value);
-                });
-                console.log('Geocoding cache loaded from localStorage');
-            }
-        } catch (e) {
-            console.warn('Failed to load geocoding cache', e);
-        }
-    }
-
-    saveCacheToStorage() {
-        try {
-            const cacheArray = Array.from(this.cache.entries());
-            localStorage.setItem('geocoding_cache', JSON.stringify(cacheArray));
-        } catch (e) {
-            console.warn('Failed to save geocoding cache', e);
-        }
-    }
-
-    // Normaliser le nom de commune pour correspondance
-    normalizeCommune(commune) {
-        if (!commune) return '';
-        return commune.trim()
-            .replace(/é/g, 'e')
-            .replace(/è/g, 'e')
-            .replace(/ê/g, 'e')
-            .replace(/à/g, 'a')
-            .replace(/ô/g, 'o')
-            .toLowerCase();
-    }
-
-    // Obtenir les coordonnées par défaut d'une commune
-    getDefaultCoordinates(commune) {
-        if (!commune) return null;
-
-        // Chercher une correspondance exacte
-        if (this.defaultCoordinates[commune]) {
-            return this.defaultCoordinates[commune];
-        }
-
-        // Chercher une correspondance partielle (insensible à la casse et accents)
-        const normalized = this.normalizeCommune(commune);
-        for (const [key, coords] of Object.entries(this.defaultCoordinates)) {
-            if (this.normalizeCommune(key).includes(normalized) ||
-                normalized.includes(this.normalizeCommune(key))) {
-                return coords;
-            }
-        }
-
-        return null;
-    }
-
-    // Geocoder une adresse via Nominatim (avec rate limiting)
-    async geocodeAddress(address) {
-        if (!address) return null;
-
-        // Vérifier le cache
-        const cacheKey = address.toLowerCase().trim();
-        if (this.cache.has(cacheKey)) {
-            return this.cache.get(cacheKey);
-        }
-
-        try {
-            // Rate limiting: attendre 1 seconde entre les requêtes (politique Nominatim)
-            await this.delay(1000);
-
-            const query = encodeURIComponent(`${address}, Abidjan, Côte d'Ivoire`);
-            const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`;
-
-            const response = await fetch(url, {
-                headers: {
-                    'User-Agent': 'ImmoDash Real Estate Dashboard'
-                }
-            });
-
-            if (!response.ok) throw new Error('Geocoding failed');
-
-            const data = await response.json();
-
-            if (data && data.length > 0) {
-                const coords = {
-                    lat: parseFloat(data[0].lat),
-                    lng: parseFloat(data[0].lon)
-                };
-
-                // Mettre en cache
-                this.cache.set(cacheKey, coords);
-                this.saveCacheToStorage();
-
-                return coords;
-            }
-
-            return null;
-        } catch (error) {
-            console.warn('Geocoding error:', error);
-            return null;
-        }
-    }
-
-    delay(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    // Obtenir les coordonnées d'une propriété
-    async getPropertyCoordinates(property) {
-        const { commune, zone } = property;
-
-        // PRIORITÉ 1: Géocoder avec la zone précise (quartier) + commune
-        // Cela donne la position la plus précise
-        if (zone && commune) {
-            const coords = await this.geocodeAddress(`${zone}, ${commune}`);
-            if (coords) {
-                console.log(`✓ Géocodé: ${zone}, ${commune}`);
-                return coords;
-            }
-        }
-
-        // PRIORITÉ 2: Essayer juste avec la zone (quartier)
-        if (zone) {
-            const coords = await this.geocodeAddress(`${zone}, Abidjan`);
-            if (coords) {
-                console.log(`✓ Géocodé: ${zone}, Abidjan`);
-                return coords;
-            }
-        }
-
-        // PRIORITÉ 3: Utiliser les coordonnées par défaut de la commune
-        const defaultCoords = this.getDefaultCoordinates(commune);
-        if (defaultCoords) {
-            console.log(`⚠ Coordonnées par défaut pour commune: ${commune}`);
-            // Ajouter un léger décalage aléatoire pour éviter que tous les biens
-            // de la même commune soient au même endroit
-            return {
-                lat: defaultCoords.lat + (Math.random() - 0.5) * 0.02,
-                lng: defaultCoords.lng + (Math.random() - 0.5) * 0.02
-            };
-        }
-
-        // PRIORITÉ 4: Essayer de géocoder juste avec la commune
-        if (commune) {
-            const coords = await this.geocodeAddress(`${commune}, Abidjan`);
-            if (coords) {
-                console.log(`✓ Géocodé: ${commune}, Abidjan`);
-                return coords;
-            }
-        }
-
-        // PRIORITÉ 5: Fallback - centre d'Abidjan
-        console.warn(`✗ Impossible de géocoder: ${zone || 'N/A'}, ${commune || 'N/A'} - Utilisation du centre d'Abidjan`);
-        return { lat: 5.3364, lng: -4.0267 };
-    }
-
-    // Géocoder toutes les propriétés en batch (avec rate limiting)
+    /**
+     * Géocode une liste de propriétés instantanément
+     * Utilise le dictionnaire local pour la performance
+     */
     async geocodeProperties(properties) {
-        console.log(`🗺️ Début du géocodage de ${properties.length} propriétés...`);
-        const startTime = Date.now();
+        if (!properties || !Array.isArray(properties)) return [];
 
-        // Créer un map des adresses uniques pour éviter de géocoder plusieurs fois la même adresse
-        const uniqueAddresses = new Map();
+        console.log(`🚀 Géocodage optimisé de ${properties.length} propriétés...`);
 
-        properties.forEach(property => {
-            const { zone, commune } = property;
-            // Créer une clé unique pour chaque combinaison zone + commune
-            const addressKey = `${zone || ''}|${commune || ''}`;
+        // Promesse résolue rapidement (simule un process async mais très court)
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                const results = properties.map(property => {
+                    // 1. Si déjà des coordonnées valides, on garde
+                    if (property.latitude && property.longitude &&
+                        !isNaN(parseFloat(property.latitude)) &&
+                        !isNaN(parseFloat(property.longitude))) {
+                        return {
+                            ...property,
+                            coordinates: {
+                                lat: parseFloat(property.latitude),
+                                lng: parseFloat(property.longitude)
+                            }
+                        };
+                    }
 
-            if (!uniqueAddresses.has(addressKey)) {
-                uniqueAddresses.set(addressKey, { zone, commune, properties: [] });
-            }
-            uniqueAddresses.get(addressKey).properties.push(property);
+                    // 2. Recherche par Zone puis Commune
+                    const searchTerms = [
+                        (property.zone || '').toLowerCase().trim(),
+                        (property.commune || '').toLowerCase().trim()
+                    ];
+
+                    let baseCoords = null;
+                    let matchType = 'none';
+
+                    // Recherche
+                    for (const term of searchTerms) {
+                        if (!term) continue;
+
+                        // Exact match
+                        if (ABIDJAN_COORDS[term]) {
+                            baseCoords = ABIDJAN_COORDS[term];
+                            matchType = 'exact';
+                            break;
+                        }
+
+                        // Partial match (si le terme contient une clé connue)
+                        // Ex: "Cocody Riviera" -> match "riviera"
+                        const foundKey = Object.keys(ABIDJAN_COORDS).find(k => term.includes(k) && k.length > 3);
+                        if (foundKey) {
+                            baseCoords = ABIDJAN_COORDS[foundKey];
+                            matchType = 'partial';
+                            break;
+                        }
+                    }
+
+                    // Fallback
+                    if (!baseCoords) {
+                        baseCoords = ABIDJAN_COORDS['abidjan'];
+                        matchType = 'fallback';
+                    }
+
+                    // 3. Ajouter un "bruit" aléatoire pour disperser les points
+                    // +/- 0.003 degrés (~300m) pour éviter les superpositions parfaites
+                    const noiseLat = (Math.random() - 0.5) * 0.006;
+                    const noiseLng = (Math.random() - 0.5) * 0.006;
+
+                    return {
+                        ...property,
+                        coordinates: {
+                            lat: baseCoords.lat + noiseLat,
+                            lng: baseCoords.lng + noiseLng
+                        },
+                        _geocoded: true,
+                        _matchType: matchType
+                    };
+                });
+
+                console.log('✅ Géocodage terminé.');
+                resolve(results);
+            }, 50); // 50ms délai imperceptible
         });
-
-        console.log(`📍 ${uniqueAddresses.size} adresses uniques à géocoder`);
-
-        // Géocoder chaque adresse unique
-        const geocodedAddresses = new Map();
-        let geocodedCount = 0;
-
-        for (const [addressKey, { zone, commune }] of uniqueAddresses) {
-            const coords = await this.getPropertyCoordinates({ zone, commune });
-            geocodedAddresses.set(addressKey, coords);
-            geocodedCount++;
-
-            // Log de progression tous les 10 géocodages
-            if (geocodedCount % 10 === 0) {
-                console.log(`⏳ Progression: ${geocodedCount}/${uniqueAddresses.size} adresses géocodées`);
-            }
-        }
-
-        // Appliquer les coordonnées à toutes les propriétés
-        const results = [];
-        properties.forEach(property => {
-            const { zone, commune } = property;
-            const addressKey = `${zone || ''}|${commune || ''}`;
-            const coords = geocodedAddresses.get(addressKey);
-
-            // Ajouter un micro-décalage pour éviter la superposition exacte
-            const microOffset = {
-                lat: coords.lat + (Math.random() - 0.5) * 0.0005,
-                lng: coords.lng + (Math.random() - 0.5) * 0.0005
-            };
-
-            results.push({
-                ...property,
-                coordinates: microOffset
-            });
-        });
-
-        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-        console.log(`✅ Géocodage terminé en ${duration}s - ${properties.length} propriétés géocodées`);
-
-        return results;
     }
 
-    // Obtenir les limites géographiques pour centrer la carte
+    // Calculer les bornes pour centrer la carte
     getBounds(properties) {
-        if (!properties || properties.length === 0) {
-            // Bounds par défaut pour Abidjan
-            return {
-                north: 5.45,
-                south: 5.20,
-                east: -3.85,
-                west: -4.30
-            };
-        }
+        if (!properties || properties.length === 0) return null;
 
-        const coords = properties
-            .map(p => p.coordinates)
-            .filter(c => c && c.lat && c.lng);
+        const validProps = properties.filter(p => p.coordinates);
+        if (validProps.length === 0) return null;
 
-        if (coords.length === 0) {
-            return {
-                north: 5.45,
-                south: 5.20,
-                east: -3.85,
-                west: -4.30
-            };
-        }
-
-        const lats = coords.map(c => c.lat);
-        const lngs = coords.map(c => c.lng);
+        const lats = validProps.map(p => p.coordinates.lat);
+        const lngs = validProps.map(p => p.coordinates.lng);
 
         return {
             north: Math.max(...lats),

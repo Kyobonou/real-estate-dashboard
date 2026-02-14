@@ -6,8 +6,75 @@ import {
 } from 'lucide-react';
 import apiService from '../services/api';
 import { useToast } from '../components/Toast';
+import Skeleton from '../components/Skeleton';
 import { debounce } from '../utils/performance';
 import './Visits.css';
+
+const VisitsSkeleton = ({ viewMode }) => (
+    <div className="visits-v2">
+        <div className="visits-header">
+            <div className="header-text">
+                <Skeleton width="200px" height="32px" style={{ marginBottom: '0.5rem' }} />
+                <Skeleton width="150px" height="20px" />
+            </div>
+            <Skeleton width="100px" height="40px" />
+        </div>
+
+        <div className="visits-toolbar">
+            <div className="toolbar-left" style={{ flex: 1 }}>
+                <Skeleton width="100%" height="42px" style={{ borderRadius: '12px' }} />
+            </div>
+            <div className="view-toggles">
+                <Skeleton width="120px" height="42px" style={{ borderRadius: '12px' }} />
+            </div>
+        </div>
+
+        {viewMode === 'list' ? (
+            <div className="visits-list-container">
+                <table className="visits-table">
+                    <thead>
+                        <tr>
+                            {[1, 2, 3, 4, 5].map(k => <th key={k}><Skeleton width="60%" height="16px" /></th>)}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {Array.from({ length: 8 }).map((_, i) => (
+                            <tr key={i}>
+                                <td><div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}><Skeleton className="skeleton-circle" width="32px" height="32px" /><Skeleton width="100px" height="16px" /></div></td>
+                                <td><Skeleton width="80px" height="16px" /></td>
+                                <td><Skeleton width="100px" height="16px" /></td>
+                                <td><Skeleton width="80px" height="24px" style={{ borderRadius: '20px' }} /></td>
+                                <td><Skeleton width="80px" height="32px" /></td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        ) : (
+            <div className="visits-grid">
+                {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="card visit-card-v2" style={{ height: '200px', padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                            <Skeleton width="80px" height="24px" style={{ borderRadius: '20px' }} />
+                            <Skeleton className="skeleton-circle" width="32px" height="32px" />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                            <Skeleton className="skeleton-circle" width="40px" height="40px" />
+                            <div>
+                                <Skeleton width="100px" height="16px" style={{ marginBottom: '4px' }} />
+                                <Skeleton width="80px" height="14px" />
+                            </div>
+                        </div>
+                        <div style={{ marginTop: 'auto' }}>
+                            <Skeleton width="100%" height="32px" />
+                        </div>
+                    </div>
+                ))}
+            </div>
+        )}
+    </div>
+);
+
 
 // --- Shared Helper for Actions ---
 const VisitActions = React.memo(({ visit, addToast }) => {
@@ -43,13 +110,13 @@ const GridView = React.memo(({ visits, addToast }) => (
         {visits.map((visit, index) => (
             <motion.div
                 key={visit.id}
-                className={`visit-card-v2 ${visit.visiteProg ? 'programmed' : 'tentative'}`}
+                className={`card visit-card-v2 ${visit.visiteProg ? 'programmed' : 'tentative'}`}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
                 whileHover={{ y: -4 }}
             >
-                <div className="visit-badge">
+                <div className={`badge ${visit.visiteProg ? 'badge-success' : 'badge-warning'}`}>
                     {visit.visiteProg ? <CheckCircle size={14} /> : <Clock size={14} />}
                     <span>{visit.visiteProg ? 'Confirmée' : 'Tentative'}</span>
                 </div>
@@ -127,7 +194,7 @@ const ListView = React.memo(({ visits, addToast }) => (
                         <td>{visit.zoneInt || '-'}</td>
                         <td>{visit.dateRv}</td>
                         <td>
-                            <span className={`status-badge-sm ${visit.visiteProg ? 'programmed' : 'tentative'}`}>
+                            <span className={`badge ${visit.visiteProg ? 'badge-success' : 'badge-warning'}`}>
                                 {visit.visiteProg ? 'Confirmée' : 'Tentative'}
                             </span>
                         </td>
@@ -233,6 +300,7 @@ const Visits = () => {
     const { addToast } = useToast();
 
     useEffect(() => {
+        console.log('Visits component mounted');
         loadVisits();
         const unsubscribe = apiService.subscribe('dataUpdate', ({ visits: v }) => {
             if (v?.success) setVisits(v.data);
@@ -301,16 +369,17 @@ const Visits = () => {
     }, [searchTerm, filter, viewMode]);
 
     if (loading && !refreshing) {
-        return (
-            <div className="dashboard-loading">
-                <RefreshCw className="spinner" size={40} />
-                <p>Récupération des rendez-vous...</p>
-            </div>
-        );
+        return <VisitsSkeleton viewMode={viewMode} />;
     }
 
     return (
-        <div className="visits-v2">
+        <motion.div
+            className="visits-v2"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+        >
+
             <header className="visits-header">
                 <div className="header-text">
                     <h1>Gestion des Visites</h1>
@@ -464,7 +533,7 @@ const Visits = () => {
                     </span>
                 </div>
             )}
-        </div>
+        </motion.div>
     );
 };
 

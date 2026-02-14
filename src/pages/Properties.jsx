@@ -8,9 +8,70 @@ import apiService from '../services/api';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 import PropertyMap from '../components/PropertyMap';
+import Skeleton from '../components/Skeleton';
 import geocodingService from '../services/geocodingService';
 import { debounce } from '../utils/performance';
 import './Properties.css';
+
+const PropertiesSkeleton = ({ viewMode }) => (
+    <div className="properties-v2">
+        <div className="properties-header">
+            <div className="header-left">
+                <Skeleton width="200px" height="32px" style={{ marginBottom: '0.5rem' }} />
+                <Skeleton width="250px" height="20px" />
+            </div>
+            <Skeleton width="140px" height="40px" />
+        </div>
+
+        <div className="properties-toolbar">
+            <div className="search-filter-group" style={{ width: '100%', gap: '1rem' }}>
+                <Skeleton width="100%" height="42px" type="rect" style={{ borderRadius: '12px' }} />
+                <Skeleton width="120px" height="42px" type="rect" style={{ borderRadius: '12px' }} />
+            </div>
+            <div className="view-toggle">
+                <Skeleton width="120px" height="42px" type="rect" style={{ borderRadius: '12px' }} />
+            </div>
+        </div>
+
+        <div className={`properties-container ${viewMode}`}>
+            {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className={viewMode === 'list' ? 'property-list-item' : 'property-card-v2'} style={viewMode === 'list' ? { pointerEvents: 'none' } : { pointerEvents: 'none', height: '420px' }}>
+                    {viewMode === 'list' ? (
+                        <>
+                            <div className="property-list-info" style={{ width: '100%' }}>
+                                <div className="property-list-header">
+                                    <Skeleton width="40%" height="24px" />
+                                    <Skeleton width="20%" height="24px" />
+                                </div>
+                                <div className="property-list-details" style={{ marginTop: '0.5rem' }}>
+                                    <Skeleton width="30%" height="16px" />
+                                    <Skeleton width="20%" height="16px" />
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <Skeleton type="rect" height="200px" style={{ borderTopLeftRadius: '16px', borderTopRightRadius: '16px' }} />
+                            <div className="property-content" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                <div>
+                                    <Skeleton width="70%" height="24px" style={{ marginBottom: '8px' }} />
+                                    <Skeleton width="40%" height="20px" />
+                                </div>
+                                <Skeleton width="100%" height="16px" />
+                                <Skeleton width="90%" height="16px" />
+                                <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
+                                    <Skeleton width="60px" height="24px" />
+                                    <Skeleton width="60px" height="24px" />
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
+            ))}
+        </div>
+    </div>
+);
+
 
 const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
     const { addToast } = useToast();
@@ -57,7 +118,7 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
                             <h3 className="price-value">{property.prixFormate}</h3>
                         </div>
                         <div className="status-section">
-                            <span className={`status-badge ${property.disponible ? 'available' : 'occupied'}`}>
+                            <span className={`badge ${property.disponible ? 'badge-success' : 'badge-danger'}`}>
                                 {property.status}
                             </span>
                             {property.typeOffre && <span className="offer-badge">{property.typeOffre}</span>}
@@ -186,7 +247,6 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
                 <div className="property-list-info">
                     <div className="property-list-header">
                         <h3>{property.typeBien} {property.typeOffre ? `— ${property.typeOffre}` : ''}</h3>
-                        <span className="property-price">{property.prixFormate}</span>
                     </div>
                     <div className="property-list-details">
                         <span className="property-zone">
@@ -203,6 +263,7 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
                     </div>
                 </div>
                 <div className="property-list-actions">
+                    <span className="list-view-price">{property.prixFormate}</span>
                     <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); onViewDetails(property); }}
                         style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <Eye size={16} /> Détails
@@ -218,7 +279,7 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
 
     return (
         <motion.div
-            className="property-card-v2"
+            className="card property-card-v2"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: index * 0.1 }}
@@ -234,12 +295,10 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
                         background: `linear-gradient(135deg, ${property.id % 2 === 0 ? '#4f46e5' : '#ec4899'} 0%, ${property.id % 2 === 0 ? '#7c3aed' : '#f97316'} 100%)`
                     }}
                 >
-                    <div className="property-overlay">
-                        <span className="property-type">{property.typeBien}</span>
-                    </div>
+                    {/* Overlay text removed to avoid overlap with badges */}
                 </div>
                 <div className="property-badges">
-                    <span className="badge-status" style={{ background: statusColor }}>
+                    <span className={`badge ${property.disponible ? 'badge-success' : 'badge-danger'}`}>
                         {property.status}
                     </span>
                     {property.typeOffre && <span className="badge-offer">{property.typeOffre}</span>}
@@ -468,16 +527,17 @@ const Properties = () => {
     }, []);
 
     if (loading) {
-        return (
-            <div className="dashboard-loading">
-                <Loader className="spinner" size={40} />
-                <p>Chargement des biens depuis Google Sheets...</p>
-            </div>
-        );
+        return <PropertiesSkeleton viewMode={viewMode} />;
     }
 
     return (
-        <div className="properties-v2">
+        <motion.div
+            className="properties-v2"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+        >
+
             <div className="properties-header">
                 <div className="header-left">
                     <h2>Biens Immobiliers</h2>
@@ -764,7 +824,7 @@ const Properties = () => {
                 isOpen={modalOpen}
                 onClose={() => setModalOpen(false)}
             />
-        </div>
+        </motion.div>
     );
 };
 

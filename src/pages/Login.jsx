@@ -193,7 +193,17 @@ const Login = () => {
                                     disabled={loading}
                                 />
                             </div>
+                            {email.toLowerCase().includes('@gmail.com') && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    className="gmail-hint"
+                                >
+                                    👋 Vous pouvez aussi utiliser vos identifiants ImmoDash.
+                                </motion.div>
+                            )}
                         </div>
+
 
                         <div className="input-group">
                             <label htmlFor="login-password">Mot de passe</label>
