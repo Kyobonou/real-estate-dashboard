@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
     Calendar as CalendarIcon, Clock, Phone, MapPin, CheckCircle,
@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import apiService from '../services/api';
 import { useToast } from '../components/Toast';
+import { debounce } from '../utils/performance';
 import './Visits.css';
 
 // --- Shared Helper for Actions ---
@@ -225,8 +226,10 @@ const Visits = () => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [filter, setFilter] = useState('all'); // all, programmed, tentative
-    const [viewMode, setViewMode] = useState('grid'); // grid, list, calendar
+    const [viewMode, setViewMode] = useState('list'); // grid, list, calendar
     const [refreshing, setRefreshing] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 20;
     const { addToast } = useToast();
 
     useEffect(() => {
@@ -251,26 +254,51 @@ const Visits = () => {
         }
     };
 
-    const handleRefresh = () => {
+    // Debounced search (optimisation critique)
+    const debouncedSearch = useMemo(
+        () => debounce((value) => setSearchTerm(value), 300),
+        []
+    );
+
+    // Handlers optimisés avec useCallback
+    const handleRefresh = useCallback(() => {
         setRefreshing(true);
         loadVisits();
-    };
+    }, []);
 
-    const filteredVisits = visits.filter(visit => {
-        if (viewMode === 'calendar') return true; // Show all in calendar, maybe filter later if needed
+    // Filtrage des visites (mémorisé pour éviter recalculs)
+    const filteredVisits = useMemo(() => {
+        return visits.filter(visit => {
+            if (viewMode === 'calendar') return true; // Show all in calendar, maybe filter later if needed
 
-        const matchesSearch =
-            visit.nomPrenom.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (visit.zoneInt && visit.zoneInt.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            visit.telephone.includes(searchTerm);
+            const matchesSearch =
+                visit.nomPrenom.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (visit.zoneInt && visit.zoneInt.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                visit.telephone.includes(searchTerm);
 
-        const matchesFilter =
-            filter === 'all' ||
-            (filter === 'programmed' && visit.visiteProg) ||
-            (filter === 'tentative' && !visit.visiteProg);
+            const matchesFilter =
+                filter === 'all' ||
+                (filter === 'programmed' && visit.visiteProg) ||
+                (filter === 'tentative' && !visit.visiteProg);
 
-        return matchesSearch && matchesFilter;
-    });
+            return matchesSearch && matchesFilter;
+        });
+    }, [visits, searchTerm, filter, viewMode]);
+
+    // Pagination (optimisation importante)
+    const totalPages = Math.ceil(filteredVisits.length / ITEMS_PER_PAGE);
+
+    const paginatedVisits = useMemo(() => {
+        if (viewMode === 'calendar') return filteredVisits; // Pas de pagination pour le calendrier
+        const start = (currentPage - 1) * ITEMS_PER_PAGE;
+        const end = start + ITEMS_PER_PAGE;
+        return filteredVisits.slice(start, end);
+    }, [filteredVisits, currentPage, ITEMS_PER_PAGE, viewMode]);
+
+    // Réinitialiser la page à 1 quand les filtres changent
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, filter, viewMode]);
 
     if (loading && !refreshing) {
         return (
@@ -303,8 +331,8 @@ const Visits = () => {
                         <input
                             type="text"
                             placeholder="Rechercher..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            defaultValue={searchTerm}
+                            onChange={(e) => debouncedSearch(e.target.value)}
                         />
                     </div>
 
@@ -340,9 +368,10 @@ const Visits = () => {
                 </div>
             </div>
 
+
             {/* Content Area */}
-            {viewMode === 'grid' && <GridView visits={filteredVisits} addToast={addToast} />}
-            {viewMode === 'list' && <ListView visits={filteredVisits} addToast={addToast} />}
+            {viewMode === 'grid' && <GridView visits={paginatedVisits} addToast={addToast} />}
+            {viewMode === 'list' && <ListView visits={paginatedVisits} addToast={addToast} />}
             {viewMode === 'calendar' && <CalendarView visits={visits} />}
 
             {/* Empty State (only for list/grid) */}
@@ -353,6 +382,86 @@ const Visits = () => {
                     <button className="btn btn-secondary" onClick={() => { setFilter('all'); setSearchTerm(''); }}>
                         Effacer les filtres
                     </button>
+                </div>
+            )}
+
+            {/* Pagination Controls */}
+            {viewMode !== 'calendar' && filteredVisits.length > ITEMS_PER_PAGE && (
+                <div className="pagination-controls" style={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '2rem 0',
+                    marginTop: '2rem',
+                    borderTop: '1px solid var(--border-color)'
+                }}>
+                    <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        style={{
+                            opacity: currentPage === 1 ? 0.5 : 1,
+                            cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
+                        }}
+                    >
+                        Précédent
+                    </button>
+
+                    <div style={{
+                        display: 'flex',
+                        gap: '0.25rem',
+                        alignItems: 'center'
+                    }}>
+                        {Array.from({ length: totalPages }, (_, i) => i + 1)
+                            .filter(page => {
+                                return page <= 3 ||
+                                    page > totalPages - 3 ||
+                                    Math.abs(page - currentPage) <= 1;
+                            })
+                            .map((page, index, array) => {
+                                const prevPage = array[index - 1];
+                                const showEllipsis = prevPage && page - prevPage > 1;
+
+                                return (
+                                    <React.Fragment key={page}>
+                                        {showEllipsis && (
+                                            <span style={{ padding: '0 0.5rem', color: 'var(--text-secondary)' }}>...</span>
+                                        )}
+                                        <button
+                                            className={`btn ${currentPage === page ? 'btn-primary' : 'btn-ghost'} btn-sm`}
+                                            onClick={() => setCurrentPage(page)}
+                                            style={{
+                                                minWidth: '2.5rem',
+                                                fontWeight: currentPage === page ? 'bold' : 'normal'
+                                            }}
+                                        >
+                                            {page}
+                                        </button>
+                                    </React.Fragment>
+                                );
+                            })}
+                    </div>
+
+                    <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                        style={{
+                            opacity: currentPage === totalPages ? 0.5 : 1,
+                            cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'
+                        }}
+                    >
+                        Suivant
+                    </button>
+
+                    <span style={{
+                        marginLeft: '1rem',
+                        color: 'var(--text-secondary)',
+                        fontSize: '0.875rem'
+                    }}>
+                        Page {currentPage} sur {totalPages} ({filteredVisits.length} visites)
+                    </span>
                 </div>
             )}
         </div>

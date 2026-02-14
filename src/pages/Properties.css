@@ -747,3 +747,46 @@
 .spin {
     animation: spin 1s linear infinite;
 }
+
+/* Map View Styles */
+.map-view-container {
+    position: relative;
+    width: 100%;
+    min-height: 600px;
+}
+
+.map-loading-overlay {
+    position: absolute;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: 0.75rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    z-index: 1001;
+    box-shadow: var(--shadow-lg);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.map-loading-overlay .spinner {
+    animation: spin 1s linear infinite;
+}
+
+@media (max-width: 768px) {
+    .map-view-container {
+        min-height: 500px;
+    }
+}
+
+@media (max-width: 480px) {
+    .map-view-container {
+        min-height: 400px;
+    }
+}

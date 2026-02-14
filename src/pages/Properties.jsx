@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     MapPin, Tag, Grid, List, Search, Filter, X, Phone, Eye,
-    Download, Share2, Heart, Home, Key, Loader, RefreshCw, Bed, Building
+    Download, Share2, Heart, Home, Key, Loader, RefreshCw, Bed, Building, Map
 } from 'lucide-react';
 import apiService from '../services/api';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
+import PropertyMap from '../components/PropertyMap';
+import geocodingService from '../services/geocodingService';
+import { debounce } from '../utils/performance';
 import './Properties.css';
 
 const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
@@ -293,11 +296,15 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
 const Properties = () => {
     const [properties, setProperties] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [viewMode, setViewMode] = useState('grid');
+    const [viewMode, setViewMode] = useState('list');
     const [searchTerm, setSearchTerm] = useState('');
     const [filterOpen, setFilterOpen] = useState(false);
     const [selectedProperty, setSelectedProperty] = useState(null);
     const [modalOpen, setModalOpen] = useState(false);
+    const [geocodedProperties, setGeocodedProperties] = useState([]);
+    const [geocoding, setGeocoding] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 20;
     const { addToast } = useToast();
 
     const [filters, setFilters] = useState({
@@ -315,17 +322,37 @@ const Properties = () => {
         loadProperties();
 
         const unsubscribe = apiService.subscribe('dataUpdate', ({ properties: p }) => {
-            if (p?.success) setProperties(p.data);
+            if (p?.success) {
+                setProperties(p.data);
+                geocodePropertiesAsync(p.data);
+            }
         });
 
         return () => unsubscribe();
     }, []);
+
+    // Géocoder les propriétés de manière asynchrone
+    const geocodePropertiesAsync = async (props) => {
+        if (!props || props.length === 0) return;
+
+        setGeocoding(true);
+        try {
+            const geocoded = await geocodingService.geocodeProperties(props);
+            setGeocodedProperties(geocoded);
+        } catch (error) {
+            console.error('Geocoding error:', error);
+            addToast({ type: 'error', title: 'Erreur', message: 'Erreur lors du géocodage des propriétés' });
+        } finally {
+            setGeocoding(false);
+        }
+    };
 
     const loadProperties = async () => {
         try {
             const response = await apiService.getProperties();
             if (response.success) {
                 setProperties(response.data);
+                geocodePropertiesAsync(response.data);
             }
         } catch (error) {
             console.error('Error loading properties:', error);
@@ -334,49 +361,88 @@ const Properties = () => {
         }
     };
 
-    // Extraire les options uniques depuis les données réelles
-    const uniqueTypes = [...new Set(properties.map(p => p.typeBien).filter(Boolean))].sort();
-    const uniqueCommunes = [...new Set(properties.map(p => p.commune).filter(Boolean))].sort();
-    const uniqueQuartiers = [...new Set(properties.map(p => p.zone).filter(Boolean))].sort();
-    const uniquePieces = [...new Set(properties.map(p => p.chambres).filter(p => p > 0))].sort((a, b) => a - b);
+    // Extraire les options uniques depuis les données réelles (mémorisé)
+    const uniqueTypes = useMemo(() =>
+        [...new Set(properties.map(p => p.typeBien).filter(Boolean))].sort(),
+        [properties]
+    );
 
-    const filteredProperties = properties.filter(property => {
-        const matchesSearch =
-            (property.commune || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (property.zone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (property.typeBien || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (property.publiePar || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (property.caracteristiques || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const uniqueCommunes = useMemo(() =>
+        [...new Set(properties.map(p => p.commune).filter(Boolean))].sort(),
+        [properties]
+    );
 
-        const matchesType = filters.type === 'all' || property.typeBien === filters.type;
+    const uniqueQuartiers = useMemo(() =>
+        [...new Set(properties.map(p => p.zone).filter(Boolean))].sort(),
+        [properties]
+    );
 
-        const matchesStatus = filters.status === 'all' ||
-            (filters.status === 'Disponible' && property.disponible) ||
-            (filters.status === 'Occupé' && !property.disponible);
+    const uniquePieces = useMemo(() =>
+        [...new Set(properties.map(p => p.chambres).filter(p => p > 0))].sort((a, b) => a - b),
+        [properties]
+    );
 
-        const matchesMeuble = filters.meuble === 'all' ||
-            (filters.meuble === 'oui' && property.meuble) ||
-            (filters.meuble === 'non' && !property.meuble);
+    // Filtrage des propriétés (mémorisé pour éviter recalculs)
+    const filteredProperties = useMemo(() => {
+        return properties.filter(property => {
+            const matchesSearch =
+                (property.commune || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (property.zone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (property.typeBien || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (property.publiePar || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (property.caracteristiques || '').toLowerCase().includes(searchTerm.toLowerCase());
 
-        const matchesPieces = filters.pieces === 'all' || property.chambres === parseInt(filters.pieces);
+            const matchesType = filters.type === 'all' || property.typeBien === filters.type;
 
-        const matchesCommune = filters.commune === 'all' || property.commune === filters.commune;
+            const matchesStatus = filters.status === 'all' ||
+                (filters.status === 'Disponible' && property.disponible) ||
+                (filters.status === 'Occupé' && !property.disponible);
 
-        const matchesQuartier = filters.quartier === 'all' || property.zone === filters.quartier;
+            const matchesMeuble = filters.meuble === 'all' ||
+                (filters.meuble === 'oui' && property.meuble) ||
+                (filters.meuble === 'non' && !property.meuble);
 
-        let matchesPrice = true;
-        if (filters.minPrice && property.rawPrice < parseFloat(filters.minPrice)) matchesPrice = false;
-        if (filters.maxPrice && property.rawPrice > parseFloat(filters.maxPrice)) matchesPrice = false;
+            const matchesPieces = filters.pieces === 'all' || property.chambres === parseInt(filters.pieces);
 
-        return matchesSearch && matchesType && matchesStatus && matchesMeuble && matchesPieces && matchesCommune && matchesQuartier && matchesPrice;
-    });
+            const matchesCommune = filters.commune === 'all' || property.commune === filters.commune;
 
-    const handleViewDetails = (property) => {
+            const matchesQuartier = filters.quartier === 'all' || property.zone === filters.quartier;
+
+            let matchesPrice = true;
+            if (filters.minPrice && property.rawPrice < parseFloat(filters.minPrice)) matchesPrice = false;
+            if (filters.maxPrice && property.rawPrice > parseFloat(filters.maxPrice)) matchesPrice = false;
+
+            return matchesSearch && matchesType && matchesStatus && matchesMeuble && matchesPieces && matchesCommune && matchesQuartier && matchesPrice;
+        });
+    }, [properties, searchTerm, filters]);
+
+    // Pagination (optimisation importante)
+    const totalPages = Math.ceil(filteredProperties.length / ITEMS_PER_PAGE);
+
+    const paginatedProperties = useMemo(() => {
+        const start = (currentPage - 1) * ITEMS_PER_PAGE;
+        const end = start + ITEMS_PER_PAGE;
+        return filteredProperties.slice(start, end);
+    }, [filteredProperties, currentPage, ITEMS_PER_PAGE]);
+
+    // Réinitialiser la page à 1 quand les filtres changent
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, filters]);
+
+    // Debounced search (optimisation critique)
+    const debouncedSearch = useMemo(
+        () => debounce((value) => setSearchTerm(value), 300),
+        []
+    );
+
+    // Handlers optimisés avec useCallback
+    const handleViewDetails = useCallback((property) => {
         setSelectedProperty(property);
         setModalOpen(true);
-    };
+    }, []);
 
-    const handleExport = () => {
+    const handleExport = useCallback(() => {
         const headers = ['Type', 'Offre', 'Zone', 'Prix', 'Téléphone', 'Caractéristiques', 'Publié par', 'Meublé', 'Chambres', 'Disponible'];
         const rows = filteredProperties.map(p => [
             p.typeBien, p.typeOffre, p.zone, p.prix, p.telephone, p.caracteristiques, p.publiePar, p.meuble ? 'Oui' : 'Non', p.chambres, p.disponible ? 'Oui' : 'Non'
@@ -388,12 +454,12 @@ const Properties = () => {
         link.download = `biens_immobiliers_${new Date().toISOString().split('T')[0]}.csv`;
         link.click();
         addToast({ type: 'success', title: 'Export réussi', message: `${filteredProperties.length} biens exportés en CSV` });
-    };
+    }, [filteredProperties, addToast]);
 
-    const resetFilters = () => {
+    const resetFilters = useCallback(() => {
         setFilters({ type: 'all', status: 'all', meuble: 'all', pieces: 'all', commune: 'all', quartier: 'all' });
         setSearchTerm('');
-    };
+    }, []);
 
     if (loading) {
         return (
@@ -426,11 +492,11 @@ const Properties = () => {
                         <input
                             type="text"
                             placeholder="Rechercher par commune, type, publieur..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            defaultValue={searchTerm}
+                            onChange={(e) => debouncedSearch(e.target.value)}
                         />
                         {searchTerm && (
-                            <button onClick={() => setSearchTerm('')}>
+                            <button onClick={() => { setSearchTerm(''); }}>
                                 <X size={16} />
                             </button>
                         )}
@@ -451,6 +517,9 @@ const Properties = () => {
                     </button>
                     <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')}>
                         <List size={18} />
+                    </button>
+                    <button className={`view-btn ${viewMode === 'map' ? 'active' : ''}`} onClick={() => setViewMode('map')} title="Vue Carte">
+                        <Map size={18} />
                     </button>
                 </div>
             </div>
@@ -563,19 +632,57 @@ const Properties = () => {
                 )}
             </AnimatePresence>
 
-            <div className={`properties-container ${viewMode}`}>
-                <AnimatePresence mode="wait">
-                    {filteredProperties.map((property, index) => (
-                        <PropertyCard
-                            key={property.id}
-                            property={property}
-                            index={index}
-                            viewMode={viewMode}
-                            onViewDetails={handleViewDetails}
-                        />
-                    ))}
-                </AnimatePresence>
-            </div>
+            {viewMode === 'map' ? (
+                <div className="map-view-container">
+                    {geocoding && (
+                        <div className="map-loading-overlay">
+                            <Loader className="spinner" size={24} />
+                            <span>Géocodage des propriétés...</span>
+                        </div>
+                    )}
+                    <PropertyMap
+                        properties={geocodedProperties.filter(property => {
+                            const matchesSearch =
+                                (property.commune || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                (property.zone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                (property.typeBien || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                (property.publiePar || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                (property.caracteristiques || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+                            const matchesType = filters.type === 'all' || property.typeBien === filters.type;
+                            const matchesStatus = filters.status === 'all' ||
+                                (filters.status === 'Disponible' && property.disponible) ||
+                                (filters.status === 'Occupé' && !property.disponible);
+                            const matchesMeuble = filters.meuble === 'all' ||
+                                (filters.meuble === 'oui' && property.meuble) ||
+                                (filters.meuble === 'non' && !property.meuble);
+                            const matchesPieces = filters.pieces === 'all' || property.chambres === parseInt(filters.pieces);
+                            const matchesCommune = filters.commune === 'all' || property.commune === filters.commune;
+                            const matchesQuartier = filters.quartier === 'all' || property.zone === filters.quartier;
+                            let matchesPrice = true;
+                            if (filters.minPrice && property.rawPrice < parseFloat(filters.minPrice)) matchesPrice = false;
+                            if (filters.maxPrice && property.rawPrice > parseFloat(filters.maxPrice)) matchesPrice = false;
+
+                            return matchesSearch && matchesType && matchesStatus && matchesMeuble && matchesPieces && matchesCommune && matchesQuartier && matchesPrice;
+                        })}
+                        onPropertyClick={handleViewDetails}
+                    />
+                </div>
+            ) : (
+                <div className={`properties-container ${viewMode}`}>
+                    <AnimatePresence mode="wait">
+                        {paginatedProperties.map((property, index) => (
+                            <PropertyCard
+                                key={property.id}
+                                property={property}
+                                index={index}
+                                viewMode={viewMode}
+                                onViewDetails={handleViewDetails}
+                            />
+                        ))}
+                    </AnimatePresence>
+                </div>
+            )}
 
             {filteredProperties.length === 0 && (
                 <motion.div className="empty-state" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -585,6 +692,88 @@ const Properties = () => {
                         Réinitialiser les filtres
                     </button>
                 </motion.div>
+            )}
+
+            {/* Pagination Controls */}
+            {viewMode !== 'map' && filteredProperties.length > ITEMS_PER_PAGE && (
+                <div className="pagination-controls" style={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '2rem 0',
+                    marginTop: '2rem',
+                    borderTop: '1px solid var(--border-color)'
+                }}>
+                    <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        style={{
+                            opacity: currentPage === 1 ? 0.5 : 1,
+                            cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
+                        }}
+                    >
+                        Précédent
+                    </button>
+
+                    <div style={{
+                        display: 'flex',
+                        gap: '0.25rem',
+                        alignItems: 'center'
+                    }}>
+                        {Array.from({ length: totalPages }, (_, i) => i + 1)
+                            .filter(page => {
+                                // Afficher les 3 premières, les 3 dernières, et 2 autour de la page actuelle
+                                return page <= 3 ||
+                                    page > totalPages - 3 ||
+                                    Math.abs(page - currentPage) <= 1;
+                            })
+                            .map((page, index, array) => {
+                                // Ajouter des "..." entre les groupes
+                                const prevPage = array[index - 1];
+                                const showEllipsis = prevPage && page - prevPage > 1;
+
+                                return (
+                                    <React.Fragment key={page}>
+                                        {showEllipsis && (
+                                            <span style={{ padding: '0 0.5rem', color: 'var(--text-secondary)' }}>...</span>
+                                        )}
+                                        <button
+                                            className={`btn ${currentPage === page ? 'btn-primary' : 'btn-ghost'} btn-sm`}
+                                            onClick={() => setCurrentPage(page)}
+                                            style={{
+                                                minWidth: '2.5rem',
+                                                fontWeight: currentPage === page ? 'bold' : 'normal'
+                                            }}
+                                        >
+                                            {page}
+                                        </button>
+                                    </React.Fragment>
+                                );
+                            })}
+                    </div>
+
+                    <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                        style={{
+                            opacity: currentPage === totalPages ? 0.5 : 1,
+                            cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'
+                        }}
+                    >
+                        Suivant
+                    </button>
+
+                    <span style={{
+                        marginLeft: '1rem',
+                        color: 'var(--text-secondary)',
+                        fontSize: '0.875rem'
+                    }}>
+                        Page {currentPage} sur {totalPages} ({filteredProperties.length} biens)
+                    </span>
+                </div>
             )}
 
             <PropertyDetailsModal

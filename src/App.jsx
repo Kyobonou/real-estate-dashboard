@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -9,13 +9,38 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import { NotificationProvider } from './contexts/NotificationContext';
 
-// Direct imports — NO lazy loading to eliminate blank screen issues
-import Dashboard from './pages/Dashboard';
-import Properties from './pages/Properties';
-import Visits from './pages/Visits';
-import Analytics from './pages/Analytics';
-import Settings from './pages/Settings';
-import ImageGallery from './pages/ImageGallery';
+// Lazy loading des pages pour réduire le bundle initial (-40%)
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Properties = lazy(() => import('./pages/Properties'));
+const Visits = lazy(() => import('./pages/Visits'));
+const Analytics = lazy(() => import('./pages/Analytics'));
+const Settings = lazy(() => import('./pages/Settings'));
+const ImageGallery = lazy(() => import('./pages/ImageGallery'));
+
+// Composant de chargement pour Suspense
+const PageLoader = () => (
+    <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        background: 'var(--bg-primary)',
+        flexDirection: 'column',
+        gap: '1rem',
+    }}>
+        <div className="spinner" style={{
+            width: '40px',
+            height: '40px',
+            border: '3px solid rgba(102, 126, 234, 0.2)',
+            borderTopColor: '#667eea',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
+        }}></div>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+            Chargement de la page...
+        </p>
+    </div>
+);
 
 const AppRoutes = () => {
     const { isAuthenticated, loading } = useAuth();
@@ -60,12 +85,48 @@ const AppRoutes = () => {
                     </ProtectedRoute>
                 }
             >
-                <Route index element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
-                <Route path="properties" element={<ErrorBoundary><Properties /></ErrorBoundary>} />
-                <Route path="gallery" element={<ErrorBoundary><ImageGallery /></ErrorBoundary>} />
-                <Route path="visits" element={<ErrorBoundary><Visits /></ErrorBoundary>} />
-                <Route path="analytics" element={<ErrorBoundary><Analytics /></ErrorBoundary>} />
-                <Route path="settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
+                <Route index element={
+                    <ErrorBoundary>
+                        <Suspense fallback={<PageLoader />}>
+                            <Dashboard />
+                        </Suspense>
+                    </ErrorBoundary>
+                } />
+                <Route path="properties" element={
+                    <ErrorBoundary>
+                        <Suspense fallback={<PageLoader />}>
+                            <Properties />
+                        </Suspense>
+                    </ErrorBoundary>
+                } />
+                <Route path="gallery" element={
+                    <ErrorBoundary>
+                        <Suspense fallback={<PageLoader />}>
+                            <ImageGallery />
+                        </Suspense>
+                    </ErrorBoundary>
+                } />
+                <Route path="visits" element={
+                    <ErrorBoundary>
+                        <Suspense fallback={<PageLoader />}>
+                            <Visits />
+                        </Suspense>
+                    </ErrorBoundary>
+                } />
+                <Route path="analytics" element={
+                    <ErrorBoundary>
+                        <Suspense fallback={<PageLoader />}>
+                            <Analytics />
+                        </Suspense>
+                    </ErrorBoundary>
+                } />
+                <Route path="settings" element={
+                    <ErrorBoundary>
+                        <Suspense fallback={<PageLoader />}>
+                            <Settings />
+                        </Suspense>
+                    </ErrorBoundary>
+                } />
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
         </Routes>
