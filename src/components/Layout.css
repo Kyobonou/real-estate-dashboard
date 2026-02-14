@@ -391,9 +391,27 @@
 
     .top-header {
         padding: 0 1.25rem;
-        height: 64px;
+        /* Increase height and add padding-top to lower content from status bar */
+        height: auto;
+        min-height: 80px;
+        padding-top: env(safe-area-inset-top, 24px);
+        padding-bottom: 1rem;
         position: sticky;
         top: 0;
+        z-index: 40;
+        background: var(--bg-secondary);
+        /* Ensure background covers content behind */
+        display: flex;
+        align-items: flex-end;
+        /* Align bottom to keep "lowered" feel */
+    }
+
+    /* Ensure header content is centered vertically in the new available space */
+    .header-left {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        padding-bottom: 0.25rem;
     }
 
     .search-box,

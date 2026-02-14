@@ -35,12 +35,47 @@ const StatCard = ({ title, value, icon: Icon, trend, trendValue, color }) => (
     </motion.div>
 );
 
+const WelcomeBanner = ({ onClose }) => (
+    <motion.div
+        className="welcome-banner glass-panel"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, height: 0 }}
+    >
+        <div className="welcome-content">
+            <div className="welcome-icon">
+                <Home size={32} />
+            </div>
+            <div className="welcome-text">
+                <h3>Bienvenue sur ImmoDash ! 👋</h3>
+                <p>Votre tableau de bord pour gérer vos biens immobiliers en toute simplicité.</p>
+            </div>
+            <button className="btn-close-banner" onClick={onClose}><X size={20} /></button>
+        </div>
+    </motion.div>
+);
+
+const EmptyListState = ({ message, icon: Icon, actionLabel, onAction }) => (
+    <div className="empty-state">
+        <div className="empty-icon">
+            <Icon size={24} />
+        </div>
+        <p>{message}</p>
+        {actionLabel && (
+            <button className="btn-link-action" onClick={onAction}>
+                {actionLabel} <ChevronRight size={14} />
+            </button>
+        )}
+    </div>
+);
+
 const Dashboard = () => {
     const [stats, setStats] = useState(null);
     const [properties, setProperties] = useState([]);
     const [visits, setVisits] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [showWelcome, setShowWelcome] = useState(true);
 
     useEffect(() => {
         loadData();
@@ -49,8 +84,18 @@ const Dashboard = () => {
             if (data.properties?.success) setProperties(data.properties.data.slice(0, 5));
             if (data.visits?.success) setVisits(data.visits.data.slice(0, 5));
         });
+
+        // Check if welcome banner was dismissed
+        const bannerDismissed = localStorage.getItem('welcome_dismissed');
+        if (bannerDismissed) setShowWelcome(false);
+
         return () => unsubscribe();
     }, []);
+
+    const dismissWelcome = () => {
+        setShowWelcome(false);
+        localStorage.setItem('welcome_dismissed', 'true');
+    };
 
     const loadData = async () => {
         setLoading(true);
@@ -79,7 +124,7 @@ const Dashboard = () => {
         return (
             <div className="dashboard-loading">
                 <div className="loader-ring"></div>
-                <p>Analyse de la base de données...</p>
+                <p>Chargement de votre espace...</p>
             </div>
         );
     }
@@ -94,14 +139,18 @@ const Dashboard = () => {
         <div className="dashboard-v2">
             <header className="dashboard-header">
                 <div className="header-text">
-                    <h1>Tableau de Bord Immobilier</h1>
-                    <p>Aperçu en temps réel de votre parc immobilier</p>
+                    <h1>Tableau de Bord</h1>
+                    <p>Aperçu de votre activité immobilière</p>
                 </div>
                 <button className={`btn btn-secondary ${refreshing ? 'spinning' : ''}`} onClick={handleRefresh}>
                     <RefreshCw size={18} />
-                    {refreshing ? 'Mise à jour...' : 'Actualiser'}
+                    <span className="desktop-only">{refreshing ? 'Mise à jour...' : 'Actualiser'}</span>
                 </button>
             </header>
+
+            <AnimatePresence>
+                {showWelcome && <WelcomeBanner onClose={dismissWelcome} />}
+            </AnimatePresence>
 
             {/* KPI Section */}
             <div className="kpi-grid">
@@ -118,7 +167,7 @@ const Dashboard = () => {
                     color="#10b981"
                 />
                 <StatCard
-                    title="Visites Programmé"
+                    title="Visites Prog."
                     value={stats?.visitesProgrammees || 0}
                     icon={Calendar}
                     color="#f093fb"
@@ -140,22 +189,26 @@ const Dashboard = () => {
                             <Activity size={18} />
                         </div>
                         <div className="chart-wrapper h-300">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={zoneData}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                                    <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                                    <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                                    <Tooltip
-                                        contentStyle={{ backgroundColor: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
-                                        itemStyle={{ color: '#f8fafc' }}
-                                    />
-                                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                                        {zoneData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
+                            {zoneData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={zoneData}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                                        <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
+                                        <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
+                                        <Tooltip
+                                            contentStyle={{ backgroundColor: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                                            itemStyle={{ color: '#f8fafc' }}
+                                        />
+                                        <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                                            {zoneData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <EmptyListState message="Aucune donnée de zone disponible" icon={Activity} />
+                            )}
                         </div>
                     </div>
 
@@ -165,32 +218,38 @@ const Dashboard = () => {
                                 <h3>Types de Biens</h3>
                             </div>
                             <div className="chart-wrapper h-250">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={typeData}
-                                            innerRadius={60}
-                                            outerRadius={80}
-                                            paddingAngle={5}
-                                            dataKey="value"
-                                        >
-                                            {typeData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip />
-                                    </PieChart>
-                                </ResponsiveContainer>
+                                {typeData.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie
+                                                data={typeData}
+                                                innerRadius={60}
+                                                outerRadius={80}
+                                                paddingAngle={5}
+                                                dataKey="value"
+                                            >
+                                                {typeData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                ) : (
+                                    <EmptyListState message="Aucun bien enregistré" icon={Home} />
+                                )}
                             </div>
-                            <div className="chart-legend">
-                                {typeData.map((item, i) => (
-                                    <div key={item.name} className="legend-item">
-                                        <span className="dot" style={{ backgroundColor: COLORS[i % COLORS.length] }}></span>
-                                        <span className="label">{item.name}</span>
-                                        <span className="value">{item.value}</span>
-                                    </div>
-                                ))}
-                            </div>
+                            {typeData.length > 0 && (
+                                <div className="chart-legend">
+                                    {typeData.map((item, i) => (
+                                        <div key={item.name} className="legend-item">
+                                            <span className="dot" style={{ backgroundColor: COLORS[i % COLORS.length] }}></span>
+                                            <span className="label">{item.name}</span>
+                                            <span className="value">{item.value}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         <div className="glass-panel p-6">
@@ -205,7 +264,7 @@ const Dashboard = () => {
                                         <strong>{stats?.biensDisponibles || 0}</strong>
                                     </div>
                                     <div className="progress-bar">
-                                        <div className="progress-fill available" style={{ width: `${(stats?.biensDisponibles / stats?.totalBiens) * 100}%` }}></div>
+                                        <div className="progress-fill available" style={{ width: `${stats?.totalBiens ? (stats.biensDisponibles / stats.totalBiens) * 100 : 0}%` }}></div>
                                     </div>
                                 </div>
                                 <div className="avail-item">
@@ -215,7 +274,7 @@ const Dashboard = () => {
                                         <strong>{stats?.biensOccupes || 0}</strong>
                                     </div>
                                     <div className="progress-bar">
-                                        <div className="progress-fill occupied" style={{ width: `${(stats?.biensOccupes / stats?.totalBiens) * 100}%` }}></div>
+                                        <div className="progress-fill occupied" style={{ width: `${stats?.totalBiens ? (stats.biensOccupes / stats.totalBiens) * 100 : 0}%` }}></div>
                                     </div>
                                 </div>
                             </div>
@@ -231,7 +290,7 @@ const Dashboard = () => {
                             <button className="btn-link">Tout voir <ChevronRight size={14} /></button>
                         </div>
                         <div className="items-list">
-                            {properties.map(p => (
+                            {properties.length > 0 ? properties.map(p => (
                                 <div key={p.id} className="item-row">
                                     <div className="item-icon" style={{ background: p.disponible ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)' }}>
                                         <Home size={16} color={p.disponible ? '#10b981' : '#ef4444'} />
@@ -242,7 +301,9 @@ const Dashboard = () => {
                                     </div>
                                     <div className="item-price">{p.prixFormate}</div>
                                 </div>
-                            ))}
+                            )) : (
+                                <EmptyListState message="Aucun bien récent" icon={Home} />
+                            )}
                         </div>
                     </div>
 
@@ -251,7 +312,7 @@ const Dashboard = () => {
                             <h3>Visites à venir</h3>
                         </div>
                         <div className="items-list">
-                            {visits.map(v => (
+                            {visits.length > 0 ? visits.map(v => (
                                 <div key={v.id} className="item-row">
                                     <div className="item-icon bg-indigo-soft">
                                         <Calendar size={16} className="text-indigo" />
@@ -264,7 +325,9 @@ const Dashboard = () => {
                                         {v.visiteProg ? 'Prog.' : 'Tent.'}
                                     </div>
                                 </div>
-                            ))}
+                            )) : (
+                                <EmptyListState message="Aucune visite prévue" icon={Calendar} />
+                            )}
                         </div>
                     </div>
                 </div>
