@@ -35,6 +35,8 @@
     "firebase-tools": "^15.6.0",
     "globals": "^16.5.0",
     "rollup-plugin-visualizer": "^6.0.5",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vite-plugin-pwa": "^1.2.0",
+    "workbox-window": "^7.4.0"
   }
 }

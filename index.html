@@ -3,7 +3,13 @@
 
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+
+  <!-- PWA & Favicons -->
+  <link rel="icon" type="image/svg+xml" href="/pwa-icon.svg" />
+  <link rel="apple-touch-icon" href="/masked-icon.svg" />
+  <link rel="mask-icon" href="/masked-icon.svg" color="#667eea" />
+  <meta name="theme-color" content="#0f172a" />
+
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <!-- Force no-cache to prevent stale JS/CSS -->
@@ -91,7 +97,7 @@
   <script type="module" src="/src/main.jsx"></script>
   <script>
     // Diagnostic: if React hasn't mounted after 10 seconds, show a message
-    setTimeout(function() {
+    setTimeout(function () {
       var loading = document.getElementById('root-loading');
       if (loading) {
         loading.innerHTML = '<div style="text-align:center;padding:2rem;">' +
