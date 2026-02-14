@@ -10,7 +10,7 @@ import { debounce } from '../utils/performance';
 import './Visits.css';
 
 // --- Shared Helper for Actions ---
-const VisitActions = ({ visit, addToast }) => {
+const VisitActions = React.memo(({ visit, addToast }) => {
     const handleCall = (e) => {
         e.stopPropagation();
         window.open(`tel:${visit.telephone}`, '_self');
@@ -27,18 +27,18 @@ const VisitActions = ({ visit, addToast }) => {
 
     return (
         <div className="visit-actions">
-            <button className="btn btn-secondary btn-sm" onClick={handleCall} title="Appeler">
+            <button className="btn btn-secondary btn-sm" onClick={handleCall} title="Appeler" aria-label="Appeler">
                 <Phone size={14} /> <span className="desktop-only">Appeler</span>
             </button>
-            <button className="btn btn-whatsapp btn-sm" onClick={handleWhatsApp} title="Gros pouce vert">
+            <button className="btn btn-whatsapp btn-sm" onClick={handleWhatsApp} title="Gros pouce vert" aria-label="WhatsApp">
                 WhatsApp
             </button>
         </div>
     );
-};
+});
 
 // --- GRID VIEW COMPONENT ---
-const GridView = ({ visits, addToast }) => (
+const GridView = React.memo(({ visits, addToast }) => (
     <div className="visits-grid">
         {visits.map((visit, index) => (
             <motion.div
@@ -95,10 +95,10 @@ const GridView = ({ visits, addToast }) => (
             </motion.div>
         ))}
     </div>
-);
+));
 
 // --- LIST VIEW COMPONENT ---
-const ListView = ({ visits, addToast }) => (
+const ListView = React.memo(({ visits, addToast }) => (
     <div className="visits-list-container">
         <table className="visits-table">
             <thead>
@@ -139,10 +139,10 @@ const ListView = ({ visits, addToast }) => (
             </tbody>
         </table>
     </div>
-);
+));
 
 // --- CALENDAR VIEW COMPONENT ---
-const CalendarView = ({ visits }) => {
+const CalendarView = React.memo(({ visits }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
 
     const getDaysInMonth = (date) => {
@@ -218,7 +218,7 @@ const CalendarView = ({ visits }) => {
             </div>
         </div>
     );
-};
+});
 
 
 const Visits = () => {

@@ -44,7 +44,7 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
             <div className="property-details-modal">
                 <div className="property-details-header">
                     <div className="property-image-large" style={{
-                        background: `linear-gradient(135deg, ${property.id % 2 === 0 ? '#667eea' : '#f093fb'} 0%, ${property.id % 2 === 0 ? '#764ba2' : '#f5576c'} 100%)`
+                        background: `linear-gradient(135deg, ${property.id % 2 === 0 ? '#4f46e5' : '#ec4899'} 0%, ${property.id % 2 === 0 ? '#7c3aed' : '#f97316'} 100%)`
                     }}>
                         <div className="property-overlay">
                             <h2>{property.typeBien}</h2>
@@ -231,7 +231,7 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
                 <div
                     className="property-image"
                     style={{
-                        background: `linear-gradient(135deg, ${property.id % 2 === 0 ? '#667eea' : '#f093fb'} 0%, ${property.id % 2 === 0 ? '#764ba2' : '#f5576c'} 100%)`
+                        background: `linear-gradient(135deg, ${property.id % 2 === 0 ? '#4f46e5' : '#ec4899'} 0%, ${property.id % 2 === 0 ? '#7c3aed' : '#f97316'} 100%)`
                     }}
                 >
                     <div className="property-overlay">
@@ -416,6 +416,12 @@ const Properties = () => {
         });
     }, [properties, searchTerm, filters]);
 
+    // Optimisation Vercel: Croisement efficace O(N) pour la carte au lieu de duplication O(N*M)
+    const filteredGeocodedProperties = useMemo(() => {
+        const filteredIds = new Set(filteredProperties.map(p => p.id));
+        return geocodedProperties.filter(p => filteredIds.has(p.id));
+    }, [filteredProperties, geocodedProperties]);
+
     // Pagination (optimisation importante)
     const totalPages = Math.ceil(filteredProperties.length / ITEMS_PER_PAGE);
 
@@ -512,13 +518,13 @@ const Properties = () => {
                 </div>
 
                 <div className="view-toggle">
-                    <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')}>
+                    <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')} aria-label="Vue Grille">
                         <Grid size={18} />
                     </button>
-                    <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')}>
+                    <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')} aria-label="Vue Liste">
                         <List size={18} />
                     </button>
-                    <button className={`view-btn ${viewMode === 'map' ? 'active' : ''}`} onClick={() => setViewMode('map')} title="Vue Carte">
+                    <button className={`view-btn ${viewMode === 'map' ? 'active' : ''}`} onClick={() => setViewMode('map')} title="Vue Carte" aria-label="Vue Carte">
                         <Map size={18} />
                     </button>
                 </div>
@@ -641,30 +647,7 @@ const Properties = () => {
                         </div>
                     )}
                     <PropertyMap
-                        properties={geocodedProperties.filter(property => {
-                            const matchesSearch =
-                                (property.commune || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                (property.zone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                (property.typeBien || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                (property.publiePar || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                (property.caracteristiques || '').toLowerCase().includes(searchTerm.toLowerCase());
-
-                            const matchesType = filters.type === 'all' || property.typeBien === filters.type;
-                            const matchesStatus = filters.status === 'all' ||
-                                (filters.status === 'Disponible' && property.disponible) ||
-                                (filters.status === 'Occupé' && !property.disponible);
-                            const matchesMeuble = filters.meuble === 'all' ||
-                                (filters.meuble === 'oui' && property.meuble) ||
-                                (filters.meuble === 'non' && !property.meuble);
-                            const matchesPieces = filters.pieces === 'all' || property.chambres === parseInt(filters.pieces);
-                            const matchesCommune = filters.commune === 'all' || property.commune === filters.commune;
-                            const matchesQuartier = filters.quartier === 'all' || property.zone === filters.quartier;
-                            let matchesPrice = true;
-                            if (filters.minPrice && property.rawPrice < parseFloat(filters.minPrice)) matchesPrice = false;
-                            if (filters.maxPrice && property.rawPrice > parseFloat(filters.maxPrice)) matchesPrice = false;
-
-                            return matchesSearch && matchesType && matchesStatus && matchesMeuble && matchesPieces && matchesCommune && matchesQuartier && matchesPrice;
-                        })}
+                        properties={filteredGeocodedProperties}
                         onPropertyClick={handleViewDetails}
                     />
                 </div>
