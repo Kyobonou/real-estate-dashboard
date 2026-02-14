@@ -1,4 +1,4 @@
-# ✅ Sauvegarde GitHub Complétée - ImmoDash v3.6.0 (Pro Design Edition)
+# ✅ Sauvegarde GitHub Complétée - ImmoDash v3.7.0 (Pro Dashboard Edition)
 
 ## 🎨 Statut : Sauvegarde Réussie et Déployée (PWA + NEW Design)
 
@@ -14,6 +14,24 @@ Votre application **ImmoDash** a bénéficié d'une refonte visuelle majeure ("I
 - **Branche** : `main`
 - **Tag** : `v3.6.0` (Design & Performance)
 - **Déploiement** : <https://immo-dashboard-ci.web.app/>
+
+### Contenu de la Version v3.7.0 (Dashboard Pro)
+
+Cette mise à jour sublime le tableau de bord principal.
+
+#### 1. Dashboard UI Pro 📊
+
+- **Palette de Données** : Couleurs distinctes (Indigo, Pink, Emerald, Amber) pour chaque KPI.
+- **Charts Modernes** : Tooltips en **Glassmorphism**, axes épurés, légendes dynamiques.
+- **KPI Cards** : Ajout d'indicateurs de tendance (ex: "+12%").
+- **Listes Activity** : Icônes stylisées avec fonds subtils (`rgba`).
+
+#### 2. Design System Pro (UI/UX Pro Max) 🎨
+
+- **Palette Couleurs** : Passage au thème **Indigo (#4f46e5)** pour un contraste AA+ (Accessibilité).
+- **Accessibilité** : Ajout de **Focus Rings** visibles pour la navigation clavier.
+- **Glassmorphism** : Unification des effets de transparence et d'ombres.
+- **Typographie** : Utilisation de `text-wrap: balance` pour des titres parfaits.
 
 ### Contenu de la Version v3.6.0
 

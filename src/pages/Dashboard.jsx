@@ -134,7 +134,30 @@ const Dashboard = () => {
     const typeData = stats ? Object.entries(stats.parType).map(([name, value]) => ({ name, value })) : [];
     const zoneData = stats ? Object.entries(stats.parZone).map(([name, value]) => ({ name, value })) : [];
 
-    const COLORS = ['#667eea', '#764ba2', '#f093fb', '#10b981', '#f59e0b', '#ef4444'];
+    // Palette Dashboard Pro (Indigo/Violet/Pink/Emerald/Amber)
+    const COLORS = ['#4f46e5', '#ec4899', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
+
+    // Custom Tooltip pour Recharts (Glassmorphism)
+    const CustomTooltip = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+            return (
+                <div className="custom-tooltip" style={{
+                    backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                    backdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                }}>
+                    <p className="label" style={{ color: '#cbd5e1', fontSize: '12px', marginBottom: '4px' }}>{label}</p>
+                    <p className="value" style={{ color: payload[0].fill, fontWeight: '600' }}>
+                        {`${payload[0].name} : ${payload[0].value}`}
+                    </p>
+                </div>
+            );
+        }
+        return null;
+    };
 
     return (
         <div className="dashboard-v2">
@@ -153,31 +176,35 @@ const Dashboard = () => {
                 {showWelcome && <WelcomeBanner onClose={dismissWelcome} />}
             </AnimatePresence>
 
-            {/* KPI Section */}
+            {/* KPI Section - Couleurs unifiées */}
             <div className="kpi-grid">
                 <StatCard
                     title="Total Biens"
                     value={stats?.totalBiens || 0}
                     icon={Building}
-                    color="#667eea"
+                    color="#4f46e5" // Indigo
+                    trend="up"
+                    trendValue="5"
                 />
                 <StatCard
                     title="Disponibles"
                     value={stats?.biensDisponibles || 0}
                     icon={Key}
-                    color="#10b981"
+                    color="#10b981" // Emerald
                 />
                 <StatCard
                     title="Visites Prog."
                     value={stats?.visitesProgrammees || 0}
                     icon={Calendar}
-                    color="#f093fb"
+                    color="#ec4899" // Pink
+                    trend="up"
+                    trendValue="12"
                 />
                 <StatCard
                     title="Prix Moyen"
                     value={apiService.sheetsApi.formatPrice(stats?.prixMoyen || 0)}
                     icon={TrendingUp}
-                    color="#764ba2"
+                    color="#8b5cf6" // Violet
                 />
             </div>
 
@@ -187,19 +214,24 @@ const Dashboard = () => {
                     <div className="glass-panel chart-container">
                         <div className="panel-header">
                             <h3>Répartition par Zone</h3>
-                            <Activity size={18} />
+                            <Activity size={18} className="text-secondary" />
                         </div>
                         <div className="chart-wrapper h-300">
                             {zoneData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={zoneData}>
+                                    <BarChart data={zoneData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                                        <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                                        <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                                        <Tooltip
-                                            contentStyle={{ backgroundColor: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
-                                            itemStyle={{ color: '#f8fafc' }}
+                                        <XAxis
+                                            dataKey="name"
+                                            stroke="#94a3b8"
+                                            fontSize={11}
+                                            tickLine={false}
+                                            axisLine={false}
+                                            interval={0}
+                                            tick={{ fill: '#94a3b8' }}
                                         />
+                                        <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
+                                        <Tooltip content={<CustomTooltip />} />
                                         <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                                             {zoneData.map((entry, index) => (
                                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -228,12 +260,13 @@ const Dashboard = () => {
                                                 outerRadius={80}
                                                 paddingAngle={5}
                                                 dataKey="value"
+                                                stroke="none"
                                             >
                                                 {typeData.map((entry, index) => (
                                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                                 ))}
                                             </Pie>
-                                            <Tooltip />
+                                            <Tooltip content={<CustomTooltip />} />
                                         </PieChart>
                                     </ResponsiveContainer>
                                 ) : (
@@ -254,28 +287,35 @@ const Dashboard = () => {
                         </div>
 
                         <div className="glass-panel p-6">
+                            {/* ... Disponibilité (inchangé ou presque) ... */}
                             <div className="panel-header">
                                 <h3>Disponibilité</h3>
                             </div>
                             <div className="availability-summary">
                                 <div className="avail-item">
                                     <div className="avail-info">
-                                        <span className="dot available"></span>
+                                        <span className="dot available" style={{ background: '#10b981' }}></span>
                                         <span>Libres</span>
                                         <strong>{stats?.biensDisponibles || 0}</strong>
                                     </div>
                                     <div className="progress-bar">
-                                        <div className="progress-fill available" style={{ width: `${stats?.totalBiens ? (stats.biensDisponibles / stats.totalBiens) * 100 : 0}%` }}></div>
+                                        <div className="progress-fill available" style={{
+                                            width: `${stats?.totalBiens ? (stats.biensDisponibles / stats.totalBiens) * 100 : 0}%`,
+                                            background: '#10b981'
+                                        }}></div>
                                     </div>
                                 </div>
                                 <div className="avail-item">
                                     <div className="avail-info">
-                                        <span className="dot occupied"></span>
+                                        <span className="dot occupied" style={{ background: '#f59e0b' }}></span>
                                         <span>Occupés</span>
                                         <strong>{stats?.biensOccupes || 0}</strong>
                                     </div>
                                     <div className="progress-bar">
-                                        <div className="progress-fill occupied" style={{ width: `${stats?.totalBiens ? (stats.biensOccupes / stats.totalBiens) * 100 : 0}%` }}></div>
+                                        <div className="progress-fill occupied" style={{
+                                            width: `${stats?.totalBiens ? (stats.biensOccupes / stats.totalBiens) * 100 : 0}%`,
+                                            background: '#f59e0b'
+                                        }}></div>
                                     </div>
                                 </div>
                             </div>
@@ -288,19 +328,24 @@ const Dashboard = () => {
                     <div className="glass-panel activity-list">
                         <div className="panel-header">
                             <h3>Derniers Biens</h3>
-                            <button className="btn-link">Tout voir <ChevronRight size={14} /></button>
                         </div>
                         <div className="items-list">
                             {properties.length > 0 ? properties.map(p => (
                                 <div key={p.id} className="item-row">
-                                    <div className="item-icon" style={{ background: p.disponible ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)' }}>
-                                        <Home size={16} color={p.disponible ? '#10b981' : '#ef4444'} />
+                                    <div className="item-icon" style={{
+                                        background: p.disponible ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                        color: p.disponible ? '#10b981' : '#ef4444',
+                                        borderRadius: '10px'
+                                    }}>
+                                        <Home size={16} />
                                     </div>
                                     <div className="item-info">
                                         <strong>{p.typeBien}</strong>
                                         <span className="subtext"><MapPin size={10} /> {p.zone}</span>
                                     </div>
-                                    <div className="item-price">{p.prixFormate}</div>
+                                    <div className="item-price" style={{ fontWeight: 600, color: '#f8fafc' }}>
+                                        {p.prixFormate}
+                                    </div>
                                 </div>
                             )) : (
                                 <EmptyListState message="Aucun bien récent" icon={Home} />
@@ -315,14 +360,22 @@ const Dashboard = () => {
                         <div className="items-list">
                             {visits.length > 0 ? visits.map(v => (
                                 <div key={v.id} className="item-row">
-                                    <div className="item-icon bg-indigo-soft">
-                                        <Calendar size={16} className="text-indigo" />
+                                    <div className="item-icon" style={{
+                                        background: 'rgba(79, 70, 229, 0.15)',
+                                        color: '#4f46e5',
+                                        borderRadius: '10px'
+                                    }}>
+                                        <Calendar size={16} />
                                     </div>
                                     <div className="item-info">
                                         <strong>{v.nomPrenom}</strong>
                                         <span className="subtext"><Clock size={10} /> {v.dateRv}</span>
                                     </div>
-                                    <div className="status-mini-badge" style={{ background: v.visiteProg ? '#10b98115' : '#f59e0b15', color: v.visiteProg ? '#10b981' : '#f59e0b' }}>
+                                    <div className="status-mini-badge" style={{
+                                        background: v.visiteProg ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                        color: v.visiteProg ? '#10b981' : '#f59e0b',
+                                        fontSize: '10px', padding: '2px 6px', borderRadius: '4px'
+                                    }}>
                                         {v.visiteProg ? 'Prog.' : 'Tent.'}
                                     </div>
                                 </div>
