@@ -20,15 +20,19 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import apiService from '../services/api';
+import { useNotifications } from '../contexts/NotificationContext';
+import NotificationPanel from './NotificationPanel';
 import './Layout.css';
 
 const Layout = () => {
     const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
-    const [notifications, setNotifications] = useState(3);
+    // REMOVED local state for notifications: const [notifications, setNotifications] = useState(3);
+    const [showNotifications, setShowNotifications] = useState(false);
     const [isOnline, setIsOnline] = useState(true);
     const location = useLocation();
     const navigate = useNavigate();
     const { user, logout } = useAuth();
+    const { unreadCount } = useNotifications();
     const { theme, toggleTheme } = useTheme();
 
     useEffect(() => {
@@ -36,7 +40,7 @@ const Layout = () => {
             setIsOnline(online);
         });
 
-        // Start polling for real-time data
+        // Start polling for real-time data — this is the SINGLE source of polling
         apiService.startPolling(30000);
 
         return () => {
@@ -68,6 +72,17 @@ const Layout = () => {
     const handleLogout = () => {
         logout();
         navigate('/login');
+    };
+
+    const handleNotifications = () => {
+        // Simple mock behavior: clear count or show message
+        if (notifications > 0) {
+            setNotifications(0);
+            // Could add a toast here if ToastContext was used in Layout
+            alert("Toutes les notifications ont été lues !"); // Temporary simple feedback
+        } else {
+            alert("Aucune nouvelle notification.");
+        }
     };
 
     const getRoleLabel = (role) => {
@@ -221,23 +236,32 @@ const Layout = () => {
                             {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
                         </motion.button>
 
-                        <motion.button
-                            className="icon-btn"
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                        >
-                            <Bell size={20} />
-                            {notifications > 0 && (
-                                <motion.span
-                                    className="notification-badge"
-                                    initial={{ scale: 0 }}
-                                    animate={{ scale: 1 }}
-                                    transition={{ type: 'spring' }}
-                                >
-                                    {notifications}
-                                </motion.span>
-                            )}
-                        </motion.button>
+                        <div style={{ position: 'relative' }}>
+                            <motion.button
+                                className={`icon-btn ${showNotifications ? 'active' : ''}`}
+                                onClick={() => setShowNotifications(!showNotifications)}
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                title="Notifications"
+                            >
+                                <Bell size={20} />
+                                {unreadCount > 0 && (
+                                    <motion.span
+                                        className="notification-badge"
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        transition={{ type: 'spring' }}
+                                    >
+                                        {unreadCount}
+                                    </motion.span>
+                                )}
+                            </motion.button>
+                            <AnimatePresence>
+                                {showNotifications && (
+                                    <NotificationPanel onClose={() => setShowNotifications(false)} />
+                                )}
+                            </AnimatePresence>
+                        </div>
 
                         <motion.div
                             className="user-profile"
@@ -255,17 +279,10 @@ const Layout = () => {
                 </header>
 
                 <main className="page-content">
-                    <AnimatePresence mode="wait">
-                        <motion.div
-                            key={location.pathname}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -20 }}
-                            transition={{ duration: 0.3 }}
-                        >
-                            <Outlet />
-                        </motion.div>
-                    </AnimatePresence>
+                    {/* REMOVED AnimatePresence mode="wait" — this was causing white screens
+                        because it waits for the exit animation to complete before mounting
+                        the next lazy-loaded component, causing a blank gap. */}
+                    <Outlet />
                 </main>
             </div>
         </div>

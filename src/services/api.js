@@ -20,16 +20,20 @@ class ApiService {
     }
 
     // Data
-    async getProperties() {
-        return this.sheetsApi.getProperties();
+    async getProperties(forceRefresh = false) {
+        return this.sheetsApi.getProperties(forceRefresh);
     }
 
-    async getVisits() {
-        return this.sheetsApi.getVisits();
+    async getVisits(forceRefresh = false) {
+        return this.sheetsApi.getVisits(forceRefresh);
     }
 
-    async getStats() {
-        return this.sheetsApi.getStats();
+    async getStats(forceRefresh = false) {
+        return this.sheetsApi.getStats(forceRefresh);
+    }
+
+    async getImagesProperties(forceRefresh = false) {
+        return this.sheetsApi.getImagesProperties(forceRefresh);
     }
 
     // Real-time

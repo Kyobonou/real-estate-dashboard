@@ -1,19 +1,21 @@
-import React, { lazy, Suspense } from 'react';
+import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ToastProvider } from './components/Toast';
 import ProtectedRoute from './components/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import { NotificationProvider } from './contexts/NotificationContext';
 
-// Lazy load pages for better performance
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const Properties = lazy(() => import('./pages/Properties'));
-const Visits = lazy(() => import('./pages/Visits'));
-const Analytics = lazy(() => import('./pages/Analytics'));
-const Settings = lazy(() => import('./pages/Settings'));
-const ImageGallery = lazy(() => import('./pages/ImageGallery'));
+// Direct imports — NO lazy loading to eliminate blank screen issues
+import Dashboard from './pages/Dashboard';
+import Properties from './pages/Properties';
+import Visits from './pages/Visits';
+import Analytics from './pages/Analytics';
+import Settings from './pages/Settings';
+import ImageGallery from './pages/ImageGallery';
 
 const AppRoutes = () => {
     const { isAuthenticated, loading } = useAuth();
@@ -46,13 +48,10 @@ const AppRoutes = () => {
 
     return (
         <Routes>
-            {/* Public Route */}
             <Route
                 path="/login"
                 element={isAuthenticated ? <Navigate to="/" replace /> : <Login />}
             />
-
-            {/* Protected Routes */}
             <Route
                 path="/"
                 element={
@@ -61,48 +60,12 @@ const AppRoutes = () => {
                     </ProtectedRoute>
                 }
             >
-                <Route index element={
-                    <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
-                        <div className="spinner" style={{ width: '40px', height: '40px', border: '3px solid rgba(102, 126, 234, 0.2)', borderTopColor: '#667eea', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
-                    </div>}>
-                        <Dashboard />
-                    </Suspense>
-                } />
-                <Route path="properties" element={
-                    <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
-                        <div className="spinner" style={{ width: '40px', height: '40px', border: '3px solid rgba(102, 126, 234, 0.2)', borderTopColor: '#667eea', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
-                    </div>}>
-                        <Properties />
-                    </Suspense>
-                } />
-                <Route path="gallery" element={
-                    <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
-                        <div className="spinner" style={{ width: '40px', height: '40px', border: '3px solid rgba(102, 126, 234, 0.2)', borderTopColor: '#667eea', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
-                    </div>}>
-                        <ImageGallery />
-                    </Suspense>
-                } />
-                <Route path="visits" element={
-                    <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
-                        <div className="spinner" style={{ width: '40px', height: '40px', border: '3px solid rgba(102, 126, 234, 0.2)', borderTopColor: '#667eea', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
-                    </div>}>
-                        <Visits />
-                    </Suspense>
-                } />
-                <Route path="analytics" element={
-                    <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
-                        <div className="spinner" style={{ width: '40px', height: '40px', border: '3px solid rgba(102, 126, 234, 0.2)', borderTopColor: '#667eea', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
-                    </div>}>
-                        <Analytics />
-                    </Suspense>
-                } />
-                <Route path="settings" element={
-                    <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
-                        <div className="spinner" style={{ width: '40px', height: '40px', border: '3px solid rgba(102, 126, 234, 0.2)', borderTopColor: '#667eea', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
-                    </div>}>
-                        <Settings />
-                    </Suspense>
-                } />
+                <Route index element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
+                <Route path="properties" element={<ErrorBoundary><Properties /></ErrorBoundary>} />
+                <Route path="gallery" element={<ErrorBoundary><ImageGallery /></ErrorBoundary>} />
+                <Route path="visits" element={<ErrorBoundary><Visits /></ErrorBoundary>} />
+                <Route path="analytics" element={<ErrorBoundary><Analytics /></ErrorBoundary>} />
+                <Route path="settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
         </Routes>
@@ -111,15 +74,19 @@ const AppRoutes = () => {
 
 function App() {
     return (
-        <AuthProvider>
-            <ThemeProvider>
-                <ToastProvider>
-                    <BrowserRouter>
-                        <AppRoutes />
-                    </BrowserRouter>
-                </ToastProvider>
-            </ThemeProvider>
-        </AuthProvider>
+        <ErrorBoundary>
+            <AuthProvider>
+                <ThemeProvider>
+                    <ToastProvider>
+                        <NotificationProvider>
+                            <BrowserRouter>
+                                <AppRoutes />
+                            </BrowserRouter>
+                        </NotificationProvider>
+                    </ToastProvider>
+                </ThemeProvider>
+            </AuthProvider>
+        </ErrorBoundary>
     );
 }
 

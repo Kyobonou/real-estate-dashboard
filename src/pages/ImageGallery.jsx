@@ -319,7 +319,6 @@ const ImageGallery = () => {
     }, []);
 
     const loadProperties = async (force = false) => {
-        setLoading(true);
         try {
             const response = await apiService.getImagesProperties(force);
             if (response.success) {

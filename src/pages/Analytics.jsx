@@ -51,7 +51,7 @@ const Analytics = () => {
             if (visitsRes.success) setVisits(visitsRes.data);
             if (statsRes.success) setStats(statsRes.data);
         } catch (error) {
-            console.error('Error loading data:', error);
+            console.error('Error loading analytics data:', error);
         } finally {
             setLoading(false);
         }

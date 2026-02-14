@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
     Building, Users, Calendar, TrendingUp, ArrowUpRight, ArrowDownRight,
-    MapPin, Clock, RefreshCw, ChevronRight, Activity, Home, Key
+    MapPin, Clock, RefreshCw, ChevronRight, Activity, Home, Key, X
 } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -97,18 +97,20 @@ const Dashboard = () => {
         localStorage.setItem('welcome_dismissed', 'true');
     };
 
-    const loadData = async () => {
-        setLoading(true);
+    const loadData = async (isRefresh = false) => {
+        if (isRefresh) setRefreshing(true);
         try {
             const [sRes, pRes, vRes] = await Promise.all([
-                apiService.getStats(),
-                apiService.getProperties(),
-                apiService.getVisits()
+                apiService.getStats(isRefresh),
+                apiService.getProperties(isRefresh),
+                apiService.getVisits(isRefresh)
             ]);
 
             if (sRes.success) setStats(sRes.data);
             if (pRes.success) setProperties(pRes.data.slice(0, 5));
             if (vRes.success) setVisits(vRes.data.slice(0, 5));
+        } catch (error) {
+            console.error('Error loading dashboard data:', error);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -116,11 +118,10 @@ const Dashboard = () => {
     };
 
     const handleRefresh = () => {
-        setRefreshing(true);
-        loadData();
+        loadData(true);
     };
 
-    if (loading && !refreshing) {
+    if (loading) {
         return (
             <div className="dashboard-loading">
                 <div className="loader-ring"></div>

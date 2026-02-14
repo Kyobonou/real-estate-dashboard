@@ -10,45 +10,105 @@ const GID_IMAGES = 1059453156;
 class GoogleSheetsService {
     constructor() {
         this.cache = new Map();
-        this.cacheTimeout = 30000; // 30s
-        this.isOnline = false;
+        this.cacheTimeout = 60000; // 1 minute (increased from 30s)
+        this.isOnline = navigator.onLine;
         this.listeners = new Map();
         this.pollingInterval = null;
         this.isPageVisible = !document.hidden;
+
+        // Load cache from localStorage on init
+        this.loadCacheFromStorage();
+
         this.setupVisibilityListener();
+        this.setupOnlineListener();
+    }
+
+    loadCacheFromStorage() {
+        try {
+            const savedCache = localStorage.getItem('immodash_data_cache');
+            if (savedCache) {
+                const parsed = JSON.parse(savedCache);
+                // Restore Map from array of entries
+                parsed.forEach(([key, value]) => {
+                    this.cache.set(key, value);
+                });
+                console.log('Cache loaded from localStorage');
+            }
+        } catch (e) {
+            console.warn('Failed to load cache from storage', e);
+        }
+    }
+
+    saveCacheToStorage() {
+        try {
+            // Convert Map to array of entries for JSON stringify
+            const cacheArray = Array.from(this.cache.entries());
+            localStorage.setItem('immodash_data_cache', JSON.stringify(cacheArray));
+        } catch (e) {
+            console.warn('Failed to save cache to storage', e);
+        }
+    }
+
+    setupOnlineListener() {
+        window.addEventListener('online', () => {
+            this.isOnline = true;
+            this.notifyListeners('connectionChange', { online: true });
+            this.pollData(); // Refresh when back online
+        });
+        window.addEventListener('offline', () => {
+            this.isOnline = false;
+            this.notifyListeners('connectionChange', { online: false });
+        });
     }
 
     setupVisibilityListener() {
         document.addEventListener('visibilitychange', () => {
             this.isPageVisible = !document.hidden;
             if (this.isPageVisible) {
-                // Page became visible - resume polling if it was active
-                if (this.pollingInterval) {
-                    this.pollData(); // Immediate refresh
+                // Page became visible - check if data is stale
+                const lastFetch = this.lastPollingTime || 0;
+                if (Date.now() - lastFetch > this.cacheTimeout) {
+                    this.pollData();
                 }
             }
-            // When page is hidden, polling continues but we could optimize further
         });
     }
 
     // === FETCH & PARSE ===
 
     getSheetCsvUrl(gid) {
-        return `${SHEET_CSV_BASE}?gid=${gid}&single=true&output=csv`;
+        return `${SHEET_CSV_BASE}?gid=${gid}&single=true&output=csv&t=${Date.now()}`; // Add timestamp to prevent browser caching
     }
 
     async fetchSheetCsv(gid, sheetName, forceRefresh = false) {
         const cacheKey = `sheet_${gid}`;
         const cached = this.cache.get(cacheKey);
+        const now = Date.now();
 
-        if (!forceRefresh && cached && Date.now() - cached.timestamp < this.cacheTimeout) {
+        // If we have valid cache and not forcing refresh, return it
+        if (!forceRefresh && cached && (now - cached.timestamp < this.cacheTimeout)) {
             return cached.data;
         }
 
+        // If we have STALE cache, we can return it immediately but trigger a background refresh (Optimistic UI)
+        // Only do this if we are not explicitly forcing a refresh
+        if (!forceRefresh && cached) {
+            // Return stale data immediately for UI responsiveness
+            // BUT continue execution to fetch fresh data and update
+            // We use a promise to update in background
+            this.fetchAndCache(gid, sheetName, cacheKey).catch(err => console.warn('Background fetch failed', err));
+            return cached.data;
+        }
+
+        // Otherwise (first load or forced refresh), wait for the fetch
+        return this.fetchAndCache(gid, sheetName, cacheKey);
+    }
+
+    async fetchAndCache(gid, sheetName, cacheKey) {
         try {
             const response = await fetch(this.getSheetCsvUrl(gid), {
                 method: 'GET',
-                signal: AbortSignal.timeout(10000),
+                signal: AbortSignal.timeout(15000), // 15s timeout
             });
 
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -59,16 +119,27 @@ class GoogleSheetsService {
             if (wasOffline) this.notifyListeners('connectionChange', { online: true });
 
             const data = this.parseCsv(csvText);
+
+            // Update cache and storage
             this.cache.set(cacheKey, { data, timestamp: Date.now() });
+            this.saveCacheToStorage();
+
             return data;
         } catch (error) {
             console.warn(`Google Sheets fetch failed (${sheetName}):`, error.message);
             const wasOnline = this.isOnline;
             this.isOnline = false;
-            if (wasOnline) this.notifyListeners('connectionChange', { online: false });
 
+            // Check if it's a network error vs 404
+            if (!navigator.onLine || error.name === 'AbortError' || error.message.includes('Failed to fetch')) {
+                if (wasOnline) this.notifyListeners('connectionChange', { online: false });
+            }
+
+            // Fallback to cache if available (even if stale)
+            const cached = this.cache.get(cacheKey);
             if (cached) return cached.data;
-            return [];
+
+            return []; // No data available
         }
     }
 
@@ -135,33 +206,6 @@ class GoogleSheetsService {
             data.push(obj);
         }
         return data;
-    }
-
-    parseCsvLine(line) {
-        const result = [];
-        let current = '';
-        let inQuotes = false;
-
-        for (let i = 0; i < line.length; i++) {
-            const char = line[i];
-            const nextChar = line[i + 1];
-
-            if (char === '"') {
-                if (inQuotes && nextChar === '"') {
-                    current += '"';
-                    i++;
-                } else {
-                    inQuotes = !inQuotes;
-                }
-            } else if (char === ',' && !inQuotes) {
-                result.push(current.trim());
-                current = '';
-            } else {
-                current += char;
-            }
-        }
-        result.push(current.trim());
-        return result;
     }
 
     // === DATA TRANSFORMATION ===
@@ -293,23 +337,23 @@ class GoogleSheetsService {
 
     // === API PUBLIQUES ===
 
-    async getProperties() {
-        const rawData = await this.fetchSheetCsv(GID_LOCAUX, 'Locaux');
+    async getProperties(forceRefresh = false) {
+        // Use GID_LOCAUX for properties
+        const rawData = await this.fetchSheetCsv(GID_LOCAUX, 'Locaux', forceRefresh);
         const properties = rawData
             .map((raw, i) => this.transformProperty(raw, i))
             .filter(p => p.typeBien); // Filtrer lignes vides
         return { success: true, data: properties, source: this.isOnline ? 'live' : 'cache' };
     }
 
-    async getVisits() {
-        const rawData = await this.fetchSheetCsv(GID_VISITES, 'Visite programmé');
+    async getVisits(forceRefresh = false) {
+        const rawData = await this.fetchSheetCsv(GID_VISITES, 'Visite programmé', forceRefresh);
         const visits = rawData
             .map((raw, i) => this.transformVisit(raw, i))
             .filter(v => v.nomPrenom); // Filtrer lignes vides
         return { success: true, data: visits, source: this.isOnline ? 'live' : 'cache' };
     }
 
-    // Nouvelle méthode pour la page Images Immobilier
     async getImagesProperties(forceRefresh = false) {
         const rawData = await this.fetchSheetCsv(GID_IMAGES, 'Images Immobilier', forceRefresh);
         const properties = rawData
@@ -360,10 +404,11 @@ class GoogleSheetsService {
         };
     }
 
-    async getStats() {
+    async getStats(forceRefresh = false) {
+        // We reuse getProperties/getVisits which will use cache if available
         const [propertiesRes, visitsRes] = await Promise.all([
-            this.getProperties(),
-            this.getVisits(),
+            this.getProperties(forceRefresh),
+            this.getVisits(forceRefresh),
         ]);
 
         const properties = propertiesRes.data;
@@ -474,9 +519,12 @@ class GoogleSheetsService {
 
     startPolling(interval = 30000) {
         this.stopPolling();
-        // Fetch initial data
-        this.pollData();
+
+        // Initial poll (after a short delay to allow app to mount)
+        setTimeout(() => this.pollData(), 1000);
+
         this.pollingInterval = setInterval(() => this.pollData(), interval);
+        console.log(`Polling started (every ${interval}ms)`);
     }
 
     async pollData() {
@@ -486,11 +534,14 @@ class GoogleSheetsService {
         }
 
         try {
-            const [properties, visits, stats] = await Promise.all([
+            this.lastPollingTime = Date.now();
+            const [properties, visits] = await Promise.all([
                 this.getProperties(),
                 this.getVisits(),
-                this.getStats(),
             ]);
+
+            const stats = await this.getStats();
+
             this.notifyListeners('dataUpdate', { properties, visits, stats });
         } catch (error) {
             console.warn('Polling error:', error);
@@ -513,8 +564,10 @@ class GoogleSheetsService {
         this.listeners.get(event).push(callback);
         return () => {
             const callbacks = this.listeners.get(event);
-            const index = callbacks.indexOf(callback);
-            if (index > -1) callbacks.splice(index, 1);
+            if (callbacks) {
+                const index = callbacks.indexOf(callback);
+                if (index > -1) callbacks.splice(index, 1);
+            }
         };
     }
 
