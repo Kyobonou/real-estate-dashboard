@@ -16,7 +16,8 @@ import {
     WifiOff,
     Sun,
     Moon,
-    Users
+    Users,
+    Wand2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -62,6 +63,7 @@ const Layout = () => {
         { path: '/gallery', icon: Building, label: 'Galerie', roles: ['admin', 'agent', 'viewer'] },
         { path: '/visits', icon: Calendar, label: 'Visites', roles: ['admin', 'agent'] },
         { path: '/clients', icon: Users, label: 'Clients', roles: ['admin', 'agent'] },
+        { path: '/tools/ad-generator', icon: Wand2, label: 'Rédaction IA', roles: ['admin', 'agent'] },
         { path: '/analytics', icon: TrendingUp, label: 'Analytiques', roles: ['admin'] },
     ].filter(item => !item.roles || item.roles.includes(user?.role || 'admin'));
 
@@ -192,7 +194,7 @@ const Layout = () => {
                 <header className="top-header">
                     <div className="header-left">
                         <button
-                            className="mobile-menu-btn icon-btn"
+                            className="mobile-menu-btn"
                             onClick={() => setSidebarOpen(!sidebarOpen)}
                         >
                             <Menu size={24} />

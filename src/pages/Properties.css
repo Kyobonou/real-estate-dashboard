@@ -148,11 +148,40 @@
     outline: none;
 }
 
+/* MAP VIEW CONTAINER */
+.map-view-container {
+    height: 600px;
+    width: 100%;
+    position: relative;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    background-color: var(--bg-panel);
+}
+
+.map-loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(4px);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    color: var(--brand-primary);
+    font-weight: 600;
+}
+
 /* PROPERTY GRID */
 .properties-container.grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 2rem;
+    gap: 1.5rem;
 }
 
 .property-card-v2 {
@@ -170,7 +199,7 @@
 
 .property-image-wrapper {
     position: relative;
-    height: 220px;
+    height: 150px;
     overflow: hidden;
 }
 
@@ -187,19 +216,20 @@
 
 .property-badges {
     position: absolute;
-    top: 1rem;
-    left: 1rem;
-    right: 1rem;
+    top: 0.75rem;
+    left: 0.75rem;
+    right: 0.75rem;
     display: flex;
     justify-content: space-between;
     pointer-events: none;
 }
 
-/* Badge specific override for images */
 .property-badges .badge {
     backdrop-filter: blur(4px);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     border: none;
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
 }
 
 .property-badges .badge-success {
@@ -215,9 +245,9 @@
 .badge-offer {
     display: inline-flex;
     align-items: center;
-    padding: 0.25rem 0.625rem;
+    padding: 0.2rem 0.5rem;
     border-radius: var(--radius-full);
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 700;
     color: white;
     background: var(--brand-primary);
@@ -226,7 +256,7 @@
 }
 
 .property-content {
-    padding: 1.5rem;
+    padding: 0.75rem;
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -236,40 +266,42 @@
     font-size: 1.125rem;
     font-weight: 700;
     color: var(--text-primary);
-    margin: 0 0 0.25rem;
-    line-height: 1.4;
+    margin: 0 0 0.1rem;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .property-location {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.35rem;
     color: var(--text-secondary);
-    font-size: 0.875rem;
-    margin-bottom: 1rem;
+    font-size: 0.8125rem;
+    margin-bottom: 0.5rem;
 }
 
 .property-price {
-    font-size: 1.25rem;
+    font-size: 1rem;
     font-weight: 700;
     color: var(--text-primary);
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
 }
 
 .property-features {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
+    gap: 0.35rem;
+    margin-bottom: 0.75rem;
     margin-top: auto;
-    /* Push to bottom */
 }
 
 .feature-tag {
     display: flex;
     align-items: center;
-    gap: 0.375rem;
-    padding: 0.25rem 0.625rem;
+    gap: 0.25rem;
+    padding: 0.2rem 0.5rem;
     background-color: var(--bg-app);
     border: none;
     border-radius: var(--radius-sm);
@@ -279,12 +311,26 @@
 
 .property-footer {
     display: flex;
-    gap: 0.75rem;
-    padding-top: 1rem;
+    gap: 0.5rem;
+    padding-top: 0.75rem;
     border-top: 1px solid var(--border-subtle);
 }
 
-/* LIST VIEW - TABLE STYLE REFRACTOR */
+.property-footer .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    height: 32px;
+    flex: 1;
+    justify-content: center;
+    gap: 0.35rem;
+}
+
+.property-footer .btn svg {
+    width: 14px !important;
+    height: 14px !important;
+}
+
+/* LIST VIEW - TABLE STYLE */
 .properties-container.list {
     display: flex;
     flex-direction: column;
@@ -293,7 +339,6 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
     overflow: hidden;
-    /* Contains the children */
 }
 
 .property-list-item {
@@ -301,19 +346,15 @@
     align-items: center;
     gap: 2rem;
     padding: 1.5rem;
-    /* Generous padding like table cells */
     border-bottom: 1px solid var(--border-subtle);
     margin: 0;
-    /* Remove spacing between items */
     transition: background-color 0.2s;
     background: transparent;
     border-radius: 0;
-    /* Remove individual radius */
     border-left: none;
     border-right: none;
     border-top: none;
     box-shadow: none;
-    /* Remove individual shadows */
 }
 
 .property-list-item:last-child {
@@ -322,10 +363,6 @@
 
 .property-list-item:hover {
     background-color: var(--bg-hover);
-    transform: none;
-    /* Disable transform for table-like feel */
-    border-color: var(--border-subtle);
-    /* Keep border stable */
 }
 
 .property-list-item .property-image-wrapper {
@@ -339,27 +376,36 @@
     display: flex;
     align-items: center;
     gap: 1.5rem;
-    /* Space between price and buttons */
     margin-left: auto;
-    /* Push to right */
 }
 
 .list-view-price {
     font-size: 1.125rem;
-    /* Match Title Size */
     font-weight: 700;
     color: var(--text-primary);
     white-space: nowrap;
     margin-right: 0.5rem;
     font-family: var(--font-heading);
-    /* Visual consistency */
 }
 
 /* RESPONSIVE */
 @media (max-width: 768px) {
+    .properties-v2 {
+        padding: 1.5rem 1rem 1rem;
+    }
+
+    .properties-header {
+        display: none !important;
+    }
+
+    .header-left h2 {
+        font-size: 1.5rem;
+    }
+
     .properties-toolbar {
         flex-direction: column;
         align-items: stretch;
+        padding: 1rem;
     }
 
     .search-input {
@@ -368,13 +414,40 @@
 
     .property-list-item {
         flex-direction: column;
-        align-items: flex-start;
-        gap: 1rem;
+        align-items: stretch;
+        gap: 1.25rem;
+        padding: 1.25rem;
     }
 
+    .property-list-actions {
+        margin-left: 0;
+        width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .property-list-actions .btn {
+        flex: 1;
+        min-width: 120px;
+        justify-content: center;
+        height: 40px;
+        font-size: 0.875rem;
+    }
+
+    .list-view-price {
+        width: 100%;
+        margin-bottom: 0.5rem;
+        font-size: 1.25rem;
+        display: block;
+    }
+
+    .properties-container.grid {
+        grid-template-columns: 1fr;
+    }
 }
 
-/* LIST VIEW DETAILS - FIX */
+/* LIST VIEW DETAILS */
 .property-list-info {
     flex: 1;
     display: flex;
@@ -427,14 +500,210 @@
     border: none;
 }
 
-/* LOADING STATES */
-.loading-overlay {
-    position: absolute;
-    inset: 0;
-    background: rgba(255, 255, 255, 0.8);
+/* MODAL DETAILS */
+.property-details-modal {
+    display: flex;
+    flex-direction: column;
+}
+
+.property-details-header {
+    margin: -1.5rem -1.5rem 1.5rem -1.5rem;
+    overflow: hidden;
+}
+
+.property-image-large {
+    height: 200px;
+    width: 100%;
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 50;
-    backdrop-filter: blur(4px);
+}
+
+.property-overlay {
+    background: rgba(0, 0, 0, 0.4);
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.property-overlay h2 {
+    color: white;
+    font-size: 2rem;
+    margin: 0;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.property-quick-info {
+    padding: 1.5rem;
+    padding-top: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.price-section .price-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: block;
+}
+
+.price-section .price-value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.status-section {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.property-details-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.details-section h4 {
+    margin: 0 0 1rem 0;
+    font-size: 1rem;
+    color: var(--text-primary);
+    border-left: 3px solid var(--brand-primary);
+    padding-left: 0.75rem;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.info-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.info-item svg {
+    color: var(--brand-primary);
+    flex-shrink: 0;
+}
+
+.info-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.info-value {
+    display: block;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.property-full-description {
+    color: var(--text-secondary);
+    line-height: 1.6;
+    background: var(--bg-app);
+    padding: 1.25rem;
+    border-radius: var(--radius-md);
+    margin: 0;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.modal-actions .btn {
+    flex: 1;
+    height: 48px;
+    font-weight: 700;
+}
+
+.features-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+.feature-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    background: var(--bg-app);
+    padding: 0.4rem 0.75rem;
+    border-radius: var(--radius-sm);
+}
+
+.feature-item svg {
+    color: var(--brand-primary);
+}
+
+@media (max-width: 640px) {
+    .properties-v2 {
+        padding: 1.5rem 0.75rem 0.75rem;
+    }
+
+    .property-image-large {
+        height: 150px;
+    }
+
+    .property-quick-info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1.25rem;
+        padding: 1.25rem;
+    }
+
+    .info-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .modal-actions {
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 1rem;
+    }
+
+    .modal-actions .btn {
+        width: 100%;
+    }
+
+    .search-filter-group {
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+    }
+
+    .filter-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .view-toggle {
+        width: 100%;
+        margin-top: 0.5rem;
+    }
+
+    .view-btn {
+        flex: 1;
+        height: 40px;
+    }
 }

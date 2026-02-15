@@ -91,6 +91,7 @@ const NotificationPanel = ({ onClose }) => {
                     top: 100%;
                     right: 0;
                     width: 360px;
+                    max-width: 90vw; /* Responsive width */
                     background: var(--glass-bg);
                     backdrop-filter: blur(20px);
                     -webkit-backdrop-filter: blur(20px);
@@ -103,6 +104,18 @@ const NotificationPanel = ({ onClose }) => {
                     flex-direction: column;
                     max-height: 480px;
                     overflow: hidden;
+                }
+
+                @media (max-width: 480px) {
+                    .notification-panel {
+                        position: fixed; /* Fixed on mobile for better visibility */
+                        top: 70px; /* Below header */
+                        left: 50%;
+                        transform: translateX(-50%);
+                        right: auto;
+                        width: 95vw;
+                        max-width: 360px;
+                    }
                 }
 
                 .panel-header {

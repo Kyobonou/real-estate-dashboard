@@ -5,6 +5,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { ToastProvider } from './components/Toast';
 import Layout from './components/Layout';
 import { NotificationProvider } from './contexts/NotificationContext';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Lazy loading des pages
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -14,6 +15,7 @@ const Analytics = lazy(() => import('./pages/Analytics'));
 const Clients = lazy(() => import('./pages/Clients'));
 const Settings = lazy(() => import('./pages/Settings'));
 const ImageGallery = lazy(() => import('./pages/ImageGallery'));
+const AdGenerator = lazy(() => import('./pages/AdGenerator'));
 
 const PageLoader = () => (
     <div style={{
@@ -39,55 +41,79 @@ const PageLoader = () => (
 
 const AppRoutes = () => {
     return (
-        <Routes>
-            <Route path="/" element={
-                <Layout />
-            }>
-                <Route index element={
-                    <Suspense fallback={<PageLoader />}>
-                        <Dashboard />
-                    </Suspense>
-                } />
+        <ErrorBoundary>
+            <Routes>
+                <Route path="/" element={
+                    <Layout />
+                }>
+                    <Route index element={
+                        <Suspense fallback={<PageLoader />}>
+                            <ErrorBoundary>
+                                <Dashboard />
+                            </ErrorBoundary>
+                        </Suspense>
+                    } />
 
-                <Route path="properties" element={
-                    <Suspense fallback={<PageLoader />}>
-                        <Properties />
-                    </Suspense>
-                } />
+                    <Route path="properties" element={
+                        <Suspense fallback={<PageLoader />}>
+                            <ErrorBoundary>
+                                <Properties />
+                            </ErrorBoundary>
+                        </Suspense>
+                    } />
 
-                <Route path="visits" element={
-                    <Suspense fallback={<PageLoader />}>
-                        <Visits />
-                    </Suspense>
-                } />
+                    <Route path="visits" element={
+                        <Suspense fallback={<PageLoader />}>
+                            <ErrorBoundary>
+                                <Visits />
+                            </ErrorBoundary>
+                        </Suspense>
+                    } />
 
-                <Route path="gallery" element={
-                    <Suspense fallback={<PageLoader />}>
-                        <ImageGallery />
-                    </Suspense>
-                } />
+                    <Route path="gallery" element={
+                        <Suspense fallback={<PageLoader />}>
+                            <ErrorBoundary>
+                                <ImageGallery />
+                            </ErrorBoundary>
+                        </Suspense>
+                    } />
 
-                <Route path="clients" element={
-                    <Suspense fallback={<PageLoader />}>
-                        <Clients />
-                    </Suspense>
-                } />
+                    <Route path="clients" element={
+                        <Suspense fallback={<PageLoader />}>
+                            <ErrorBoundary>
+                                <Clients />
+                            </ErrorBoundary>
+                        </Suspense>
+                    } />
 
-                <Route path="analytics" element={
-                    <Suspense fallback={<PageLoader />}>
-                        <Analytics />
-                    </Suspense>
-                } />
+                    <Route path="analytics" element={
+                        <Suspense fallback={<PageLoader />}>
+                            <ErrorBoundary>
+                                <Analytics />
+                            </ErrorBoundary>
+                        </Suspense>
+                    } />
 
-                <Route path="settings" element={
-                    <Suspense fallback={<PageLoader />}>
-                        <Settings />
-                    </Suspense>
-                } />
+                    <Route path="settings" element={
+                        <Suspense fallback={<PageLoader />}>
+                            <ErrorBoundary>
+                                <Settings />
+                            </ErrorBoundary>
+                        </Suspense>
+                    } />
 
-                <Route path="*" element={<Navigate to="/" replace />} />
-            </Route>
-        </Routes>
+                    <Route path="tools/ad-generator" element={
+                        <Suspense fallback={<PageLoader />}>
+                            <ErrorBoundary>
+                                <AdGenerator />
+                            </ErrorBoundary>
+                        </Suspense>
+                    } />
+
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                </Route>
+            </Routes>
+        </ErrorBoundary>
     );
 };
 

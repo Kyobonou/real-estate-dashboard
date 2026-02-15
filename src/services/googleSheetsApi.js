@@ -439,6 +439,17 @@ class GoogleSheetsService {
             parZone[zone] = (parZone[zone] || 0) + 1;
         });
 
+        // Distribution par commune (Demande utilisateur)
+        const parCommune = {};
+        properties.forEach(p => {
+            const commune = (p.commune || p.zone.split(',')[0] || 'Autre').trim();
+            parCommune[commune] = (parCommune[commune] || 0) + 1;
+        });
+
+        // Nombre de clients uniques (basé sur les visites)
+        const uniqueClients = new Set(visits.map(v => v.numero || v.nomPrenom).filter(Boolean));
+        const totalClients = uniqueClients.size;
+
         // Distribution par disponibilité
         const parDisponibilite = {
             'Disponible': biensDisponibles,
@@ -472,6 +483,8 @@ class GoogleSheetsService {
                 visitesTerminees,
                 parType,
                 parZone,
+                parCommune,
+                totalClients,
                 parDisponibilite,
                 meubles,
                 nonMeubles,

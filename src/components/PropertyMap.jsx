@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap } from 'react-leaflet';
+import React, { useEffect, useState, useMemo } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MapPin, Phone, Eye, Home, Bed } from 'lucide-react';
+import { MapPin, Phone, Eye, Home, Bed, Layers, Navigation } from 'lucide-react';
 import './PropertyMap.css';
 
 // Fix pour les icônes Leaflet qui ne s'affichent pas correctement avec Webpack/Vite
@@ -55,6 +55,7 @@ const FitBounds = ({ properties }) => {
 
 const PropertyMap = ({ properties, onPropertyClick }) => {
     const [mapReady, setMapReady] = useState(false);
+    const [showHeatmap, setShowHeatmap] = useState(false);
 
     // Centre par défaut: Abidjan
     const defaultCenter = [5.3364, -4.0267];
@@ -75,19 +76,80 @@ const PropertyMap = ({ properties, onPropertyClick }) => {
         window.open(`https://wa.me/225${phone}?text=${message}`, '_blank');
     };
 
+    const handleNavigate = (e, property) => {
+        e.stopPropagation();
+        // Ouvre Google Maps avec les coordonnées
+        const url = `https://www.google.com/maps/search/?api=1&query=${property.coordinates.lat},${property.coordinates.lng}`;
+        window.open(url, '_blank');
+    };
+
+    // Calcul des tiers de prix pour la heatmap
+    const priceTiers = useMemo(() => {
+        if (!properties.length) return { low: 0, high: 0 };
+
+        const prices = properties
+            .map(p => p.rawPrice)
+            .filter(p => p > 0)
+            .sort((a, b) => a - b);
+
+        if (!prices.length) return { low: 0, high: 0 };
+
+        const q1 = prices[Math.floor(prices.length * 0.33)];
+        const q3 = prices[Math.floor(prices.length * 0.66)];
+
+        return { low: q1, high: q3 };
+    }, [properties]);
+
+    const getHeatmapColor = (price) => {
+        if (!price) return '#94a3b8'; // Gris si pas de prix
+        if (price < priceTiers.low) return '#10b981'; // Vert (Abordable)
+        if (price < priceTiers.high) return '#f59e0b'; // Orange (Moyen)
+        return '#ef4444'; // Rouge (Cher)
+    };
+
     return (
         <div className="property-map-container">
+            <div className="map-controls">
+                <button
+                    className={`btn-map-control ${showHeatmap ? 'active' : ''}`}
+                    onClick={() => setShowHeatmap(!showHeatmap)}
+                    title={showHeatmap ? "Désactiver la carte des prix" : "Activer la carte des prix"}
+                >
+                    <Layers size={18} />
+                    {showHeatmap ? "Mode Prix" : "Mode Carte"}
+                </button>
+            </div>
+
             <div className="map-legend">
-                <div className="legend-item">
-                    <div className="legend-marker available"></div>
-                    <span>Disponible</span>
-                </div>
-                <div className="legend-item">
-                    <div className="legend-marker occupied"></div>
-                    <span>Occupé</span>
-                </div>
+                {showHeatmap ? (
+                    <>
+                        <div className="legend-item">
+                            <div className="legend-marker" style={{ background: '#10b981', borderRadius: '50%' }}></div>
+                            <span>€ Abordable</span>
+                        </div>
+                        <div className="legend-item">
+                            <div className="legend-marker" style={{ background: '#f59e0b', borderRadius: '50%' }}></div>
+                            <span>€€ Moyen</span>
+                        </div>
+                        <div className="legend-item">
+                            <div className="legend-marker" style={{ background: '#ef4444', borderRadius: '50%' }}></div>
+                            <span>€€€ Élevé</span>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="legend-item">
+                            <div className="legend-marker available"></div>
+                            <span>Disponible</span>
+                        </div>
+                        <div className="legend-item">
+                            <div className="legend-marker occupied"></div>
+                            <span>Occupé</span>
+                        </div>
+                    </>
+                )}
                 <div className="legend-count">
-                    {properties.length} bien{properties.length > 1 ? 's' : ''} affiché{properties.length > 1 ? 's' : ''}
+                    {properties.length} bien{properties.length > 1 ? 's' : ''}
                 </div>
             </div>
 
@@ -112,99 +174,123 @@ const PropertyMap = ({ properties, onPropertyClick }) => {
 
                     const position = [property.coordinates.lat, property.coordinates.lng];
                     const icon = property.disponible ? availableIcon : occupiedIcon;
+                    const heatmapColor = getHeatmapColor(property.rawPrice);
 
                     return (
-                        <Marker
-                            key={property.id}
-                            position={position}
-                            icon={icon}
-                        >
-                            {/* Tooltip au survol */}
-                            <Tooltip
-                                direction="top"
-                                offset={[0, -30]}
-                                opacity={0.95}
-                                permanent={false}
+                        <React.Fragment key={property.id}>
+                            {showHeatmap && (
+                                <Circle
+                                    center={position}
+                                    pathOptions={{
+                                        color: heatmapColor,
+                                        fillColor: heatmapColor,
+                                        fillOpacity: 0.4,
+                                        weight: 0
+                                    }}
+                                    radius={300} // Rayon de 300m
+                                />
+                            )}
+
+                            <Marker
+                                position={position}
+                                icon={icon}
+                                opacity={showHeatmap ? 0.8 : 1}
                             >
-                                <div className="tooltip-content">
-                                    <div className="tooltip-title">{property.typeBien}</div>
-                                    <div className="tooltip-price">{property.prixFormate}</div>
-                                    <div className="tooltip-location">
-                                        <MapPin size={12} />
-                                        <span>{property.zone}</span>
-                                    </div>
-                                    <div className="tooltip-status">
-                                        <span className={`status-badge ${property.disponible ? 'available' : 'occupied'}`}>
-                                            {property.status}
-                                        </span>
-                                    </div>
-                                </div>
-                            </Tooltip>
-
-                            {/* Popup au clic */}
-                            <Popup className="custom-popup" maxWidth={300}>
-                                <div className="popup-content">
-                                    <div className="popup-header">
-                                        <h3>{property.typeBien}</h3>
-                                        <span className={`popup-status ${property.disponible ? 'available' : 'occupied'}`}>
-                                            {property.status}
-                                        </span>
-                                    </div>
-
-                                    <div className="popup-price">
-                                        {property.prixFormate}
-                                    </div>
-
-                                    <div className="popup-location">
-                                        <MapPin size={14} />
-                                        <span>{property.zone}</span>
-                                    </div>
-
-                                    {property.commune && (
-                                        <div className="popup-commune">
-                                            <strong>Commune:</strong> {property.commune}
+                                {/* Tooltip au survol */}
+                                <Tooltip
+                                    direction="top"
+                                    offset={[0, -30]}
+                                    opacity={0.95}
+                                    permanent={false}
+                                >
+                                    <div className="tooltip-content">
+                                        <div className="tooltip-title">{property.typeBien}</div>
+                                        <div className="tooltip-price">{property.prixFormate}</div>
+                                        <div className="tooltip-location">
+                                            <MapPin size={12} />
+                                            <span>{property.zone}</span>
                                         </div>
-                                    )}
-
-                                    <div className="popup-features">
-                                        {property.chambres > 0 && (
-                                            <span className="feature-tag">
-                                                <Bed size={12} /> {property.chambres} ch.
-                                            </span>
-                                        )}
-                                        {property.meuble && (
-                                            <span className="feature-tag">
-                                                <Home size={12} /> Meublé
-                                            </span>
+                                        {showHeatmap && (
+                                            <div style={{ fontSize: '11px', color: heatmapColor, fontWeight: 'bold', marginTop: '4px' }}>
+                                                {property.rawPrice < priceTiers.low ? 'Prix attractif' : property.rawPrice > priceTiers.high ? 'Standing élevé' : 'Prix marché'}
+                                            </div>
                                         )}
                                     </div>
+                                </Tooltip>
 
-                                    {property.caracteristiques && (
-                                        <p className="popup-description">
-                                            {property.caracteristiques.substring(0, 100)}
-                                            {property.caracteristiques.length > 100 ? '...' : ''}
-                                        </p>
-                                    )}
+                                {/* Popup au clic */}
+                                <Popup className="custom-popup" maxWidth={300}>
+                                    <div className="popup-content">
+                                        <div className="popup-header">
+                                            <h3>{property.typeBien}</h3>
+                                            <span className={`popup-status ${property.disponible ? 'available' : 'occupied'}`}>
+                                                {property.status}
+                                            </span>
+                                        </div>
 
-                                    <div className="popup-actions">
-                                        <button
-                                            className="btn btn-secondary btn-sm"
-                                            onClick={() => handleMarkerClick(property)}
-                                        >
-                                            <Eye size={14} /> Détails
-                                        </button>
-                                        {property.telephone && (
+                                        <div className="popup-price">
+                                            {property.prixFormate}
+                                        </div>
+
+                                        <div className="popup-location">
+                                            <MapPin size={14} />
+                                            <span>{property.zone}</span>
+                                        </div>
+
+                                        {property.commune && (
+                                            <div className="popup-commune">
+                                                <strong>Commune:</strong> {property.commune}
+                                            </div>
+                                        )}
+
+                                        <div className="popup-features">
+                                            {property.chambres > 0 && (
+                                                <span className="feature-tag">
+                                                    <Bed size={12} /> {property.chambres} ch.
+                                                </span>
+                                            )}
+                                            {property.meuble && (
+                                                <span className="feature-tag">
+                                                    <Home size={12} /> Meublé
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {property.caracteristiques && (
+                                            <p className="popup-description">
+                                                {property.caracteristiques.substring(0, 100)}
+                                                {property.caracteristiques.length > 100 ? '...' : ''}
+                                            </p>
+                                        )}
+
+                                        <div className="popup-actions">
                                             <button
-                                                className="btn btn-whatsapp btn-sm"
-                                                onClick={(e) => handleWhatsApp(e, property)}
+                                                className="btn btn-secondary btn-sm"
+                                                onClick={() => handleMarkerClick(property)}
                                             >
-                                                <Phone size={14} /> WhatsApp
+                                                <Eye size={14} /> Détails
                                             </button>
-                                        )}
+                                            <button
+                                                className="btn btn-secondary btn-sm"
+                                                onClick={(e) => handleNavigate(e, property)}
+                                                title="Voir sur Google Maps"
+                                                style={{ minWidth: '32px', padding: '0 8px' }}
+                                            >
+                                                <Navigation size={14} />
+                                            </button>
+                                            {property.telephone && (
+                                                <button
+                                                    className="btn btn-whatsapp btn-sm"
+                                                    onClick={(e) => handleWhatsApp(e, property)}
+                                                >
+                                                    <Phone size={14} />
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            </Popup>
-                        </Marker>
+                                </Popup>
+                            </Marker>
+                        </React.Fragment>
                     );
                 })}
             </MapContainer>

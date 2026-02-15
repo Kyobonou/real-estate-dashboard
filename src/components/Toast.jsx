@@ -1,5 +1,5 @@
 // Toast Notification System
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react';
 import './Toast.css';
@@ -54,7 +54,7 @@ const Toast = ({ toast, onClose }) => {
 export const ToastProvider = ({ children }) => {
     const [toasts, setToasts] = useState([]);
 
-    const addToast = ({ type = 'info', title, message, duration = 3000 }) => {
+    const addToast = useCallback(({ type = 'info', title, message, duration = 3000 }) => {
         const id = Date.now();
         setToasts(prev => [...prev, { id, type, title, message }]);
 
@@ -63,7 +63,7 @@ export const ToastProvider = ({ children }) => {
                 removeToast(id);
             }, duration);
         }
-    };
+    }, []);
 
     const removeToast = (id) => {
         setToasts(prev => prev.filter(toast => toast.id !== id));

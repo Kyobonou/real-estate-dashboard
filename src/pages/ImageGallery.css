@@ -167,7 +167,7 @@
 
 @media (max-width: 768px) {
     .image-gallery-page {
-        padding: 1.25rem;
+        padding: 1.5rem 1rem 1rem;
     }
 
     .gallery-grid {
@@ -175,8 +175,8 @@
         gap: 1rem;
     }
 
-    .header-content h1 {
-        font-size: 1.5rem;
+    .header-content {
+        display: none !important;
     }
 
     .image-property-card {
@@ -186,7 +186,7 @@
 
 @media (max-width: 640px) {
     .image-gallery-page {
-        padding: 1.25rem;
+        padding: 1.5rem 0.75rem 0.75rem;
     }
 
     .gallery-grid {
@@ -210,5 +210,14 @@
 
     .filter-group {
         margin-bottom: 1rem;
+    }
+
+    .image-card .card-actions {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .image-card .card-actions .btn {
+        width: 100%;
     }
 }

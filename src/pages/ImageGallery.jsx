@@ -20,9 +20,20 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
     };
 
     const handleWhatsApp = () => {
-        const phone = property.telephone.replace(/\s/g, '');
+        if (!property.telephone) {
+            addToast({ type: 'warning', title: 'Erreur', message: 'Numéro de téléphone manquant' });
+            return;
+        }
+
+        let phone = property.telephone.replace(/\D/g, '');
+        if (phone.startsWith('0')) {
+            phone = '225' + phone.substring(1);
+        } else if (phone.length === 10) {
+            phone = '225' + phone;
+        }
+
         const message = encodeURIComponent(`Bonjour, je suis intéressé par votre bien vu dans la galerie: ${property.typeBien} à ${property.zone} (${property.prixFormate})`);
-        window.open(`https://wa.me/225${phone}?text=${message}`, '_blank');
+        window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
         addToast({ type: 'success', title: 'WhatsApp', message: 'Ouverture de WhatsApp...' });
     };
 
@@ -133,12 +144,11 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
                     )}
 
                     <div className="modal-actions">
-                        <button className="btn btn-ghost" onClick={handleShare}>
+                        <button className="btn btn-secondary" onClick={handleShare}>
                             <Share2 size={18} />
                             Copier
                         </button>
                         <button className="btn btn-whatsapp" onClick={handleWhatsApp}>
-                            <Phone size={18} />
                             WhatsApp
                         </button>
                     </div>
@@ -156,9 +166,14 @@ const ImagePropertyCard = ({ property, index, viewMode, onViewDetails }) => {
     const handleContact = (e) => {
         e.stopPropagation();
         if (property.telephone) {
-            const phone = property.telephone.replace(/\s/g, '');
+            let phone = property.telephone.replace(/\D/g, '');
+            if (phone.startsWith('0')) {
+                phone = '225' + phone.substring(1);
+            } else if (phone.length === 10) {
+                phone = '225' + phone;
+            }
             const message = encodeURIComponent(`Bonjour, je suis intéressé par ce bien vu sur la galerie: ${property.typeBien} à ${property.zone}`);
-            window.open(`https://wa.me/225${phone}?text=${message}`, '_blank');
+            window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
             addToast({ type: 'success', title: 'Contact', message: 'Ouverture de WhatsApp...' });
         } else {
             addToast({ type: 'error', title: 'Erreur', message: 'Numéro de téléphone non disponible' });

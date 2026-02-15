@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Users, Search, RefreshCw, LayoutGrid, List, Phone,
     Calendar, MapPin, CheckCircle, Clock, X, TrendingUp,
-    UserPlus, UserCheck, UserX, SlidersHorizontal, ArrowUpDown, Filter
+    UserPlus, UserCheck, UserX, SlidersHorizontal, ArrowUpDown, Filter, User
 } from 'lucide-react';
 import apiService from '../services/api';
 import { useToast } from '../components/Toast';
@@ -112,10 +112,22 @@ const ClientActions = React.memo(({ client, addToast, canAction = true }) => {
 
     const handleWhatsApp = (e) => {
         e.stopPropagation();
-        if (!client.numero) return;
-        const phone = client.numero.replace(/\s/g, '');
+        if (!client.numero) {
+            addToast({ type: 'warning', title: 'Erreur', message: 'Numéro de téléphone manquant' });
+            return;
+        }
+
+        // Nettoyage complet
+        let phone = client.numero.replace(/\D/g, '');
+
+        if (phone.startsWith('0')) {
+            phone = '225' + phone.substring(1);
+        } else if (phone.length === 10) {
+            phone = '225' + phone;
+        }
+
         const message = encodeURIComponent(`Bonjour ${client.nomPrenom}, nous revenons vers vous concernant votre recherche immobilière.`);
-        window.open(`https://wa.me/225${phone}?text=${message}`, '_blank');
+        window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
         addToast({ type: 'success', title: 'WhatsApp', message: 'Lancement de la conversation...' });
     };
 
@@ -148,22 +160,16 @@ const StatusBadge = ({ statut }) => {
 };
 
 // --- Avatar ---
-const ClientAvatar = ({ nomPrenom, statut }) => {
+const ClientAvatar = ({ statut }) => {
     const gradients = {
         'Nouveau': 'var(--gradient-primary)',
         'Actif': 'var(--gradient-success)',
         'Inactif': 'linear-gradient(135deg, #f59e0b, #d97706)',
     };
-    const initials = nomPrenom
-        .split(' ')
-        .filter(Boolean)
-        .slice(0, 2)
-        .map(n => n.charAt(0).toUpperCase())
-        .join('');
 
     return (
-        <div className="client-avatar" style={{ background: gradients[statut] || gradients['Nouveau'] }}>
-            {initials || '?'}
+        <div className="client-avatar-min" style={{ background: gradients[statut] || gradients['Nouveau'] }}>
+            <User size={16} />
         </div>
     );
 };
@@ -182,39 +188,45 @@ const GridView = React.memo(({ clients, addToast, onSelect, canAction }) => (
                 onClick={() => onSelect(client)}
             >
                 <div className="client-card-header">
-                    <ClientAvatar nomPrenom={client.nomPrenom} statut={client.statut} />
-                    <StatusBadge statut={client.statut} />
+                    <div className="client-title-group">
+                        <ClientAvatar statut={client.statut} />
+                        <h3 className="client-name">{client.nomPrenom}</h3>
+                    </div>
                 </div>
 
                 <div className="client-card-body">
-                    <h3 className="client-name">{client.nomPrenom}</h3>
-                    {client.numero && (
-                        <a href={`tel:${client.numero}`} className="client-phone" onClick={e => e.stopPropagation()}>
-                            <Phone size={13} /> {client.numero}
-                        </a>
-                    )}
+                    <div className="client-info-row">
+                        {client.numero && (
+                            <a href={`tel:${client.numero}`} className="client-phone" onClick={e => e.stopPropagation()}>
+                                <Phone size={13} /> {client.numero}
+                            </a>
+                        )}
+                        <StatusBadge statut={client.statut} />
+                    </div>
 
-                    <div className="client-stats-row">
-                        <div className="client-stat">
-                            <Calendar size={14} />
-                            <span>{client.totalVisites} visite{client.totalVisites > 1 ? 's' : ''}</span>
+                    <div className="client-main-stats">
+                        <div className="main-stat-item">
+                            <span className="stat-label">Visites</span>
+                            <span className="stat-value">{client.totalVisites}</span>
                         </div>
-                        <div className="client-stat">
-                            <Clock size={14} />
-                            <span>{client.derniereVisite ? formatDate(client.derniereVisite) : '-'}</span>
+                        <div className="main-stat-item">
+                            <span className="stat-label">Dernière</span>
+                            <span className="stat-value">{client.derniereVisite ? formatDate(client.derniereVisite) : '-'}</span>
                         </div>
                     </div>
 
                     {client.zonesInteret.length > 0 && (
-                        <div className="client-chips">
-                            {client.zonesInteret.slice(0, 3).map((zone, i) => (
-                                <span key={i} className="zone-chip">
-                                    <MapPin size={11} /> {zone}
-                                </span>
-                            ))}
-                            {client.zonesInteret.length > 3 && (
-                                <span className="zone-chip more">+{client.zonesInteret.length - 3}</span>
-                            )}
+                        <div className="client-chips-container">
+                            <div className="client-chips">
+                                {client.zonesInteret.slice(0, 3).map((zone, i) => (
+                                    <span key={i} className="zone-tag">
+                                        {zone}
+                                    </span>
+                                ))}
+                                {client.zonesInteret.length > 3 && (
+                                    <span className="zone-tag more">+{client.zonesInteret.length - 3}</span>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -238,7 +250,7 @@ const ListView = React.memo(({ clients, addToast, onSelect, canAction }) => (
                     <th>Visites</th>
                     <th>Dernière visite</th>
                     <th>Zones</th>
-                    <th>Actions</th>
+                    <th className="text-center">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -246,7 +258,7 @@ const ListView = React.memo(({ clients, addToast, onSelect, canAction }) => (
                     <tr key={client.id} onClick={() => onSelect(client)} className="client-row">
                         <td>
                             <div className="list-client-cell">
-                                <ClientAvatar nomPrenom={client.nomPrenom} statut={client.statut} />
+                                <ClientAvatar statut={client.statut} />
                                 <div className="client-text">
                                     <h3>{client.nomPrenom}</h3>
                                     <span>{client.numero || '-'}</span>
@@ -273,7 +285,7 @@ const ListView = React.memo(({ clients, addToast, onSelect, canAction }) => (
                                 )}
                             </div>
                         </td>
-                        <td onClick={e => e.stopPropagation()}>
+                        <td className="text-center" onClick={e => e.stopPropagation()}>
                             <ClientActions client={client} addToast={addToast} canAction={canAction} />
                         </td>
                     </tr>

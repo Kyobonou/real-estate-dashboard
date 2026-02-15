@@ -80,15 +80,36 @@ const VisitsSkeleton = ({ viewMode }) => (
 const VisitActions = React.memo(({ visit, addToast }) => {
     const handleCall = (e) => {
         e.stopPropagation();
-        window.open(`tel:${visit.telephone}`, '_self');
-        addToast({ type: 'info', title: 'Appel', message: `Composition du numéro ${visit.telephone}` });
+        if (!visit.numero) {
+            addToast({ type: 'warning', title: 'Erreur', message: 'Numéro de téléphone manquant' });
+            return;
+        }
+        window.open(`tel:${visit.numero}`, '_self');
+        addToast({ type: 'info', title: 'Appel', message: `Composition du numéro ${visit.numero}` });
     };
 
     const handleWhatsApp = (e) => {
         e.stopPropagation();
-        const phone = visit.telephone.replace(/\s/g, '');
-        const message = encodeURIComponent(`Bonjour ${visit.nomPrenom}, je reviens vers vous concernant votre demande de visite pour un bien à ${visit.zoneInt}.`);
-        window.open(`https://wa.me/225${phone}?text=${message}`, '_blank');
+        if (!visit.numero) {
+            addToast({ type: 'warning', title: 'Erreur', message: 'Numéro de téléphone manquant' });
+            return;
+        }
+
+        // Nettoyage complet : garder uniquement les chiffres
+        let phone = visit.numero.replace(/\D/g, '');
+
+        // Si le numéro commence par 0, on enlève le 0 et on ajoute 225
+        if (phone.startsWith('0')) {
+            phone = '225' + phone.substring(1);
+        }
+        // S'il fait 10 chiffres (format local récent), on ajoute 225
+        else if (phone.length === 10) {
+            phone = '225' + phone;
+        }
+        // Si c'est déjà un format international sans le +, on le laisse (ex: 225...)
+
+        const message = encodeURIComponent(`Bonjour ${visit.nomPrenom}, je reviens vers vous concernant votre demande de visite pour un bien à ${visit.localInteresse || 'votre zone'}.`);
+        window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
         addToast({ type: 'success', title: 'WhatsApp', message: 'Lancement de la conversation...' });
     };
 
@@ -97,7 +118,7 @@ const VisitActions = React.memo(({ visit, addToast }) => {
             <button className="btn btn-secondary btn-sm" onClick={handleCall} title="Appeler" aria-label="Appeler">
                 <Phone size={14} /> <span className="desktop-only">Appeler</span>
             </button>
-            <button className="btn btn-whatsapp btn-sm" onClick={handleWhatsApp} title="Gros pouce vert" aria-label="WhatsApp">
+            <button className="btn btn-whatsapp btn-sm" onClick={handleWhatsApp} title="Contacter par WhatsApp" aria-label="WhatsApp">
                 WhatsApp
             </button>
         </div>
@@ -108,13 +129,9 @@ const VisitActions = React.memo(({ visit, addToast }) => {
 const GridView = React.memo(({ visits, addToast }) => (
     <div className="visits-grid">
         {visits.map((visit, index) => (
-            <motion.div
+            <div
                 key={visit.id}
-                className={`card visit-card-v2 ${visit.visiteProg ? 'programmed' : 'tentative'}`}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                whileHover={{ y: -4 }}
+                className={`card visit-card-v2 ${visit.visiteProg ? 'programmed' : 'tentative'} fade-in`}
             >
                 <div className={`badge ${visit.visiteProg ? 'badge-success' : 'badge-warning'}`}>
                     {visit.visiteProg ? <CheckCircle size={14} /> : <Clock size={14} />}
@@ -124,11 +141,11 @@ const GridView = React.memo(({ visits, addToast }) => (
                 <div className="visit-main-info">
                     <div className="visit-user">
                         <div className="user-avatar" style={{ background: visit.visiteProg ? 'var(--gradient-success)' : 'var(--gradient-primary)' }}>
-                            {visit.nomPrenom.charAt(0)}
+                            {(visit.nomPrenom || '?').charAt(0)}
                         </div>
                         <div className="user-text">
-                            <h3>{visit.nomPrenom}</h3>
-                            <span>{visit.telephone}</span>
+                            <h3>{visit.nomPrenom || 'Client Inconnu'}</h3>
+                            <span>{visit.numero || '-'}</span>
                         </div>
                     </div>
                 </div>
@@ -137,8 +154,8 @@ const GridView = React.memo(({ visits, addToast }) => (
                     <div className="detail-item">
                         <MapPin size={16} />
                         <div>
-                            <span className="label">Zone</span>
-                            <span className="value">{visit.zoneInt || 'Non spécifié'}</span>
+                            <span className="label">Bien concerné</span>
+                            <span className="value">{visit.localInteresse || 'Non spécifié'}</span>
                         </div>
                     </div>
                     <div className="detail-item">
@@ -159,7 +176,7 @@ const GridView = React.memo(({ visits, addToast }) => (
                 <div className="visit-footer">
                     <VisitActions visit={visit} addToast={addToast} />
                 </div>
-            </motion.div>
+            </div>
         ))}
     </div>
 ));
@@ -174,7 +191,7 @@ const ListView = React.memo(({ visits, addToast }) => (
                     <th>Zone</th>
                     <th>Date Prévue</th>
                     <th>Statut</th>
-                    <th>Actions</th>
+                    <th className="text-center">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -183,22 +200,22 @@ const ListView = React.memo(({ visits, addToast }) => (
                         <td>
                             <div className="list-user-cell">
                                 <div className="list-user-avatar" style={{ background: visit.visiteProg ? 'var(--gradient-success)' : 'var(--gradient-primary)' }}>
-                                    {visit.nomPrenom.charAt(0)}
+                                    {(visit.nomPrenom || '?').charAt(0)}
                                 </div>
                                 <div className="user-text">
-                                    <h3>{visit.nomPrenom}</h3>
-                                    <span>{visit.telephone}</span>
+                                    <h3>{visit.nomPrenom || 'Client Inconnu'}</h3>
+                                    <span>{visit.numero || '-'}</span>
                                 </div>
                             </div>
                         </td>
-                        <td>{visit.zoneInt || '-'}</td>
+                        <td>{visit.localInteresse || '-'}</td>
                         <td>{visit.dateRv}</td>
                         <td>
                             <span className={`badge ${visit.visiteProg ? 'badge-success' : 'badge-warning'}`}>
                                 {visit.visiteProg ? 'Confirmée' : 'Tentative'}
                             </span>
                         </td>
-                        <td>
+                        <td className="text-center">
                             <VisitActions visit={visit} addToast={addToast} />
                         </td>
                     </tr>
@@ -293,34 +310,41 @@ const Visits = () => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [filter, setFilter] = useState('all'); // all, programmed, tentative
-    const [viewMode, setViewMode] = useState('list'); // grid, list, calendar
+    const [viewMode, setViewMode] = useState('list'); // Default to list, update in effect
     const [refreshing, setRefreshing] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 20;
     const { addToast } = useToast();
 
-    useEffect(() => {
-        console.log('Visits component mounted');
-        loadVisits();
-        const unsubscribe = apiService.subscribe('dataUpdate', ({ visits: v }) => {
-            if (v?.success) setVisits(v.data);
-        });
-        return () => unsubscribe();
-    }, []);
-
-    const loadVisits = async () => {
+    const loadVisits = useCallback(async (isRefresh = false) => {
+        if (isRefresh) setRefreshing(true);
         try {
             const response = await apiService.getVisits();
             if (response.success) {
-                setVisits(response.data);
+                setVisits(Array.isArray(response.data) ? response.data : []);
             }
         } catch (error) {
             console.error('Error loading visits:', error);
+            addToast({ type: 'error', title: 'Erreur', message: 'Impossible de charger les visites' });
+            setVisits([]); // Fallback to empty array
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    };
+    }, [addToast]);
+
+    useEffect(() => {
+        loadVisits();
+        const unsubscribe = apiService.subscribe('dataUpdate', (data) => {
+            // Defensive check for data structure
+            if (data && data.visits && data.visits.success) {
+                // FORCE ARRAY
+                const newVisits = Array.isArray(data.visits.data) ? data.visits.data : [];
+                setVisits(newVisits);
+            }
+        });
+        return () => unsubscribe && unsubscribe();
+    }, [loadVisits]);
 
     // Debounced search (optimisation critique)
     const debouncedSearch = useMemo(
@@ -330,19 +354,19 @@ const Visits = () => {
 
     // Handlers optimisés avec useCallback
     const handleRefresh = useCallback(() => {
-        setRefreshing(true);
-        loadVisits();
-    }, []);
+        loadVisits(true);
+    }, [loadVisits]);
 
     // Filtrage des visites (mémorisé pour éviter recalculs)
     const filteredVisits = useMemo(() => {
+        if (!Array.isArray(visits)) return [];
         return visits.filter(visit => {
             if (viewMode === 'calendar') return true; // Show all in calendar, maybe filter later if needed
 
             const matchesSearch =
-                visit.nomPrenom.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (visit.zoneInt && visit.zoneInt.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                visit.telephone.includes(searchTerm);
+                (visit.nomPrenom || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (visit.localInteresse || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (visit.numero || '').includes(searchTerm);
 
             const matchesFilter =
                 filter === 'all' ||
@@ -372,13 +396,13 @@ const Visits = () => {
         return <VisitsSkeleton viewMode={viewMode} />;
     }
 
+    // Safety check
+    if (!visits || !Array.isArray(visits)) {
+        return <div className="visits-v2"><div className="error-state">Erreur de chargement des données.</div></div>;
+    }
+
     return (
-        <motion.div
-            className="visits-v2"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-        >
+        <div className="visits-v2 fade-in">
 
             <header className="visits-header">
                 <div className="header-text">
@@ -533,7 +557,7 @@ const Visits = () => {
                     </span>
                 </div>
             )}
-        </motion.div>
+        </div>
     );
 };
 

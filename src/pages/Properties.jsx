@@ -4,6 +4,7 @@ import {
     MapPin, Tag, Grid, List, Search, Filter, X, Phone, Eye,
     Download, Share2, Heart, Home, Key, Loader, RefreshCw, Bed, Building, Map
 } from 'lucide-react';
+import * as XLSX from 'xlsx'; // Import bibliothèque Excel
 import apiService from '../services/api';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
@@ -200,12 +201,11 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
                     )}
 
                     <div className="modal-actions">
-                        <button className="btn btn-ghost" onClick={handleShare}>
+                        <button className="btn btn-secondary" onClick={handleShare}>
                             <Share2 size={18} />
                             Copier les infos
                         </button>
                         <button className="btn btn-whatsapp" onClick={handleWhatsApp}>
-                            <Phone size={18} />
                             WhatsApp
                         </button>
                         <button className="btn btn-primary" onClick={handleContact}>
@@ -227,11 +227,18 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
     const handleContact = (e) => {
         e.stopPropagation();
         if (property.telephone) {
-            const phone = property.telephone.replace(/\s/g, '');
+            let phone = property.telephone.replace(/\D/g, '');
+            if (phone.startsWith('0')) {
+                phone = '225' + phone.substring(1);
+            } else if (phone.length === 10) {
+                phone = '225' + phone;
+            }
             const message = encodeURIComponent(`Bonjour, je suis intéressé par: ${property.typeBien} à ${property.zone}`);
-            window.open(`https://wa.me/225${phone}?text=${message}`, '_blank');
+            window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+            addToast({ type: 'success', title: 'Contact', message: `WhatsApp vers ${property.telephone}` });
+        } else {
+            addToast({ type: 'error', title: 'Erreur', message: 'Numéro de téléphone non disponible' });
         }
-        addToast({ type: 'success', title: 'Contact', message: `WhatsApp vers ${property.telephone}` });
     };
 
     if (viewMode === 'list') {
@@ -508,17 +515,50 @@ const Properties = () => {
     }, []);
 
     const handleExport = useCallback(() => {
-        const headers = ['Type', 'Offre', 'Zone', 'Prix', 'Téléphone', 'Caractéristiques', 'Publié par', 'Meublé', 'Chambres', 'Disponible'];
-        const rows = filteredProperties.map(p => [
-            p.typeBien, p.typeOffre, p.zone, p.prix, p.telephone, p.caracteristiques, p.publiePar, p.meuble ? 'Oui' : 'Non', p.chambres, p.disponible ? 'Oui' : 'Non'
-        ]);
-        const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `biens_immobiliers_${new Date().toISOString().split('T')[0]}.csv`;
-        link.click();
-        addToast({ type: 'success', title: 'Export réussi', message: `${filteredProperties.length} biens exportés en CSV` });
+        // Préparer les données pour le fichier Excel
+        const dataToExport = filteredProperties.map(p => ({
+            'Type': p.typeBien,
+            'Offre': p.typeOffre,
+            'Zone': p.zone,
+            'Commune': p.commune || '',
+            'Prix': p.prixFormate, // Ou p.rawPrice si on veut des nombres bruts
+            'Téléphone': p.telephone,
+            'Caractéristiques': p.caracteristiques,
+            'Publié par': p.publiePar,
+            'Meublé': p.meuble ? 'Oui' : 'Non',
+            'Chambres': p.chambres > 0 ? p.chambres : '',
+            'Disponible': p.disponible ? 'Oui' : 'Non',
+            'Date Publication': p.datePublication
+        }));
+
+        // Créer une feuille de travail (worksheet)
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+
+        // Ajuster la largeur des colonnes (optionnel mais recommandé)
+        const wscols = [
+            { wch: 20 }, // Type
+            { wch: 15 }, // Offre
+            { wch: 20 }, // Zone
+            { wch: 20 }, // Commune
+            { wch: 15 }, // Prix
+            { wch: 15 }, // Téléphone
+            { wch: 50 }, // Caractéristiques
+            { wch: 20 }, // Publié par
+            { wch: 10 }, // Meublé
+            { wch: 10 }, // Chambres
+            { wch: 10 }, // Disponible
+            { wch: 20 }, // Date Publication
+        ];
+        worksheet['!cols'] = wscols;
+
+        // Créer un classeur (workbook)
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Biens Immobiliers");
+
+        // Générer le fichier Excel et déclencher le téléchargement
+        XLSX.writeFile(workbook, `Biens_Immobiliers_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+        addToast({ type: 'success', title: 'Export réussi', message: `${filteredProperties.length} biens exportés en Excel` });
     }, [filteredProperties, addToast]);
 
     const resetFilters = useCallback(() => {
@@ -546,7 +586,7 @@ const Properties = () => {
                 <div className="header-actions">
                     <button className="btn btn-secondary" onClick={handleExport}>
                         <Download size={18} />
-                        Exporter CSV
+                        Exporter Excel
                     </button>
                 </div>
             </div>

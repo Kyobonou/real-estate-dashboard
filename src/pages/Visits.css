@@ -155,7 +155,7 @@
 /* GRID VIEW */
 .visits-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 1.5rem;
 }
 
@@ -186,20 +186,20 @@
 }
 
 .user-avatar {
-    width: 48px;
-    height: 48px;
-    border-radius: var(--radius-md);
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
     font-weight: 700;
-    font-size: 1.25rem;
+    font-size: 1.1rem;
     box-shadow: var(--shadow-sm);
 }
 
 .user-text h3 {
-    font-size: 1.1rem;
+    font-size: 1.125rem;
     /* Match Clients */
     color: var(--text-primary);
     font-weight: 700;
@@ -281,7 +281,22 @@
 
 .visit-actions {
     display: flex;
-    gap: 0.75rem;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.visit-actions .btn {
+    flex: 1;
+    justify-content: center;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    height: 32px;
+    gap: 0.35rem;
+}
+
+.visit-actions .btn svg {
+    width: 14px !important;
+    height: 14px !important;
 }
 
 /* LIST VIEW */
@@ -321,6 +336,18 @@
     color: var(--text-primary);
     font-size: 0.95rem;
     vertical-align: middle;
+}
+
+.visits-table td.text-center {
+    text-align: center;
+}
+
+.visits-table td.text-center .visit-actions {
+    justify-content: center;
+}
+
+.text-center {
+    text-align: center !important;
 }
 
 .visits-table tr:last-child td {
@@ -473,21 +500,161 @@
 
 /* RESPONSIVE */
 @media (max-width: 768px) {
+    .visits-v2 {
+        padding: 1rem;
+    }
+
+    /* Header: titre + bouton sur une ligne */
+    .visits-header {
+        flex-direction: row;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .visits-header h1 {
+        font-size: 1.25rem;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .header-actions {
+        flex-shrink: 0;
+    }
+
+    /* Toolbar compact */
     .visits-toolbar {
         flex-direction: column;
         align-items: stretch;
+        padding: 0.75rem;
+        gap: 0.75rem;
     }
 
     .toolbar-left {
         flex-direction: column;
         align-items: stretch;
+        gap: 0.75rem;
+    }
+
+    .search-box {
+        max-width: 100%;
+    }
+
+    /* Filters + view toggles sur une ligne */
+    .filter-chips {
+        overflow-x: auto;
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+        flex-wrap: nowrap;
+    }
+
+    .filter-chips::-webkit-scrollbar {
+        display: none;
+    }
+
+    .chip {
+        white-space: nowrap;
+        flex-shrink: 0;
+        font-size: 0.75rem;
+        padding: 0.3rem 0.75rem;
+    }
+
+    .view-toggles {
+        justify-content: center;
+    }
+
+    .view-btn {
+        flex: 1;
+    }
+
+    /* Grid View - 1 colonne */
+    .visits-grid {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+
+    .visit-card-v2 {
+        padding: 1rem;
+    }
+
+    .visit-main-info {
+        padding-right: 0;
+        margin-bottom: 0.75rem;
+    }
+
+    .visit-details-grid {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+        padding: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    /* Actions full width */
+    .visit-actions {
+        width: 100%;
+    }
+
+    .visit-actions .btn {
+        flex: 1;
+        font-size: 0.75rem;
+        padding: 0.4rem 0.5rem;
+        min-height: 36px;
+    }
+
+    /* List View - scroll horizontal */
+    .visits-list-container {
+        margin: 0 -1rem;
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
+    }
+
+    .visits-table {
+        min-width: 640px;
+    }
+
+    .visits-table th,
+    .visits-table td {
+        padding: 0.75rem 1rem;
+        font-size: 0.85rem;
+    }
+
+    /* Calendar compact */
+    .calendar-view {
+        padding: 1rem;
+    }
+
+    .calendar-header {
+        flex-direction: row;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .calendar-header h2 {
+        font-size: 1.125rem;
+        flex: 1;
     }
 
     .calendar-grid {
-        border-radius: 0;
+        border-radius: var(--radius-md);
     }
 
     .calendar-day {
-        min-height: 80px;
+        min-height: 52px;
+        padding: 2px;
+    }
+
+    .calendar-col-header {
+        padding: 0.25rem;
+        font-size: 0.65rem;
+    }
+
+    .calendar-event {
+        font-size: 0.6rem;
+        padding: 1px 3px;
+    }
+
+    .day-number {
+        font-size: 0.75rem;
     }
 }

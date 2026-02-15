@@ -18,8 +18,8 @@
 }
 
 .modal {
-    background: var(--bg-secondary);
-    border: 1px solid var(--glass-border);
+    background: var(--bg-panel);
+    border: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
     width: 100%;
@@ -117,7 +117,7 @@
         padding: 1.25rem;
         position: sticky;
         top: 0;
-        background: var(--bg-secondary);
+        background: var(--bg-panel);
         z-index: 10;
     }
 

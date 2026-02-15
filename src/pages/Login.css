@@ -519,6 +519,30 @@
     }
 }
 
+@media (max-width: 480px) {
+    .login-container {
+        min-height: auto;
+    }
+
+    .login-branding {
+        padding: 1.5rem;
+    }
+
+    .login-form-panel {
+        padding: 1.5rem;
+    }
+
+    .brand-logo {
+        width: 48px;
+        height: 48px;
+        margin-bottom: 1rem;
+    }
+
+    .brand-title {
+        font-size: 1.5rem;
+    }
+}
+
 /* Gmail Hint */
 .gmail-hint {
     background-color: rgba(66, 133, 244, 0.1);

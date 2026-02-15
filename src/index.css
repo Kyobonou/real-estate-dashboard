@@ -72,6 +72,11 @@
     --font-heading: 'Outfit', sans-serif;
     --font-sans: 'Outfit', sans-serif;
     /* Unified font for consistency */
+
+    /* --- GLASS MORPHISM --- */
+    --glass-bg: rgba(255, 255, 255, 0.75);
+    --glass-border: rgba(0, 0, 0, 0.1);
+    --glass-card: rgba(255, 255, 255, 0.85);
 }
 
 /* DARK MODE OVERRIDES (High Definition) */
@@ -94,6 +99,11 @@ body.dark {
 
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.5);
     --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.5);
+
+    /* Glass Dark */
+    --glass-bg: rgba(30, 41, 59, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-card: rgba(15, 23, 42, 0.8);
 }
 
 /* === RESET & BASE === */
@@ -314,4 +324,48 @@ textarea:focus {
 
 ::-webkit-scrollbar-thumb:hover {
     background: var(--slate-400);
+}
+
+/* Utility: hide text on mobile, show on desktop */
+.desktop-only {
+    display: inline;
+}
+
+/* RESPONSIVE BUTTONS & SPACING */
+@media (max-width: 768px) {
+    .desktop-only {
+        display: none;
+    }
+
+    .btn {
+        padding: 0.625rem 1rem;
+        font-size: 0.875rem;
+        gap: 0.5rem;
+        height: auto;
+        min-height: 40px;
+    }
+
+    .btn-sm {
+        padding: 0.4rem 0.75rem;
+        font-size: 0.8rem;
+        min-height: 34px;
+    }
+
+    .dashboard-v2,
+    .properties-v2,
+    .analytics-page,
+    .clients-page,
+    .visits-v2 {
+        padding: 1rem;
+    }
+
+    .card {
+        padding: 1rem;
+    }
+
+    .card-header,
+    .panel-header {
+        padding-bottom: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
 }
