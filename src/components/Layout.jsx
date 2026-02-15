@@ -17,13 +17,15 @@ import {
     Sun,
     Moon,
     Users,
-    Wand2
+    Wand2,
+    Trello
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import apiService from '../services/api';
 import { useNotifications } from '../contexts/NotificationContext';
 import NotificationPanel from './NotificationPanel';
+import ChatAssistant from './ChatAssistant';
 import './Layout.css';
 
 const Layout = () => {
@@ -59,6 +61,7 @@ const Layout = () => {
 
     const navItems = [
         { path: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'agent', 'viewer'] },
+        { path: '/pipeline', icon: Trello, label: 'Pipeline', roles: ['admin', 'agent'] },
         { path: '/properties', icon: Building, label: 'Biens', roles: ['admin', 'agent', 'viewer'] },
         { path: '/gallery', icon: Building, label: 'Galerie', roles: ['admin', 'agent', 'viewer'] },
         { path: '/visits', icon: Calendar, label: 'Visites', roles: ['admin', 'agent'] },
@@ -274,6 +277,8 @@ const Layout = () => {
                     <Outlet />
                 </main>
             </div>
+
+            <ChatAssistant />
         </div>
     );
 };

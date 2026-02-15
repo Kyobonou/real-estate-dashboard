@@ -125,15 +125,15 @@ const PropertyMap = ({ properties, onPropertyClick }) => {
                     <>
                         <div className="legend-item">
                             <div className="legend-marker" style={{ background: '#10b981', borderRadius: '50%' }}></div>
-                            <span>€ Abordable</span>
+                            <span>Abordable</span>
                         </div>
                         <div className="legend-item">
                             <div className="legend-marker" style={{ background: '#f59e0b', borderRadius: '50%' }}></div>
-                            <span>€€ Moyen</span>
+                            <span>Moyen</span>
                         </div>
                         <div className="legend-item">
                             <div className="legend-marker" style={{ background: '#ef4444', borderRadius: '50%' }}></div>
-                            <span>€€€ Élevé</span>
+                            <span>Élevé</span>
                         </div>
                     </>
                 ) : (

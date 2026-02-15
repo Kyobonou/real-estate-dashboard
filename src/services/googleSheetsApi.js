@@ -600,6 +600,51 @@ class GoogleSheetsService {
         }
     }
 
+    // === PIPELINE ===
+    async getPipeline(forceRefresh = false) {
+        try {
+            // Reuse getVisits as base source
+            const visitsRes = await this.getVisits(forceRefresh);
+            if (!visitsRes.success || !visitsRes.data) return { success: false, data: [] };
+
+            const visits = visitsRes.data;
+            const items = visits.map(v => ({
+                id: v.id.toString(), // Ensure string ID for dnd
+                content: v.nomPrenom || "Client Inconnu",
+                property: v.localInteresse || "Bien non spécifié",
+                date: v.dateRv || "Date inconnue",
+                price: "Budget N/A", // Placeholder as budget is not in visit data yet
+                tags: v.visiteProg ? ["Programmée"] : ["À planifier"],
+                status: this.mapVisitToPipelineStatus(v),
+                originalData: v
+            }));
+
+            return { success: true, data: items };
+
+        } catch (error) {
+            console.error('Error fetching pipeline:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    mapVisitToPipelineStatus(visit) {
+        // Updated logic for simplified pipeline
+        if (visit.status === 'Terminée') return 'closed';
+        if (visit.status === "Aujourd'hui") return 'scheduled';
+        if (visit.visiteProg) return 'scheduled'; // Scheduled visits
+        // If not scheduled but has contact info, it's a qualified lead
+        return 'leads';
+    }
+
+    async updatePipelineStatus(itemId, newStatus) {
+        // SIMULATION: In a real app, this would write to the Google Sheet
+        console.log(`[Updating Pipeline] Item ${itemId} moved to ${newStatus}`);
+
+        // Optimistic update logic would go here if we had write access
+        // For now, we return success to allow UI to update
+        return { success: true, message: 'Status updated locally' };
+    }
+
     // === AUTH ===
 
     async login(email, password) {

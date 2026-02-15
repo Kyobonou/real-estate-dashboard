@@ -26,14 +26,12 @@ const DashboardSkeleton = () => (
 
         <div className="kpi-grid">
             {[1, 2, 3, 4].map(i => (
-                <div key={i} className="stat-card-v3" style={{ height: '140px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <Skeleton className="skeleton-circle" width="48px" height="48px" />
-                        <Skeleton width="40px" height="20px" />
-                    </div>
-                    <div>
-                        <Skeleton width="80px" height="16px" style={{ marginBottom: '8px' }} />
-                        <Skeleton width="120px" height="32px" />
+                <div key={i} className="stat-card-v3 skeleton-card">
+                    <Skeleton width="48px" height="48px" style={{ borderRadius: '12px', flexShrink: 0 }} />
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <Skeleton width="80px" height="14px" />
+                        <Skeleton width="100px" height="28px" />
+                        <Skeleton width="60px" height="12px" />
                     </div>
                 </div>
             ))}
@@ -81,20 +79,20 @@ const DashboardSkeleton = () => (
 // Components internal optimized for Dashboard V2
 const StatCardV3 = ({ title, value, icon: Icon, trend, trendValue, color }) => (
     <div className="stat-card-v3">
-        <div className="stat-header">
-            <div className="stat-icon" style={{ backgroundColor: `${color}15`, color: color }}>
-                <Icon size={20} />
-            </div>
-            {trend && (
-                <div className={`stat-trend-badge ${trend === 'up' ? 'trend-up' : 'trend-down'}`}>
-                    {trend === 'up' ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                    {trendValue}
-                </div>
-            )}
+        <div className="stat-icon-wrapper" style={{ backgroundColor: color, boxShadow: `0 4px 12px ${color}40` }}>
+            <Icon size={24} color="white" />
         </div>
-        <div className="stat-body">
-            <h3>{value}</h3>
-            <p>{title}</p>
+        <div className="stat-content">
+            <span className="stat-label">{title}</span>
+            <div className="stat-value">{value}</div>
+            <div className="stat-footer">
+                {trend && (
+                    <div className={`stat-trend ${trend === 'up' ? 'positive' : trend === 'down' ? 'negative' : 'neutral'}`}>
+                        {trend === 'up' ? <TrendingUp size={14} /> : trend === 'down' ? <TrendingDown size={14} /> : null}
+                        <span>{trendValue}</span>
+                    </div>
+                )}
+            </div>
         </div>
     </div>
 );

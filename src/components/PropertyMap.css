@@ -5,7 +5,7 @@
     overflow: hidden;
     position: relative;
     box-shadow: var(--shadow-md);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border-subtle);
 }
 
 .leaflet-map {
@@ -25,11 +25,11 @@
 }
 
 .btn-map-control {
-    background: white;
-    border: none;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-subtle);
     padding: 8px 12px;
     border-radius: var(--radius-md);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow-sm);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -41,26 +41,29 @@
 }
 
 .btn-map-control:hover {
-    background: #f8fafc;
-    color: var(--primary-color);
+    background: var(--bg-hover);
+    color: var(--brand-primary);
+    border-color: var(--brand-primary);
 }
 
 .btn-map-control.active {
-    background: var(--primary-color);
+    background: var(--brand-primary);
     color: white;
+    border-color: var(--brand-primary);
 }
 
 .map-legend {
     position: absolute;
     bottom: 20px;
     right: 20px;
-    background: white;
+    background: var(--bg-panel);
     padding: 10px 15px;
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-lg);
     z-index: 20;
     font-size: 0.85rem;
     min-width: 150px;
+    border: 1px solid var(--border-subtle);
 }
 
 .legend-item {
@@ -68,6 +71,7 @@
     align-items: center;
     gap: 8px;
     margin-bottom: 5px;
+    color: var(--text-primary);
 }
 
 .legend-marker {
@@ -87,7 +91,7 @@
 .legend-count {
     margin-top: 8px;
     padding-top: 5px;
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--border-subtle);
     font-weight: 600;
     text-align: center;
     color: var(--text-secondary);
@@ -104,7 +108,7 @@
     width: 30px;
     height: 30px;
     border-radius: 50% 50% 50% 0;
-    background: var(--primary-color);
+    background: var(--brand-primary);
     position: absolute;
     transform: rotate(-45deg);
     left: 50%;
@@ -120,6 +124,7 @@
     transform: rotate(45deg);
     width: 16px;
     height: 16px;
+    color: white;
 }
 
 .marker-pin::after {
@@ -127,7 +132,7 @@
     width: 14px;
     height: 14px;
     margin: 8px 0 0 8px;
-    background: #fff;
+    background: white;
     position: absolute;
     border-radius: 50%;
     display: none;
@@ -135,11 +140,18 @@
 }
 
 /* Popup Styles */
+.custom-popup .leaflet-popup-content-wrapper,
+.custom-popup .leaflet-popup-tip {
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-xl);
+    border: 1px solid var(--border-subtle);
+}
+
 .custom-popup .leaflet-popup-content-wrapper {
     border-radius: 12px;
     padding: 0;
     overflow: hidden;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
 }
 
 .custom-popup .leaflet-popup-content {
@@ -162,7 +174,7 @@
     margin: 0;
     font-size: 1rem;
     font-weight: 700;
-    color: #1e293b;
+    color: var(--text-primary);
     line-height: 1.2;
 }
 
@@ -175,17 +187,17 @@
 }
 
 .popup-status.available {
-    background-color: #d1fae5;
-    color: #059669;
+    background-color: var(--success-bg);
+    color: var(--success);
 }
 
 .popup-status.occupied {
-    background-color: #fee2e2;
-    color: #dc2626;
+    background-color: var(--danger-bg);
+    color: var(--danger);
 }
 
 .popup-price {
-    color: #4f46e5;
+    color: var(--brand-primary);
     font-size: 1.1rem;
     font-weight: 700;
     margin-bottom: 8px;
@@ -195,14 +207,14 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    color: #64748b;
+    color: var(--text-secondary);
     font-size: 0.85rem;
     margin-bottom: 4px;
 }
 
 .popup-commune {
     font-size: 0.85rem;
-    color: #334155;
+    color: var(--text-primary);
     margin-bottom: 12px;
 }
 
@@ -217,17 +229,17 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    background-color: #f1f5f9;
+    background-color: var(--bg-app);
     padding: 4px 8px;
     border-radius: 6px;
     font-size: 0.75rem;
-    color: #475569;
+    color: var(--text-secondary);
     font-weight: 500;
 }
 
 .popup-description {
     font-size: 0.8rem;
-    color: #64748b;
+    color: var(--text-secondary);
     line-height: 1.4;
     margin: 0 0 16px 0;
     display: -webkit-box;
@@ -248,7 +260,7 @@
     justify-content: center;
     gap: 6px;
     padding: 8px;
-    border: none;
+    border: 1px solid transparent;
     border-radius: 6px;
     font-size: 0.8rem;
     font-weight: 600;
@@ -257,12 +269,14 @@
 }
 
 .btn-secondary {
-    background-color: #f1f5f9;
-    color: #334155;
+    background-color: var(--bg-app);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle) !important;
 }
 
 .btn-secondary:hover {
-    background-color: #e2e8f0;
+    background-color: var(--bg-hover);
+    border-color: var(--text-secondary) !important;
 }
 
 .btn-whatsapp {
@@ -276,7 +290,17 @@
 
 .tooltip-content {
     text-align: center;
-    font-family: 'Inter', sans-serif;
+    font-family: var(--font-sans);
+    background: var(--bg-panel);
+    color: var(--text-primary);
+}
+
+.leaflet-tooltip {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
+    border-radius: var(--radius-sm);
 }
 
 .tooltip-title {
@@ -285,6 +309,6 @@
 }
 
 .tooltip-price {
-    color: #4f46e5;
+    color: var(--brand-primary);
     font-weight: 600;
 }

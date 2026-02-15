@@ -16,6 +16,7 @@ const Clients = lazy(() => import('./pages/Clients'));
 const Settings = lazy(() => import('./pages/Settings'));
 const ImageGallery = lazy(() => import('./pages/ImageGallery'));
 const AdGenerator = lazy(() => import('./pages/AdGenerator'));
+const Pipeline = lazy(() => import('./pages/Pipeline'));
 
 const PageLoader = () => (
     <div style={{
@@ -106,6 +107,14 @@ const AppRoutes = () => {
                         <Suspense fallback={<PageLoader />}>
                             <ErrorBoundary>
                                 <AdGenerator />
+                            </ErrorBoundary>
+                        </Suspense>
+                    } />
+
+                    <Route path="pipeline" element={
+                        <Suspense fallback={<PageLoader />}>
+                            <ErrorBoundary>
+                                <Pipeline />
                             </ErrorBoundary>
                         </Suspense>
                     } />

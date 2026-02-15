@@ -41,6 +41,15 @@ class ApiService {
         return this.sheetsApi.getClients(forceRefresh);
     }
 
+    // Pipeline
+    async getPipeline(forceRefresh = false) {
+        return this.sheetsApi.getPipeline(forceRefresh);
+    }
+
+    async updatePipelineStatus(id, newStatus) {
+        return this.sheetsApi.updatePipelineStatus(id, newStatus);
+    }
+
     // Real-time
     startPolling(interval = 30000) {
         this.sheetsApi.startPolling(interval);

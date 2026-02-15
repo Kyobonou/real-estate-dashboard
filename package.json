@@ -13,9 +13,11 @@
     "deploy": "vite build && firebase deploy --only hosting --project immo-dashboard-ci"
   },
   "dependencies": {
+    "@hello-pangea/dnd": "^18.0.1",
     "date-fns": "^4.1.0",
     "firebase": "^12.9.0",
     "framer-motion": "^12.34.0",
+    "jspdf": "^4.1.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.563.0",
     "react": "^19.2.0",
