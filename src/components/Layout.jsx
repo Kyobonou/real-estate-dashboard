@@ -18,7 +18,8 @@ import {
     Moon,
     Users,
     Wand2,
-    Trello
+    Trello,
+    MessageCircle
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -65,6 +66,8 @@ const Layout = () => {
         { path: '/properties', icon: Building, label: 'Biens', roles: ['admin', 'agent', 'viewer'] },
         { path: '/gallery', icon: Building, label: 'Galerie', roles: ['admin', 'agent', 'viewer'] },
         { path: '/visits', icon: Calendar, label: 'Visites', roles: ['admin', 'agent'] },
+        { path: '/images', icon: Building, label: 'Images WhatsApp', roles: ['admin', 'agent', 'viewer'] },
+        { path: '/requests', icon: MessageCircle, label: 'Demandes', roles: ['admin', 'agent'] },
         { path: '/clients', icon: Users, label: 'Clients', roles: ['admin', 'agent'] },
         { path: '/tools/ad-generator', icon: Wand2, label: 'Rédaction IA', roles: ['admin', 'agent'] },
         { path: '/analytics', icon: TrendingUp, label: 'Analytiques', roles: ['admin'] },

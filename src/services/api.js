@@ -1,9 +1,10 @@
 // API Service - Facade for Google Sheets Backend
-import googleSheetsApi from './googleSheetsApi';
+import { supabaseService } from './supabaseService';
 
 class ApiService {
     constructor() {
-        this.sheetsApi = googleSheetsApi;
+        // Switch to Supabase
+        this.sheetsApi = supabaseService;
     }
 
     // Auth
@@ -20,6 +21,14 @@ class ApiService {
     }
 
     // Data
+    async getImages(forceRefresh = false) {
+        return this.sheetsApi.getImages(forceRefresh);
+    }
+
+    async getRequests(forceRefresh = false) {
+        return this.sheetsApi.getRequests(forceRefresh);
+    }
+
     async getProperties(forceRefresh = false) {
         return this.sheetsApi.getProperties(forceRefresh);
     }

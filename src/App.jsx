@@ -12,6 +12,8 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Properties = lazy(() => import('./pages/Properties'));
 const Visits = lazy(() => import('./pages/Visits'));
 const Analytics = lazy(() => import('./pages/Analytics'));
+const ImagesPage = lazy(() => import('./pages/Images/ImagesPage'));
+const RequestsPage = lazy(() => import('./pages/Requests/RequestsPage'));
 const Clients = lazy(() => import('./pages/Clients'));
 const Settings = lazy(() => import('./pages/Settings'));
 const ImageGallery = lazy(() => import('./pages/ImageGallery'));
@@ -71,6 +73,14 @@ const AppRoutes = () => {
                         </Suspense>
                     } />
 
+                    <Route path="images" element={
+                        <Suspense fallback={<PageLoader />}>
+                            <ErrorBoundary>
+                                <ImagesPage />
+                            </ErrorBoundary>
+                        </Suspense>
+                    } />
+
                     <Route path="gallery" element={
                         <Suspense fallback={<PageLoader />}>
                             <ErrorBoundary>
@@ -99,6 +109,14 @@ const AppRoutes = () => {
                         <Suspense fallback={<PageLoader />}>
                             <ErrorBoundary>
                                 <Settings />
+                            </ErrorBoundary>
+                        </Suspense>
+                    } />
+
+                    <Route path="requests" element={
+                        <Suspense fallback={<PageLoader />}>
+                            <ErrorBoundary>
+                                <RequestsPage />
                             </ErrorBoundary>
                         </Suspense>
                     } />

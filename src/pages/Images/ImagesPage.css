@@ -1,0 +1,8 @@
+/* Reusing styles from Properties.css for consistency */
+@import '../Properties.css';
+
+/* Specific fixes for Images page */
+.property-image-wrapper {
+    background-color: #f1f5f9;
+    /* Slate 100 placeholder */
+}
