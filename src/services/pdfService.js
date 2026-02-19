@@ -120,7 +120,7 @@ class PdfService {
         doc.text(`Proposé au prix de : ${visitData.price}`, 30, startY + 46);
 
         // Offer Details
-        doc.text(`Cette offre est faite au prix net vendeur de : ________________ FCFA`, 20, startY + 70);
+        doc.text(`Cette offre est faite au prix net vendeur de : ________________`, 20, startY + 70);
         doc.text(`Aux conditions suivantes :`, 20, startY + 85);
         doc.text(`- Durée de validité de l'offre : 7 jours`, 25, startY + 95);
         doc.text(`- Sous réserve d'acceptation par le propriétaire`, 25, startY + 103);

@@ -69,11 +69,13 @@ const PropertyMap = ({ properties, onPropertyClick }) => {
 
     const handleWhatsApp = (e, property) => {
         e.stopPropagation();
-        const phone = property.telephone.replace(/\s/g, '');
+        if (!property.telephoneBien) return;
+        let phone = property.telephoneBien.replace(/\D/g, '');
+        if (!phone.startsWith('225')) phone = '225' + phone;
         const message = encodeURIComponent(
-            `Bonjour, je suis intéressé par votre bien: ${property.typeBien} à ${property.zone} (${property.prixFormate})`
+            `Bonjour, je suis intéressé par votre bien: ${property.typeBien} à ${property.zone} (${property.prixFormate} FCFA)`
         );
-        window.open(`https://wa.me/225${phone}?text=${message}`, '_blank');
+        window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
     };
 
     const handleNavigate = (e, property) => {
@@ -278,7 +280,7 @@ const PropertyMap = ({ properties, onPropertyClick }) => {
                                             >
                                                 <Navigation size={14} />
                                             </button>
-                                            {property.telephone && (
+                                            {property.telephoneBien && (
                                                 <button
                                                     className="btn btn-whatsapp btn-sm"
                                                     onClick={(e) => handleWhatsApp(e, property)}

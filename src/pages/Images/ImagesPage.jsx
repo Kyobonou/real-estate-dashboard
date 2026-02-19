@@ -1,144 +1,140 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';  // useState ajouté pour ImageThumbnail
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    MapPin, Tag, Grid, List, Search, Filter, X, Phone, Eye,
-    Download, Share2, Image as ImageIcon, User, Calendar, MessageSquare, ExternalLink
+    Search, X, Download, ExternalLink, User, Users,
+    ChevronDown, ChevronUp, Phone, MapPin, ImageIcon
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import apiService from '../../services/api';
 import Modal from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 import Skeleton from '../../components/Skeleton';
-import '../Properties.css'; // Reusing Properties styles for consistency
+import '../Properties.css';
 
-// Skeleton specific to images page (reusing property layout)
-const ImagesSkeleton = ({ viewMode }) => (
-    <div className="properties-v2">
-        <div className="properties-header">
-            <div className="header-left">
-                <Skeleton width="200px" height="32px" style={{ marginBottom: '0.5rem' }} />
-                <Skeleton width="250px" height="20px" />
-            </div>
-            <Skeleton width="140px" height="40px" />
-        </div>
-        <div className="properties-toolbar">
-            <Skeleton width="100%" height="50px" type="rect" style={{ borderRadius: '12px' }} />
-        </div>
-        <div className={`properties-container ${viewMode}`}>
-            {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="property-card-v2" style={{ pointerEvents: 'none', height: '350px' }}>
-                    <Skeleton type="rect" height="200px" style={{ borderTopLeftRadius: '16px', borderTopRightRadius: '16px' }} />
-                    <div className="property-content" style={{ padding: '1.5rem' }}>
-                        <Skeleton width="60%" height="24px" style={{ marginBottom: '0.5rem' }} />
-                        <Skeleton width="40%" height="16px" style={{ marginBottom: '1rem' }} />
-                        <Skeleton width="90%" height="14px" />
-                    </div>
-                </div>
-            ))}
-        </div>
-    </div>
-);
-
-const ImageDetailsModal = ({ image, isOpen, onClose }) => {
+// --- MODAL DÉTAIL IMAGE ---
+const ImageDetailModal = ({ item, isOpen, onClose }) => {
+    const [imgFailed, setImgFailed] = useState(false);
     const { addToast } = useToast();
+    if (!item) return null;
+    const { property, lien_image, horodatage } = item;
 
-    if (!image) return null;
-
-    const handleShare = () => {
-        const text = `Image de : ${image.expediteur}\nDate : ${image.horodatage}\nLien : ${image.lien_image}`;
+    const handleCopyLink = () => {
         if (navigator.clipboard) {
-            navigator.clipboard.writeText(text);
+            navigator.clipboard.writeText(lien_image);
             addToast({ type: 'info', title: 'Copié !', message: 'Lien copié dans le presse-papier' });
         }
     };
 
     const handleWhatsApp = () => {
-        if (image.telephone) {
-            const phone = image.telephone.replace(/\D/g, '');
-            const message = encodeURIComponent(`Bonjour, concernant l'image envoyée le ${image.horodatage}...`);
-            window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
-        } else {
-            addToast({ type: 'error', title: 'Erreur', message: 'Pas de numéro de téléphone disponible' });
+        if (!property?.telephoneBien) {
+            addToast({ type: 'error', title: 'Erreur', message: 'Pas de numéro disponible' });
+            return;
         }
+        let phone = property.telephoneBien.replace(/\D/g, '');
+        if (!phone.startsWith('225')) phone = '225' + phone;
+        const msg = encodeURIComponent(`Bonjour, je suis intéressé par votre ${property.typeBien} à ${property.zone}`);
+        window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
     };
 
-    const handleOpenImage = () => {
-        window.open(image.lien_image, '_blank');
-    };
+    const gradient = property?.id % 2 === 0
+        ? 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)'
+        : 'linear-gradient(135deg, #ec4899 0%, #f97316 100%)';
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Détails de l'image" size="lg">
+        <Modal isOpen={isOpen} onClose={onClose} title="Détail image" size="lg">
             <div className="property-details-modal">
                 <div className="property-details-header">
-                    <div className="property-image-large" style={{ height: '300px', background: '#000' }}>
-                        <img
-                            src={image.lien_image}
-                            alt="Full view"
-                            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                        />
+                    <div className="property-image-large" style={{ height: '300px', background: imgFailed ? gradient : '#000', position: 'relative' }}>
+                        {lien_image && !imgFailed && (
+                            <img src={lien_image} alt="Full view"
+                                style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                                onError={() => setImgFailed(true)} />
+                        )}
+                        {imgFailed && (
+                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.9rem', textAlign: 'center', padding: '1rem' }}>
+                                Image expirée<br/><span style={{ fontSize: '0.75rem', opacity: 0.8 }}>L'URL WaSender a expiré</span>
+                            </div>
+                        )}
                     </div>
-
                     <div className="property-quick-info">
                         <div className="price-section">
-                            <span className="price-label">Expéditeur</span>
-                            <h3 className="price-value" style={{ fontSize: '1.2rem' }}>{image.expediteur || 'Inconnu'}</h3>
+                            <span className="price-label">{property?.typeBien}</span>
+                            <h3 className="price-value">{property?.prixFormate}</h3>
+                            {property?.refBien && (
+                                <span style={{ fontSize: '0.7rem', fontFamily: 'monospace', fontWeight: 700, color: '#fff', background: '#1B4299', borderRadius: 5, padding: '2px 8px' }}>
+                                    # {property.refBien}
+                                </span>
+                            )}
                         </div>
                         <div className="status-section">
-                            <span className="badge badge-offer">
-                                {image.groupe ? 'Groupe' : 'Direct'}
+                            <span className={`badge ${property?.disponible ? 'badge-success' : 'badge-danger'}`}>
+                                {property?.status}
                             </span>
                         </div>
                     </div>
                 </div>
 
                 <div className="property-details-body">
-                    {image.message && (
-                        <div className="details-section">
-                            <h4>Message associé</h4>
-                            <p className="property-full-description">{image.message}</p>
-                        </div>
-                    )}
-
                     <div className="details-section">
-                        <h4>Informations</h4>
+                        <h4>Contexte du bien</h4>
                         <div className="info-grid">
                             <div className="info-item">
-                                <Calendar size={18} />
+                                <MapPin size={18} />
                                 <div>
-                                    <span className="info-label">Date</span>
-                                    <span className="info-value">{image.horodatage}</span>
+                                    <span className="info-label">Zone</span>
+                                    <span className="info-value">{property?.zone} {property?.commune ? `— ${property.commune}` : ''}</span>
+                                </div>
+                            </div>
+                            <div className="info-item">
+                                <User size={18} />
+                                <div>
+                                    <span className="info-label">Publié par</span>
+                                    <span className="info-value">{property?.publiePar || '—'}</span>
+                                </div>
+                            </div>
+                            <div className="info-item">
+                                <Users size={18} />
+                                <div>
+                                    <span className="info-label">Groupe WhatsApp</span>
+                                    <span className="info-value">{property?.groupeWhatsApp || '—'}</span>
                                 </div>
                             </div>
                             <div className="info-item">
                                 <Phone size={18} />
                                 <div>
                                     <span className="info-label">Téléphone</span>
-                                    <span className="info-value">{image.telephone || 'N/A'}</span>
-                                </div>
-                            </div>
-                            <div className="info-item">
-                                <Tag size={18} />
-                                <div>
-                                    <span className="info-label">Groupe</span>
-                                    <span className="info-value">{image.groupe || '-'}</span>
+                                    <span className="info-value">{property?.telephone || '—'}</span>
                                 </div>
                             </div>
                         </div>
                     </div>
 
+                    {property?.description && (
+                        <div className="details-section">
+                            <h4>Message initial</h4>
+                            <p className="property-full-description" style={{ whiteSpace: 'pre-wrap' }}>
+                                {property.description}
+                            </p>
+                        </div>
+                    )}
+
+                    {horodatage && (
+                        <div className="details-section">
+                            <h4>Date</h4>
+                            <p className="property-full-description">{horodatage}</p>
+                        </div>
+                    )}
+
                     <div className="modal-actions">
-                        <button className="btn btn-secondary" onClick={handleShare}>
-                            <Share2 size={18} />
-                            Copier Lien
+                        <button className="btn btn-secondary" onClick={handleCopyLink}>
+                            Copier le lien
                         </button>
-                        <button className="btn btn-secondary" onClick={handleOpenImage}>
-                            <ExternalLink size={18} />
-                            Voir l'original
+                        <button className="btn btn-secondary" onClick={() => window.open(lien_image, '_blank')}>
+                            <ExternalLink size={16} /> Ouvrir
                         </button>
-                        {image.telephone && (
+                        {property?.telephone && (
                             <button className="btn btn-whatsapp" onClick={handleWhatsApp}>
-                                <Phone size={18} />
-                                Contacter
+                                <Phone size={16} /> WhatsApp
                             </button>
                         )}
                     </div>
@@ -148,306 +144,285 @@ const ImageDetailsModal = ({ image, isOpen, onClose }) => {
     );
 };
 
-const ImageCard = ({ image, index, viewMode, onViewDetails }) => {
-    const [isHovered, setIsHovered] = useState(false);
-
-    // Fallback for missing phone
-    const hasPhone = !!image.telephone;
-
-    if (viewMode === 'list') {
-        return (
-            <motion.div
-                className="property-list-item"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.05 }}
-                onClick={() => onViewDetails(image)}
-            >
-                <div className="property-image-wrapper">
-                    <img src={image.lien_image} alt="Preview" className="property-image" loading="lazy" />
-                </div>
-                <div className="property-list-info">
-                    <div className="property-list-header">
-                        <h3>{image.expediteur || 'Expéditeur inconnu'}</h3>
-                    </div>
-                    <div className="property-list-details">
-                        <span className="property-zone">
-                            <Calendar size={14} /> {image.horodatage}
-                        </span>
-                        {image.groupe && (
-                            <span className="property-status" style={{ color: 'var(--text-secondary)' }}>
-                                • {image.groupe}
-                            </span>
-                        )}
-                    </div>
-                    <div className="property-features-inline">
-                        <span className="feature-badge">{image.telephone || 'Sans numéro'}</span>
-                    </div>
-                </div>
-                <div className="property-list-actions">
-                    <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); onViewDetails(image); }}
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Eye size={16} /> Détails
-                    </button>
-                </div>
-            </motion.div>
-        );
-    }
+// --- THUMBNAIL AVEC FALLBACK ---
+const ImageThumbnail = ({ item, onViewDetail, index }) => {
+    const [imgFailed, setImgFailed] = useState(false);
+    const gradient = item.property?.id % 2 === 0
+        ? 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)'
+        : 'linear-gradient(135deg, #ec4899 0%, #f97316 100%)';
 
     return (
         <motion.div
-            className="card property-card-v2"
-            initial={{ opacity: 0, scale: 0.9 }}
+            initial={{ opacity: 0, scale: 0.92 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: index * 0.1 }}
-            whileHover={{ y: -8 }}
-            onHoverStart={() => setIsHovered(true)}
-            onHoverEnd={() => setIsHovered(false)}
-            onClick={() => onViewDetails(image)}
+            transition={{ delay: index * 0.03 }}
+            onClick={() => onViewDetail(item)}
+            style={{ cursor: 'pointer', borderRadius: 8, overflow: 'hidden', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+            whileHover={{ scale: 1.03, boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}
         >
-            <div className="property-image-wrapper" style={{ height: '220px' }}>
-                <img
-                    src={image.lien_image}
-                    alt="Preview"
-                    className="property-image"
-                    loading="lazy"
-                />
-                <div className="property-badges">
-                    <span className={`badge ${image.groupe ? 'badge-offer' : 'badge-success'}`}>
-                        {image.groupe ? 'Groupe' : 'Direct'}
-                    </span>
-                </div>
-            </div>
-
-            <div className="property-content">
-                <div className="property-header">
-                    <h3 className="property-title">{image.expediteur || 'Inconnu'}</h3>
-                </div>
-
-                <div className="property-location">
-                    <Calendar size={16} />
-                    <span>{image.horodatage}</span>
-                </div>
-
-                {image.message ? (
-                    <p className="property-description line-clamp-2" title={image.message}>
-                        {image.message.substring(0, 100) + (image.message.length > 100 ? '...' : '')}
-                    </p>
-                ) : (
-                    <p className="property-description" style={{ fontStyle: 'italic', opacity: 0.5 }}>Aucun message</p>
+            {/* Miniature - utilise lien_thumb (ImgBB) en priorité, fallback lien_image */}
+            <div style={{ position: 'relative', aspectRatio: '4/3', background: imgFailed ? gradient : '#111' }}>
+                {!imgFailed && (item.lien_thumb || item.lien_image) && (
+                    <img
+                        src={item.lien_thumb || item.lien_image}
+                        alt={item.property?.typeBien}
+                        loading="lazy"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        onError={() => setImgFailed(true)}
+                    />
                 )}
-
-                <div className="property-features">
-                    {hasPhone && (
-                        <span className="feature-tag">
-                            <Phone size={12} /> {image.telephone}
-                        </span>
-                    )}
-                </div>
-
-                <motion.div
-                    className="property-footer"
-                    initial={{ opacity: 1 }} // Always show on mobile/desktop for consistency
-                    animate={{ opacity: 1 }}
-                >
-                    <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); onViewDetails(image); }}>
-                        <Eye size={16} /> Détails
-                    </button>
-                    <button className="btn btn-secondary btn-sm" onClick={(e) => {
-                        e.stopPropagation();
-                        window.open(image.lien_image, '_blank');
-                    }}>
-                        <ExternalLink size={16} /> Ouvrir
-                    </button>
-                </motion.div>
+                {item.property?.refBien && (
+                    <span style={{ position: 'absolute', top: 4, left: 4, fontSize: '0.6rem', fontFamily: 'monospace', fontWeight: 700, color: '#fff', background: '#1B4299', borderRadius: 4, padding: '1px 5px' }}>
+                        #{item.property.refBien}
+                    </span>
+                )}
+            </div>
+            {/* Infos contexte */}
+            <div style={{ padding: '6px 8px' }}>
+                <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {item.property?.typeBien || '—'}
+                </p>
+                <p style={{ margin: '1px 0 0', fontSize: '0.67rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <MapPin size={9} style={{ display: 'inline', verticalAlign: 'middle' }} /> {item.property?.zone}
+                </p>
+                <p style={{ margin: '2px 0 0', fontSize: '0.7rem', fontWeight: 600, color: '#1B4299' }}>
+                    {item.property?.prixFormate}
+                </p>
             </div>
         </motion.div>
     );
 };
 
+// --- SECTION D'UN GROUPE (auteur ou groupe WA) ---
+const AuthorSection = ({ groupKey, items, onViewDetail, defaultOpen }) => {
+    const [open, setOpen] = useState(defaultOpen ?? true);
+    const firstProp = items[0]?.property;
+
+    return (
+        <div style={{ marginBottom: '2rem', borderRadius: 12, border: '1px solid var(--border-color)', overflow: 'hidden', background: 'var(--bg-primary)' }}>
+            {/* En-tête du groupe */}
+            <button
+                onClick={() => setOpen(o => !o)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'var(--bg-secondary)', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+            >
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#1B4299', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <User size={18} color="#fff" />
+                </div>
+                <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>{groupKey}</p>
+                    {firstProp?.groupeWhatsApp && (
+                        <p style={{ margin: 0, fontSize: '0.72rem', color: '#15803d', fontWeight: 600 }}>{firstProp.groupeWhatsApp}</p>
+                    )}
+                </div>
+                <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', background: 'var(--bg-primary)', borderRadius: 20, padding: '2px 10px', border: '1px solid var(--border-color)' }}>
+                    {items.length} photo{items.length > 1 ? 's' : ''}
+                </span>
+                {open ? <ChevronUp size={18} color="var(--text-secondary)" /> : <ChevronDown size={18} color="var(--text-secondary)" />}
+            </button>
+
+            {/* Grille d'images */}
+            <AnimatePresence>
+                {open && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.25 }}
+                        style={{ overflow: 'hidden' }}
+                    >
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10, padding: 14 }}>
+                            {items.map((item, i) => (
+                                <ImageThumbnail key={item.id || i} item={item} onViewDetail={onViewDetail} index={i} />
+                            ))}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
+
+// --- PAGE PRINCIPALE ---
 const ImagesPage = () => {
-    const [images, setImages] = useState([]);
+    const [allItems, setAllItems] = useState([]); // [{lien_image, horodatage, id, property:{...}}]
     const [loading, setLoading] = useState(true);
-    const [viewMode, setViewMode] = useState('grid');
+    const [groupBy, setGroupBy] = useState('auteur'); // 'auteur' | 'groupe'
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedImage, setSelectedImage] = useState(null);
+    const [selectedItem, setSelectedItem] = useState(null);
     const [modalOpen, setModalOpen] = useState(false);
-    const [currentPage, setCurrentPage] = useState(1);
-    const ITEMS_PER_PAGE = 20;
     const { addToast } = useToast();
 
-    useEffect(() => {
-        loadImages();
-    }, []);
+    useEffect(() => { loadData(); }, []);
 
-    const loadImages = async () => {
+    const loadData = async () => {
         try {
-            const response = await apiService.getImages();
+            const response = await apiService.getImagesProperties();
             if (response.success) {
-                setImages(response.data);
+                // Aplatir : pour chaque bien, pour chaque image → un item avec contexte
+                const items = response.data.flatMap(prop =>
+                    (prop.images || []).map(img => ({ ...img, property: prop }))
+                );
+                setAllItems(items);
+            } else {
+                addToast({ type: 'error', title: 'Erreur', message: 'Impossible de charger les images' });
             }
-        } catch (error) {
-            console.error('Error loading images:', error);
-            addToast({ type: 'error', title: 'Erreur', message: 'Impossible de charger les images' });
+        } catch (e) {
+            addToast({ type: 'error', title: 'Erreur', message: e.message });
         } finally {
             setLoading(false);
         }
     };
 
-    // Filter Logic
-    const filteredImages = useMemo(() => {
-        return images.filter(img => {
-            const term = searchTerm.toLowerCase();
-            return (
-                (img.expediteur || '').toLowerCase().includes(term) ||
-                (img.message || '').toLowerCase().includes(term) ||
-                (img.groupe || '').toLowerCase().includes(term) ||
-                (img.telephone || '').includes(term)
-            );
+    // Filtrage
+    const filteredItems = useMemo(() => {
+        if (!searchTerm) return allItems;
+        const t = searchTerm.toLowerCase();
+        return allItems.filter(item =>
+            (item.property?.publiePar || '').toLowerCase().includes(t) ||
+            (item.property?.groupeWhatsApp || '').toLowerCase().includes(t) ||
+            (item.property?.refBien || '').toLowerCase().includes(t) ||
+            (item.property?.typeBien || '').toLowerCase().includes(t) ||
+            (item.property?.zone || '').toLowerCase().includes(t)
+        );
+    }, [allItems, searchTerm]);
+
+    // Regroupement
+    const grouped = useMemo(() => {
+        const groups = {};
+        filteredItems.forEach(item => {
+            const key = groupBy === 'auteur'
+                ? (item.property?.publiePar || 'Inconnu')
+                : (item.property?.groupeWhatsApp || 'Groupe inconnu');
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(item);
         });
-    }, [images, searchTerm]);
+        // Trier par nombre d'images décroissant
+        return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+    }, [filteredItems, groupBy]);
 
-    // Pagination
-    const paginatedImages = useMemo(() => {
-        const start = (currentPage - 1) * ITEMS_PER_PAGE;
-        const end = start + ITEMS_PER_PAGE;
-        return filteredImages.slice(start, end);
-    }, [filteredImages, currentPage]);
-
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [searchTerm]);
-
-    const handleViewDetails = (image) => {
-        setSelectedImage(image);
-        setModalOpen(true);
-    };
-
-    const handleExport = () => {
-        const dataToExport = filteredImages.map(img => ({
-            'Expéditeur': img.expediteur,
-            'Téléphone': img.telephone,
-            'Groupe': img.groupe,
-            'Date': img.horodatage,
-            'Message': img.message,
-            'Lien Image': img.lien_image
+    const handleExport = useCallback(() => {
+        const rows = filteredItems.map(item => ({
+            'Réf bien': item.property?.refBien || '',
+            'Type': item.property?.typeBien || '',
+            'Zone': item.property?.zone || '',
+            'Prix': item.property?.prixFormate || '',
+            'Publié par': item.property?.publiePar || '',
+            'Groupe WhatsApp': item.property?.groupeWhatsApp || '',
+            'Téléphone': item.property?.telephone || '',
+            'Lien image': item.lien_image || '',
+            'Date': item.horodatage || '',
         }));
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Images');
+        XLSX.writeFile(wb, `Images_${new Date().toISOString().split('T')[0]}.xlsx`);
+        addToast({ type: 'success', title: 'Export réussi', message: `${filteredItems.length} images exportées` });
+    }, [filteredItems, addToast]);
 
-        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Images WhatsApp");
-        XLSX.writeFile(workbook, `Images_WhatsApp_${new Date().toISOString().split('T')[0]}.xlsx`);
-        addToast({ type: 'success', title: 'Export réussi', message: `${filteredImages.length} images exportées` });
-    };
-
-    if (loading) return <ImagesSkeleton viewMode={viewMode} />;
+    if (loading) {
+        return (
+            <div className="properties-v2">
+                <div className="properties-header">
+                    <div className="header-left">
+                        <Skeleton width="200px" height="32px" style={{ marginBottom: '0.5rem' }} />
+                        <Skeleton width="250px" height="20px" />
+                    </div>
+                </div>
+                <Skeleton width="100%" height="50px" type="rect" style={{ borderRadius: 12, marginBottom: '1rem' }} />
+                {[1, 2].map(i => (
+                    <div key={i} style={{ marginBottom: '1.5rem', borderRadius: 12, border: '1px solid var(--border-color)', overflow: 'hidden' }}>
+                        <Skeleton width="100%" height="56px" type="rect" />
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10, padding: 14 }}>
+                            {Array.from({ length: 4 }).map((_, j) => <Skeleton key={j} height="140px" type="rect" style={{ borderRadius: 8 }} />)}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+    }
 
     return (
-        <motion.div
-            className="properties-v2"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-        >
+        <motion.div className="properties-v2" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+            {/* En-tête */}
             <div className="properties-header">
                 <div className="header-left">
                     <h2>Images WhatsApp</h2>
-                    <span className="properties-count">{filteredImages.length} image(s) trouvée(s)</span>
+                    <span className="properties-count">
+                        {filteredItems.length} photo(s) · {grouped.length} groupe(s)
+                    </span>
                 </div>
                 <div className="header-actions">
                     <button className="btn btn-secondary" onClick={handleExport}>
-                        <Download size={18} />
-                        Exporter Excel
+                        <Download size={18} /> Exporter Excel
                     </button>
                 </div>
             </div>
 
+            {/* Toolbar */}
             <div className="properties-toolbar">
-                <div className="search-filter-group">
+                <div className="search-filter-group" style={{ flex: 1 }}>
                     <div className="search-input">
                         <Search size={18} />
                         <input
                             type="text"
-                            placeholder="Rechercher par expéditeur, message, groupe..."
+                            placeholder="Rechercher par auteur, groupe, réf, zone..."
                             value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onChange={e => setSearchTerm(e.target.value)}
                         />
                         {searchTerm && (
-                            <button onClick={() => setSearchTerm('')}>
-                                <X size={16} />
-                            </button>
+                            <button onClick={() => setSearchTerm('')}><X size={16} /></button>
                         )}
                     </div>
                 </div>
 
-                <div className="view-toggle">
-                    <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')}>
-                        <Grid size={18} />
+                {/* Toggle groupement */}
+                <div className="view-toggle" style={{ gap: 4 }}>
+                    <button
+                        className={`view-btn ${groupBy === 'auteur' ? 'active' : ''}`}
+                        onClick={() => setGroupBy('auteur')}
+                        title="Grouper par auteur"
+                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px', fontSize: '0.8rem' }}
+                    >
+                        <User size={16} /> Auteur
                     </button>
-                    <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')}>
-                        <List size={18} />
+                    <button
+                        className={`view-btn ${groupBy === 'groupe' ? 'active' : ''}`}
+                        onClick={() => setGroupBy('groupe')}
+                        title="Grouper par groupe WhatsApp"
+                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px', fontSize: '0.8rem' }}
+                    >
+                        <Users size={16} /> Groupe WA
                     </button>
                 </div>
             </div>
 
-            <div className={`properties-container ${viewMode}`}>
-                <AnimatePresence mode="wait">
-                    {paginatedImages.map((img, index) => (
-                        <ImageCard
-                            key={img.id || index}
-                            image={img}
-                            index={index}
-                            viewMode={viewMode}
-                            onViewDetails={handleViewDetails}
-                        />
-                    ))}
-                </AnimatePresence>
-            </div>
+            {/* Sections groupées */}
+            <AnimatePresence mode="wait">
+                {grouped.length === 0 ? (
+                    <motion.div className="empty-state" key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        <ImageIcon size={48} />
+                        <p>Aucune image trouvée</p>
+                        {searchTerm && (
+                            <button className="btn btn-primary" onClick={() => setSearchTerm('')}>Effacer la recherche</button>
+                        )}
+                    </motion.div>
+                ) : (
+                    <motion.div key={groupBy} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
+                        {grouped.map(([key, items], idx) => (
+                            <AuthorSection
+                                key={key}
+                                groupKey={key}
+                                items={items}
+                                onViewDetail={item => { setSelectedItem(item); setModalOpen(true); }}
+                                defaultOpen={idx < 3}
+                            />
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
-            {filteredImages.length === 0 && (
-                <div className="empty-state">
-                    <ImageIcon size={48} />
-                    <p>Aucune image trouvée</p>
-                    <button className="btn btn-primary" onClick={() => setSearchTerm('')}>
-                        Effacer la recherche
-                    </button>
-                </div>
-            )}
-
-            {filteredImages.length > ITEMS_PER_PAGE && (
-                <div className="pagination-controls" style={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    padding: '2rem 0',
-                    marginTop: '2rem',
-                    borderTop: '1px solid var(--border-color)'
-                }}>
-                    <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                        disabled={currentPage === 1}
-                        style={{ opacity: currentPage === 1 ? 0.5 : 1 }}
-                    >
-                        Précédent
-                    </button>
-                    <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                        Page {currentPage} / {Math.ceil(filteredImages.length / ITEMS_PER_PAGE)}
-                    </span>
-                    <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => setCurrentPage(prev => Math.min(Math.ceil(filteredImages.length / ITEMS_PER_PAGE), prev + 1))}
-                        disabled={currentPage >= Math.ceil(filteredImages.length / ITEMS_PER_PAGE)}
-                        style={{ opacity: currentPage >= Math.ceil(filteredImages.length / ITEMS_PER_PAGE) ? 0.5 : 1 }}
-                    >
-                        Suivant
-                    </button>
-                </div>
-            )}
-
-            <ImageDetailsModal
-                image={selectedImage}
+            <ImageDetailModal
+                item={selectedItem}
                 isOpen={modalOpen}
                 onClose={() => setModalOpen(false)}
             />

@@ -330,6 +330,36 @@
     letter-spacing: 0.05em;
 }
 
+.sortable-header {
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s;
+}
+
+.sortable-header:hover {
+    background-color: var(--bg-hover) !important;
+}
+
+.header-cell-content {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sort-icon-muted {
+    opacity: 0.3;
+    transition: opacity 0.2s;
+}
+
+.sortable-header:hover .sort-icon-muted {
+    opacity: 0.7;
+}
+
+.sort-icon-active {
+    color: var(--brand-primary);
+    opacity: 1;
+}
+
 .visits-table td {
     padding: 1.25rem 1.5rem;
     border-bottom: 1px solid var(--border-subtle);
@@ -657,4 +687,220 @@
     .day-number {
         font-size: 0.75rem;
     }
+}
+
+/* ─── VISIT SHEET MODAL ─────────────────────────────────────────────────── */
+
+.visit-sheet-modal {
+    max-width: 680px;
+    width: 95vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    border-radius: var(--radius-lg, 16px);
+    background: var(--bg-panel, #ffffff);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    position: sticky;
+    top: 0;
+    background: var(--bg-panel, #ffffff);
+    z-index: 1;
+}
+
+.modal-header h2 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.btn-icon-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: transparent;
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: background 0.15s, color 0.15s;
+}
+
+.btn-icon-close:hover {
+    background: var(--bg-hover, #f1f5f9);
+    color: var(--text-primary);
+}
+
+.visit-sheet-body {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.visit-sheet-section {
+    background: var(--bg-secondary, #f8fafc);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: var(--radius-md, 10px);
+    padding: 1.25rem;
+}
+
+.visit-sheet-highlight {
+    background: var(--primary-10, rgba(27, 66, 153, 0.05));
+    border-color: var(--primary-30, rgba(27, 66, 153, 0.2));
+}
+
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 1rem 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.visit-sheet-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.visit-info-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.info-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted, #94a3b8);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.info-value {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.info-value.large {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.message-preview {
+    font-family: inherit;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--bg-primary, #f1f5f9);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    padding: 0.75rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+/* ─── SIGNATURES ─────────────────────────────────────────────────────────── */
+
+.visit-signatures {
+    border-top: 2px dashed var(--border-color, #e2e8f0);
+}
+
+.signature-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 1rem;
+    text-align: center;
+}
+
+.signature-role {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0;
+}
+
+.signature-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0.25rem 0;
+}
+
+.signature-line {
+    width: 100%;
+    border-bottom: 2px solid var(--border-color, #d1d5db);
+    margin: 1.5rem 0 0.5rem;
+    min-height: 60px;
+}
+
+.signature-caption {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+/* ─── PRINT STYLES ───────────────────────────────────────────────────────── */
+
+@media print {
+    .visits-toolbar,
+    .visits-header .header-actions,
+    .pagination-controls,
+    .visit-actions,
+    .modal-header .btn-secondary,
+    .modal-header .btn-icon-close {
+        display: none !important;
+    }
+
+    .modal-overlay {
+        position: static !important;
+        background: none !important;
+    }
+
+    .visit-sheet-modal {
+        box-shadow: none;
+        max-height: none;
+        border: none;
+    }
+
+    .visit-sheet-section {
+        break-inside: avoid;
+    }
+
+    .visit-signatures {
+        margin-top: 2rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .visit-sheet-grid-2 {
+        grid-template-columns: 1fr;
+    }
+
+    .visit-sheet-modal {
+        width: 100vw;
+        max-height: 100dvh;
+        border-radius: 0;
+    }
+}
 }

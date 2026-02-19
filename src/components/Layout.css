@@ -21,7 +21,7 @@
 }
 
 .sidebar.open {
-    width: 260px;
+    width: 280px;
 }
 
 .sidebar.closed {
@@ -30,12 +30,13 @@
 
 /* Sidebar Header */
 .sidebar-header {
-    height: 64px;
-    /* Standard header height */
+    height: 160px;
+    /* Increased height for vertical balance */
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 1.5rem;
+    padding: 2.5rem 1rem 2.5rem 0.5rem;
+    /* Balanced top and bottom padding */
     border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -126,7 +127,7 @@
 }
 
 .nav-item.active {
-    background: linear-gradient(90deg, rgba(79, 70, 229, 0.15) 0%, rgba(79, 70, 229, 0.05) 100%);
+    background: linear-gradient(90deg, rgba(27, 66, 153, 0.15) 0%, rgba(27, 66, 153, 0.05) 100%);
     color: var(--brand-primary);
     font-weight: 600;
     border-left: 3px solid var(--brand-primary);
@@ -177,13 +178,15 @@
 
 /* TOP HEADER */
 .top-header {
-    height: 64px;
+    height: 100px;
+    /* Taller header */
     background-color: var(--bg-panel);
     border-bottom: 1px solid var(--border-subtle);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 2rem;
+    padding: 2rem 2rem 0 2rem;
+    /* Lowered symbols/search */
     flex-shrink: 0;
 }
 
@@ -450,5 +453,32 @@
         font-size: 0.8rem;
         border: 2px solid var(--bg-panel);
         box-shadow: 0 0 0 1px var(--border-subtle);
+    }
+
+    /* Page content: padding bottom pour les barres de navigation mobile */
+    .page-content {
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+}
+
+/* Petit mobile (< 480px) */
+@media (max-width: 480px) {
+    .top-header {
+        height: 52px;
+        padding: 0 8px;
+    }
+
+    .page-title {
+        font-size: 1rem;
+    }
+
+    .mobile-menu-btn {
+        width: 32px;
+        height: 32px;
+    }
+
+    .icon-btn {
+        width: 32px;
+        height: 32px;
     }
 }

@@ -4,7 +4,7 @@ export const properties = [
         type: "Maison",
         offer: "Location",
         zone: "Cocody Mermoz",
-        price: "150,000 FCFA", // Formatted price
+        price: "150,000", // Formatted price
         status: "Disponible",
         features: ["3 Chambres", "Jardin", "Garage"],
         publisher: "Kassio Wilfried YOBONOU",
@@ -17,7 +17,7 @@ export const properties = [
         type: "Studio",
         offer: "Location",
         zone: "Yopougon Maroc",
-        price: "60,000 FCFA",
+        price: "60,000",
         status: "Occupé",
         features: ["Meublé", "Wifi", "Climatisé"],
         publisher: "Agence Immo Pro",
@@ -30,7 +30,7 @@ export const properties = [
         type: "Appartement",
         offer: "Vente",
         zone: "Marcory Zone 4",
-        price: "85,000,000 FCFA",
+        price: "85,000,000",
         status: "Disponible",
         features: ["4 Pièces", "Piscine", "Sécurité 24/7"],
         publisher: "Prestige Immo",
@@ -74,5 +74,5 @@ export const stats = {
     activeProperties: 12,
     visitsToday: 3,
     pendingLeads: 5,
-    revenueMonth: "1.2M FCFA"
+    revenueMonth: "1.2M"
 };

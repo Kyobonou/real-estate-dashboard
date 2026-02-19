@@ -1,22 +1,87 @@
 import { supabase } from './supabaseClient';
 
+// ── Mots-clés indiquant une demande de recherche (pas une offre immobilière) ──
+// Si le message_initial d'une entrée locaux contient l'un de ces mots-clés,
+// c'est une demande mal classifiée → exclure de Biens, inclure dans Demandes.
+const DEMAND_KEYWORDS = [
+    'je cherche', 'on cherche', 'nous cherchons', 'recherche urgente',
+    'qui a un', 'qui a une', 'avec un budget', 'quelqu\'un qui a',
+    'urgent pour', 'asap', 'chers collègues', 'cher collègue', 'chère collègue',
+    'besoin de toute urgence', 'besoin toute urgence', 'un client a besoin',
+    'ma cliente a besoin', 'cherche pour', 'sollicite', 'mon client cherche',
+    'ma cliente cherche', 'mon client', 'ma cliente', 'ai un client',
+    'ai une cliente', 'besoin d\'un', 'besoin d\'une', 'cherche un',
+    'cherche une', 'recherche un', 'recherche une', 'besoin urgent',
+    'qui dispose de', 'quelqu\'un a un', 'quelqu\'un a une',
+    'qui a quelque chose', 'cherche urgemment', 'confrère', 'consoeur',
+    'client a besoin', 'cliente a besoin', 'budget de', 'budget max',
+    'au maximum', 'maxi loyer', 'loyer max', 'prix maxi',
+];
+
+function _isDemand(text) {
+    if (!text) return false;
+    const lower = text.toLowerCase();
+    return DEMAND_KEYWORDS.some(kw => lower.includes(kw));
+}
+
 class SupabaseService {
     constructor() {
-        // No manual polling needed for Supabase (it supports realtime), but to keep consistent with existing
-        // architecture which expects polling or periodic refresh, we can keep some local state or just fetch fresh.
-        // For this V1 migration, we will fetch fresh data on every call but rely on React Query or useEffect in components
-        // to handle the "when to call" logic.
         this.listeners = new Map();
+        // In-memory cache with 90s TTL — avoids duplicate Supabase calls across pages
+        this._cache = {};
+        this._cacheTTL = 90000;
+    }
+
+    _getCached(key) {
+        const entry = this._cache[key];
+        if (entry && Date.now() - entry.ts < this._cacheTTL) return entry.data;
+        return null;
+    }
+
+    _setCache(key, data) {
+        this._cache[key] = { data, ts: Date.now() };
+    }
+
+    _invalidate(key) {
+        delete this._cache[key];
     }
 
     // === HELPERS ===
 
-    formatPrice(amount) {
-        if (!amount) return '0 FCFA';
-        if (amount >= 1000000) {
-            return `${(amount / 1000000).toFixed(amount % 1000000 === 0 ? 0 : 1)}M FCFA`;
+    parsePrice(amount) {
+        if (!amount) return 0;
+        let str = String(amount).replace(/FCFA|CFA|F/gi, '').trim();
+        let lowerStr = str.toLowerCase();
+        let multiplier = 1;
+        let hasShorthand = false;
+
+        if (lowerStr.endsWith('m') || lowerStr.includes('mill')) {
+            multiplier = 1000000;
+            str = str.replace(/m|millions?|mill/gi, '').trim();
+            hasShorthand = true;
+        } else if (lowerStr.endsWith('k')) {
+            multiplier = 1000;
+            str = str.replace(/k/gi, '').trim();
+            hasShorthand = true;
         }
-        return `${amount.toLocaleString('fr-FR')} FCFA`;
+
+        let cleaned;
+        if (hasShorthand) {
+            cleaned = str.replace(',', '.');
+            const parts = cleaned.split('.');
+            if (parts.length > 2) cleaned = cleaned.replace(/\./g, '');
+        } else {
+            cleaned = str.replace(/[\s.,]/g, '');
+        }
+
+        const num = parseFloat(cleaned) * multiplier;
+        return isNaN(num) ? 0 : Math.floor(num);
+    }
+
+    formatPrice(amount) {
+        if (!amount) return '0';
+        const num = typeof amount === 'number' ? amount : this.parsePrice(amount);
+        return num.toLocaleString('fr-FR');
     }
 
     normalizePropertyType(type) {
@@ -72,23 +137,79 @@ class SupabaseService {
         }
     }
 
+    // Fetch all images for a single publication (used in property modal)
+    async getImagesForPublication(publicationId) {
+        if (!publicationId) return [];
+        try {
+            const { data, error } = await supabase
+                .from('images')
+                .select('id, publication_id, lien_image, lien_thumb, horodatage, image_order, message_id')
+                .eq('publication_id', publicationId)
+                .order('image_order', { ascending: true });
+            if (error) return [];
+            return data || [];
+        } catch (e) { return []; }
+    }
+
+    // Batch fetch images grouped by publication_id (used for galleries)
+    async getImagesForPublications(publicationIds) {
+        if (!publicationIds || publicationIds.length === 0) return {};
+        try {
+            const { data, error } = await supabase
+                .from('images')
+                .select('id, publication_id, lien_image, lien_thumb, horodatage, image_order, message_id')
+                .in('publication_id', publicationIds)
+                .order('image_order', { ascending: true });
+            if (error) return {};
+            const grouped = {};
+            (data || []).forEach(img => {
+                if (!grouped[img.publication_id]) grouped[img.publication_id] = [];
+                grouped[img.publication_id].push(img);
+            });
+            return grouped;
+        } catch (e) { return {}; }
+    }
+
     // === DEMANDES (REQUESTS) ===
     async getRequests(forceRefresh = false) {
         try {
-            // Fetch all raw publications
-            // We will filter them client-side or we could add a .ilike('message', '%cherche%') filter here
-            // For now, let's fetch recent ones and filter in the UI to be more flexible
-            const { data, error } = await supabase
-                .from('publications')
-                .select('*')
-                .order('created_at', { ascending: false })
-                .limit(500); // Limit to last 500 messages to maintain performance
+            // Fetch publications (group + private WA messages) and
+            // demand-matching entries from locaux (misclassified by AI) in parallel
+            const [pubRes, locauxRes] = await Promise.all([
+                supabase
+                    .from('publications')
+                    .select('*')
+                    .order('created_at', { ascending: false })
+                    .limit(500),
+                supabase
+                    .from('locaux')
+                    .select('id, message_initial, expediteur, telephone_expediteur, telephone_bien, telephone, groupe_whatsapp_origine, date_publication, ref_bien')
+                    .order('date_publication', { ascending: false })
+                    .limit(300)
+            ]);
 
-            if (error) throw error;
+            const publications = pubRes.error ? [] : (pubRes.data || []);
 
-            // Optional: Basic server-side filtering could be done, but "requests" detection is complex.
-            // We'll return the raw data and let the component handle the heuristic.
-            return { success: true, data: data, source: 'supabase' };
+            // Convert demand-matching locaux entries into publication-shaped objects
+            const locauxDemandes = (locauxRes.error ? [] : (locauxRes.data || []))
+                .filter(p => _isDemand(p.message_initial))
+                .map(p => ({
+                    id: 'locaux_' + p.id,
+                    message: p.message_initial || '',
+                    expediteur: p.expediteur || '',
+                    telephone: p.telephone_expediteur || p.telephone_bien || p.telephone || '',
+                    // Normalize groupe to @g.us format so RequestsPage treats as group message
+                    groupe: p.groupe_whatsapp_origine
+                        ? (p.groupe_whatsapp_origine.includes('@') ? p.groupe_whatsapp_origine : p.groupe_whatsapp_origine + '@g.us')
+                        : 'groupe@g.us',
+                    nom_groupe: p.groupe_whatsapp_origine || '',
+                    horodatage: p.date_publication || '',
+                    type: 'text',
+                    _from_locaux: true,
+                    _ref_bien: p.ref_bien || '',
+                }));
+
+            return { success: true, data: [...publications, ...locauxDemandes], source: 'supabase' };
         } catch (error) {
             console.error('Supabase Requests Error:', error);
             return { success: false, error: error.message, data: [] };
@@ -98,9 +219,11 @@ class SupabaseService {
     // === CORE METHODS ===
 
     async getProperties(forceRefresh = false) {
+        if (!forceRefresh) {
+            const cached = this._getCached('properties');
+            if (cached) return cached;
+        }
         try {
-            // Select from 'locaux' (NEW TABLE) based on n8n workflow
-            // Columns: type_de_bien, type_offre, zone_geographique, commune, quartier, prix, telephone, caracteristiques, publie_par, meubles, chambre, disponible, groupe_whatsapp_origine, lien_image, date_publication
             const { data, error } = await supabase.from('locaux').select('*');
             if (error) throw error;
 
@@ -109,48 +232,152 @@ class SupabaseService {
                 const isDispo = (p.disponible && typeof p.disponible === 'string' && p.disponible.toLowerCase() === 'oui') || p.disponible === true;
                 const isMeuble = (p.meubles && typeof p.meubles === 'string' && p.meubles.toLowerCase() === 'oui') || p.meubles === true;
 
-                // Parse Price (handle text with non-numeric chars)
+                // Parse Price (handle text with shorthand M, k, FCFA)
                 const priceStr = p.prix || '0';
-                const rawPrice = parseInt(String(priceStr).replace(/[\D]/g, '')) || 0;
+                const rawPrice = this.parsePrice(priceStr);
 
                 return {
                     id: p.id,
+                    refBien: p.ref_bien || '',
+                    publicationId: p.publication_id || '',
+                    contentHash: p.content_hash || '',  // NEW: deduplication hash
+                    messageHash: p.message_hash || '',
                     typeBien: this.normalizePropertyType(p.type_de_bien),
                     typeOffre: p.type_offre || '',
                     zone: p.zone_geographique || '',
                     commune: p.commune || '',
                     quartier: p.quartier || '',
-                    // Combined location for display if needed
                     locationLabel: [p.commune, p.quartier].filter(Boolean).join(' - ') || p.zone_geographique || '',
                     prix: priceStr,
                     rawPrice: rawPrice,
-                    telephone: p.telephone || '',
+                    telephoneBien: p.telephone_bien || p.telephone || '',  // Contact number for the property
+                    telephoneExpediteur: p.telephone_expediteur || p.telephone || '',  // Sharer's phone number
                     caracteristiques: p.caracteristiques || '',
+                    description: p.message_initial || p.caracteristiques || '',
                     features: p.caracteristiques ? p.caracteristiques.split(/,|\||\n/).map(s => s.trim()) : [],
                     publiePar: p.publie_par || '',
+                    expediteur: p.expediteur || '',  // NEW: name of sharer
+                    meubles: p.meubles || 'Non',
                     meuble: isMeuble,
+                    chambre: p.chambre || 0,
                     chambres: parseInt(p.chambre) || 0,
                     disponible: isDispo,
                     groupeWhatsApp: p.groupe_whatsapp_origine || '',
                     imageUrl: p.lien_image || '',
                     datePublication: p.date_publication || '',
-                    // Calculated
+                    shares: (() => { try { return p.shares ? (typeof p.shares === 'string' ? JSON.parse(p.shares) : p.shares) : []; } catch { return []; } })(),
                     status: isDispo ? 'Disponible' : 'Occupé',
                     prixFormate: this.formatPrice(rawPrice)
                 };
             });
 
-            return { success: true, data: transformed, source: 'supabase' };
+            // Passe 1 : déduplication par publication_id
+            // (même message WaSender traité plusieurs fois par le workflow)
+            const seenPubIds = new Set();
+            const pass1 = [];
+            for (const p of transformed) {
+                const key = p.publicationId || ('id:' + p.id);
+                if (!seenPubIds.has(key)) {
+                    seenPubIds.add(key);
+                    pass1.push(p);
+                }
+            }
+
+            // Passe 2 : déduplication par content_hash
+            // (même bien partagé dans plusieurs groupes WhatsApp avec des publication_id différents)
+            const seenHashes = new Set();
+            const deduped = [];
+            for (const p of pass1) {
+                if (p.contentHash) {
+                    if (seenHashes.has(p.contentHash)) continue;
+                    seenHashes.add(p.contentHash);
+                }
+                deduped.push(p);
+            }
+
+            // Passe 3 : exclure les entrées qui sont en réalité des demandes
+            // (le workflow IA les a mal classifiées comme propriétés)
+            const trueProperties = deduped.filter(p => !_isDemand(p.description));
+
+            const result = { success: true, data: trueProperties, source: 'supabase' };
+            this._setCache('properties', result);
+            return result;
         } catch (error) {
             console.error('Supabase Properties Error:', error);
             return { success: false, error: error.message, data: [] };
         }
     }
 
-    async getVisits(forceRefresh = false) {
+    async getImagesProperties(forceRefresh = false) {
+        const response = await this.getProperties(forceRefresh);
+        if (!response.success) return response;
+
+        // Batch-fetch all images for all properties in one query
+        const pubIds = response.data.filter(p => p.publicationId).map(p => p.publicationId);
+        const imagesMap = await this.getImagesForPublications(pubIds);
+
+        // Enrich each property with its linked images
+        const enriched = response.data.map(p => {
+            const linkedImages = imagesMap[p.publicationId] || [];
+            const extraUrls = linkedImages.map(i => i.lien_image).filter(Boolean);
+            return {
+                ...p,
+                images: linkedImages,
+                imageUrls: extraUrls,
+                // Primary image: lien_image from locaux first, then first from images table
+                imageUrl: p.imageUrl || extraUrls[0] || '',
+                photoCount: linkedImages.length
+            };
+        });
+
+        const withImages = enriched.filter(p => p.imageUrl || p.images.length > 0);
+        return { success: true, data: withImages, source: response.source };
+    }
+
+    async getPropertyByRef(refBien) {
+        if (!refBien) return { success: false, data: null };
         try {
-            // Select from 'visite_programmee' (NEW TABLE)
-            // Columns: nom_prenom, numero, date_rv, local_interesse, visite_prog
+            const { data, error } = await supabase
+                .from('locaux')
+                .select('*')
+                .ilike('ref_bien', refBien)
+                .limit(1)
+                .single();
+            if (error && error.code !== 'PGRST116') throw error;
+            if (!data) return { success: false, data: null };
+            return {
+                success: true,
+                data: {
+                    refBien: data.ref_bien || '',
+                    typeBien: this.normalizePropertyType(data.type_de_bien),
+                    typeOffre: data.type_offre || '',
+                    zone: data.zone_geographique || '',
+                    commune: data.commune || '',
+                    quartier: data.quartier || '',
+                    prix: data.prix || '',
+                    prixFormate: this.formatPrice(data.prix),
+                    telephoneBien: data.telephone_bien || data.telephone || '',
+                    telephoneExpediteur: data.telephone_expediteur || data.telephone || '',
+                    expediteur: data.expediteur || data.publie_par || '',
+                    groupeWhatsappOrigine: data.groupe_whatsapp_origine || '',
+                    description: data.message_initial || data.caracteristiques || '',
+                    disponible: data.disponible || '',
+                    chambre: data.chambre || '',
+                    meubles: data.meubles || '',
+                }
+            };
+        } catch (error) {
+            console.error('getPropertyByRef Error:', error);
+            return { success: false, data: null };
+        }
+    }
+
+    async getVisits(forceRefresh = false) {
+        if (!forceRefresh) {
+            const cached = this._getCached('visits');
+            if (cached) return cached;
+        }
+        try {
             const { data, error } = await supabase.from('visite_programmee').select('*');
             if (error) throw error;
 
@@ -175,6 +402,7 @@ class SupabaseService {
                     numero: v.numero || '',
                     dateRv: v.date_rv, // keep raw text
                     localInteresse: v.local_interesse || '',
+                    refBien: v.ref_bien || '',  // NEW: property reference code from workflow
                     visiteProg: isScheduled,
                     // Calculated
                     parsedDate: (dateRv && !isNaN(dateRv.getTime())) ? dateRv : null,
@@ -182,7 +410,9 @@ class SupabaseService {
                 };
             });
 
-            return { success: true, data: transformed, source: 'supabase' };
+            const result = { success: true, data: transformed, source: 'supabase' };
+            this._setCache('visits', result);
+            return result;
         } catch (error) {
             console.error('Supabase Visits Error:', error);
             return { success: false, error: error.message, data: [] };
@@ -319,6 +549,7 @@ class SupabaseService {
                         totalVisites: 0,
                         visitesConfirmees: 0,
                         zonesInteret: new Set(),
+                        biensInteret: new Set(),  // NEW: track interested property refs
                         visites: [],
                         premiereVisite: null,
                         derniereVisite: null,
@@ -329,6 +560,7 @@ class SupabaseService {
                 client.totalVisites++;
                 if (visit.visiteProg) client.visitesConfirmees++;
                 if (visit.localInteresse) client.zonesInteret.add(visit.localInteresse.split(',')[0].trim());
+                if (visit.refBien) client.biensInteret.add(visit.refBien);  // NEW: track by ref_bien
                 client.visites.push(visit);
 
                 const vDate = visit.parsedDate;
@@ -357,6 +589,7 @@ class SupabaseService {
                     totalVisites: c.totalVisites,
                     visitesConfirmees: c.visitesConfirmees,
                     zonesInteret: Array.from(c.zonesInteret),
+                    biensInteret: Array.from(c.biensInteret),  // NEW: list of interested property refs
                     visites: c.visites,
                     premiereVisite: c.premiereVisite,
                     derniereVisite: c.derniereVisite

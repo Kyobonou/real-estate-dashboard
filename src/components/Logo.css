@@ -1,0 +1,131 @@
+.app-logo {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 24px 0 24px 4px;
+    /* Balanced top and bottom margins */
+    transition: all 0.3s ease;
+    overflow: visible;
+}
+
+.app-logo.collapsed {
+    justify-content: center;
+    gap: 0;
+    padding: 16px 0;
+}
+
+.app-logo.collapsed .logo-icon-wrapper {
+    width: 36px;
+    height: 42px;
+}
+
+.logo-icon-wrapper {
+    width: 64px !important;
+    height: 74px !important;
+    flex-shrink: 0;
+}
+
+.logo-svg {
+    width: 100%;
+    height: 100%;
+}
+
+.logo-text {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+}
+
+.brand-primary-name {
+    color: #1B4299;
+    font-weight: 800;
+    font-size: 1.85rem !important;
+    line-height: 0.85;
+    letter-spacing: 0.5px;
+    font-family: var(--font-heading);
+}
+
+.brand-secondary-name {
+    color: #888888;
+    font-weight: 700;
+    font-size: 1.4rem !important;
+    line-height: 1;
+    letter-spacing: 2.5px;
+    font-family: var(--font-heading);
+}
+
+.tagline-container {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-top: 6px;
+    gap: 0;
+}
+
+.multi-box {
+    background-color: #1B4299;
+    color: white;
+    font-weight: 700;
+    font-size: 1.1rem;
+    padding: 2px 14px;
+    transform: skew(-15deg);
+    border-radius: 1px;
+    margin-bottom: -1px;
+    z-index: 2;
+    font-family: 'Outfit', sans-serif;
+    text-transform: capitalize;
+}
+
+.services-box {
+    background-color: white;
+    color: #F29202;
+    font-weight: 700;
+    font-size: 0.65rem;
+    padding: 1px 12px;
+    border: 0.5px solid #333;
+    letter-spacing: 1px;
+    font-family: 'Outfit', sans-serif;
+    text-transform: lowercase;
+}
+
+/* Login Page specific scaling - Keep these large */
+.login-logo-wrapper .app-logo {
+    gap: 20px;
+}
+
+.login-logo-wrapper .logo-icon-wrapper {
+    width: 80px;
+    height: 96px;
+}
+
+.login-logo-wrapper .brand-primary-name {
+    font-size: 2.8rem;
+    color: white;
+}
+
+.login-logo-wrapper .brand-secondary-name {
+    font-size: 2.2rem;
+    color: #cbd5e1;
+}
+
+.login-logo-wrapper .tagline-container {
+    margin-top: 8px;
+}
+
+.login-logo-wrapper .multi-box {
+    font-size: 1.8rem;
+    padding: 4px 24px;
+}
+
+.login-logo-wrapper .services-box {
+    font-size: 1rem;
+    padding: 2px 20px;
+    border-width: 1px;
+}
+
+/* Animations */
+.app-logo:hover .logo-svg {
+    transform: translateY(-2px);
+    transition: transform 0.3s ease;
+}

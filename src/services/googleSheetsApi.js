@@ -248,7 +248,7 @@ class GoogleSheetsService {
 
     transformProperty(raw, index) {
         const priceStr = raw['Prix'] || '0';
-        const rawPrice = parseInt(priceStr.replace(/[\s.,]/g, '')) || 0;
+        const rawPrice = this.parsePrice(priceStr);
         const disponible = (raw['Disponible'] || '').toLowerCase();
         const isAvailable = disponible === 'oui' || disponible === 'true';
         const meubles = (raw['Meubles'] || '').toLowerCase();
@@ -270,6 +270,7 @@ class GoogleSheetsService {
             rawPrice,
             telephone: raw['Téléphone'] || '',
             caracteristiques: caracStr,
+            description: raw['Message'] || raw['Description'] || caracStr,
             features,
             publiePar: raw['Publier par'] || '',
             meuble: isFurnished,
@@ -303,11 +304,40 @@ class GoogleSheetsService {
         };
     }
 
-    formatPrice(amount) {
-        if (amount >= 1000000) {
-            return `${(amount / 1000000).toFixed(amount % 1000000 === 0 ? 0 : 1)}M FCFA`;
+    parsePrice(amount) {
+        if (!amount) return 0;
+        let str = String(amount).replace(/FCFA|CFA|F/gi, '').trim();
+        let lowerStr = str.toLowerCase();
+        let multiplier = 1;
+        let hasShorthand = false;
+
+        if (lowerStr.endsWith('m') || lowerStr.includes('mill')) {
+            multiplier = 1000000;
+            str = str.replace(/m|millions?|mill/gi, '').trim();
+            hasShorthand = true;
+        } else if (lowerStr.endsWith('k')) {
+            multiplier = 1000;
+            str = str.replace(/k/gi, '').trim();
+            hasShorthand = true;
         }
-        return `${amount.toLocaleString('fr-FR')} FCFA`;
+
+        let cleaned;
+        if (hasShorthand) {
+            cleaned = str.replace(',', '.');
+            const parts = cleaned.split('.');
+            if (parts.length > 2) cleaned = cleaned.replace(/\./g, '');
+        } else {
+            cleaned = str.replace(/[\s.,]/g, '');
+        }
+
+        const num = parseFloat(cleaned) * multiplier;
+        return isNaN(num) ? 0 : Math.floor(num);
+    }
+
+    formatPrice(amount) {
+        if (!amount) return '0';
+        const num = typeof amount === 'number' ? amount : this.parsePrice(amount);
+        return num.toLocaleString('fr-FR');
     }
 
     parseDate(dateStr) {

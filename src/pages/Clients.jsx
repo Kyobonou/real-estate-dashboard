@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Users, Search, RefreshCw, LayoutGrid, List, Phone,
     Calendar, MapPin, CheckCircle, Clock, X, TrendingUp,
-    UserPlus, UserCheck, UserX, SlidersHorizontal, ArrowUpDown, Filter, User
+    UserPlus, UserCheck, UserX, SlidersHorizontal, ArrowUpDown, Filter, User,
+    ArrowUp, ArrowDown
 } from 'lucide-react';
 import apiService from '../services/api';
 import { useToast } from '../components/Toast';
@@ -240,60 +241,75 @@ const GridView = React.memo(({ clients, addToast, onSelect, canAction }) => (
 ));
 
 // --- List View ---
-const ListView = React.memo(({ clients, addToast, onSelect, canAction }) => (
-    <div className="clients-list-container">
-        <table className="clients-table">
-            <thead>
-                <tr>
-                    <th>Client</th>
-                    <th>Statut</th>
-                    <th>Visites</th>
-                    <th>Dernière visite</th>
-                    <th>Zones</th>
-                    <th className="text-center">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {clients.map(client => (
-                    <tr key={client.id} onClick={() => onSelect(client)} className="client-row">
-                        <td>
-                            <div className="list-client-cell">
-                                <ClientAvatar statut={client.statut} />
-                                <div className="client-text">
-                                    <h3>{client.nomPrenom}</h3>
-                                    <span>{client.numero || '-'}</span>
-                                </div>
-                            </div>
-                        </td>
-                        <td><StatusBadge statut={client.statut} /></td>
-                        <td>
-                            <span className="visit-count">
-                                {client.totalVisites}
-                                {client.visitesConfirmees > 0 && (
-                                    <span className="confirmed"> ({client.visitesConfirmees} conf.)</span>
-                                )}
-                            </span>
-                        </td>
-                        <td>{client.derniereVisite ? formatDate(client.derniereVisite) : '-'}</td>
-                        <td>
-                            <div className="client-chips compact">
-                                {client.zonesInteret.slice(0, 2).map((zone, i) => (
-                                    <span key={i} className="zone-chip small">{zone}</span>
-                                ))}
-                                {client.zonesInteret.length > 2 && (
-                                    <span className="zone-chip small more">+{client.zonesInteret.length - 2}</span>
-                                )}
-                            </div>
-                        </td>
-                        <td className="text-center" onClick={e => e.stopPropagation()}>
-                            <ClientActions client={client} addToast={addToast} canAction={canAction} />
-                        </td>
+const ListView = React.memo(({ clients, addToast, onSelect, canAction, sortConfig, onSort }) => {
+    const getSortIcon = (key) => {
+        if (sortConfig.key !== key) return <ArrowUpDown size={14} className="sort-icon-muted" />;
+        return sortConfig.direction === 'asc' ? <ArrowUp size={14} className="sort-icon-active" /> : <ArrowDown size={14} className="sort-icon-active" />;
+    };
+
+    return (
+        <div className="clients-list-container">
+            <table className="clients-table">
+                <thead>
+                    <tr>
+                        <th onClick={() => onSort('nomPrenom')} className="sortable-header">
+                            <div className="header-cell-content">Client {getSortIcon('nomPrenom')}</div>
+                        </th>
+                        <th onClick={() => onSort('statut')} className="sortable-header">
+                            <div className="header-cell-content">Statut {getSortIcon('statut')}</div>
+                        </th>
+                        <th onClick={() => onSort('totalVisites')} className="sortable-header">
+                            <div className="header-cell-content">Visites {getSortIcon('totalVisites')}</div>
+                        </th>
+                        <th onClick={() => onSort('derniereVisite')} className="sortable-header">
+                            <div className="header-cell-content">Dernière visite {getSortIcon('derniereVisite')}</div>
+                        </th>
+                        <th>Zones</th>
+                        <th className="text-center">Actions</th>
                     </tr>
-                ))}
-            </tbody>
-        </table>
-    </div>
-));
+                </thead>
+                <tbody>
+                    {clients.map(client => (
+                        <tr key={client.id} onClick={() => onSelect(client)} className="client-row">
+                            <td>
+                                <div className="list-client-cell">
+                                    <ClientAvatar statut={client.statut} />
+                                    <div className="client-text">
+                                        <h3>{client.nomPrenom}</h3>
+                                        <span>{client.numero || '-'}</span>
+                                    </div>
+                                </div>
+                            </td>
+                            <td><StatusBadge statut={client.statut} /></td>
+                            <td>
+                                <span className="visit-count">
+                                    {client.totalVisites}
+                                    {client.visitesConfirmees > 0 && (
+                                        <span className="confirmed"> ({client.visitesConfirmees} conf.)</span>
+                                    )}
+                                </span>
+                            </td>
+                            <td>{client.derniereVisite ? formatDate(client.derniereVisite) : '-'}</td>
+                            <td>
+                                <div className="client-chips compact">
+                                    {client.zonesInteret.slice(0, 2).map((zone, i) => (
+                                        <span key={i} className="zone-chip small">{zone}</span>
+                                    ))}
+                                    {client.zonesInteret.length > 2 && (
+                                        <span className="zone-chip small more">+{client.zonesInteret.length - 2}</span>
+                                    )}
+                                </div>
+                            </td>
+                            <td className="text-center" onClick={e => e.stopPropagation()}>
+                                <ClientActions client={client} addToast={addToast} canAction={canAction} />
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+});
 
 // --- Client Detail Modal ---
 const ClientDetailModal = ({ client, onClose, addToast, canAction }) => {
@@ -422,11 +438,21 @@ const Clients = () => {
     const [viewMode, setViewMode] = useState('grid');
     const [selectedClient, setSelectedClient] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
+    const [sortConfig, setSortConfig] = useState({ key: 'nomPrenom', direction: 'asc' });
     const itemsPerPage = 12; // Limite par page pour éviter le lag
 
     const { addToast } = useToast();
     const { can } = useAuth();
     const canAction = can('call');
+
+    // Fonction de tri
+    const handleSort = (key) => {
+        let direction = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') {
+            direction = 'desc';
+        }
+        setSortConfig({ key, direction });
+    };
 
     // Charger les clients avec option forceRefresh
     const loadClients = useCallback(async (force = false) => {
@@ -468,7 +494,7 @@ const Clients = () => {
 
     // Filtrage optimisé
     const filteredClients = useMemo(() => {
-        return clients.filter(client => {
+        let items = clients.filter(client => {
             const term = searchTerm.toLowerCase();
             const matchesSearch = !term ||
                 (client.nomPrenom && client.nomPrenom.toLowerCase().includes(term)) ||
@@ -480,7 +506,27 @@ const Clients = () => {
 
             return matchesSearch && matchesFilter;
         });
-    }, [clients, searchTerm, filter]);
+
+        // Appliquer le tri
+        if (sortConfig.key) {
+            items.sort((a, b) => {
+                let aValue = a[sortConfig.key] || '';
+                let bValue = b[sortConfig.key] || '';
+
+                // Spécial pour les dates
+                if (sortConfig.key === 'derniereVisite') {
+                    aValue = a.derniereVisite ? new Date(a.derniereVisite).getTime() : 0;
+                    bValue = b.derniereVisite ? new Date(b.derniereVisite).getTime() : 0;
+                }
+
+                if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+
+        return items;
+    }, [clients, searchTerm, filter, sortConfig]);
 
     // KPI calculations (mémoïsé pour éviter les recalculs inutiles)
     const kpis = useMemo(() => {
@@ -610,7 +656,14 @@ const Clients = () => {
                     <GridView clients={paginatedClients} addToast={addToast} onSelect={setSelectedClient} canAction={canAction} />
                 )}
                 {viewMode === 'list' && (
-                    <ListView clients={paginatedClients} addToast={addToast} onSelect={setSelectedClient} canAction={canAction} />
+                    <ListView
+                        clients={paginatedClients}
+                        addToast={addToast}
+                        onSelect={setSelectedClient}
+                        canAction={canAction}
+                        sortConfig={sortConfig}
+                        onSort={handleSort}
+                    />
                 )}
             </div>
 

@@ -61,7 +61,7 @@ const Analytics = () => {
         return (
             <div className="dashboard-loading">
                 <Loader className="spinner" size={40} />
-                <p>Chargement des analytiques depuis Google Sheets...</p>
+                <p>Chargement des analytiques...</p>
             </div>
         );
     }
@@ -133,7 +133,7 @@ const Analytics = () => {
                 <div>
                     <h2>Analytiques</h2>
                     <p className="analytics-subtitle">
-                        Analyse basée sur {properties.length} biens et {visits.length} visite(s) — Données du Google Sheet
+                        Analyse basée sur {properties.length} biens et {visits.length} visite(s)
                     </p>
                 </div>
                 <button className="btn btn-secondary" onClick={loadData}>
@@ -192,12 +192,12 @@ const Analytics = () => {
                     </div>
                     {zoneData.length > 0 ? (
                         <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={zoneData}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                                <XAxis dataKey="name" stroke="#6b7280" fontSize={11} angle={-15} textAnchor="end" height={60} />
-                                <YAxis stroke="#6b7280" fontSize={12} allowDecimals={false} />
-                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
-                                <Bar dataKey="value" name="Biens" radius={[8, 8, 0, 0]}>
+                            <BarChart data={zoneData} margin={{ top: 20, right: 10, left: 0, bottom: 10 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
+                                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#94a3b8' }} angle={-15} textAnchor="end" height={60} axisLine={false} tickLine={false} />
+                                <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} allowDecimals={false} axisLine={false} tickLine={false} />
+                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#94a3b8', fontSize: 12 }} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+                                <Bar dataKey="value" name="Biens" radius={[6, 6, 0, 0]} label={{ position: 'top', fontSize: 12, fill: '#e2e8f0', fontWeight: 700 }}>
                                     {zoneData.map((entry, index) => (
                                         <Cell key={index} fill={entry.color} />
                                     ))}
@@ -219,13 +219,15 @@ const Analytics = () => {
                     {typeData.length > 0 ? (
                         <ResponsiveContainer width="100%" height={300}>
                             <PieChart>
-                                <Pie data={typeData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={3} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
+                                <Pie data={typeData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={3} dataKey="value"
+                                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                    labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}>
                                     {typeData.map((entry, index) => (
                                         <Cell key={index} fill={entry.color} />
                                     ))}
                                 </Pie>
-                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
-                                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '12px', color: '#b8bfce' }} />
+                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff', fontSize: 13 }} labelStyle={{ color: '#94a3b8', fontSize: 12 }} />
+                                <Legend iconType="circle" iconSize={9} wrapperStyle={{ fontSize: '13px', color: '#cbd5e1' }} />
                             </PieChart>
                         </ResponsiveContainer>
                     ) : (
@@ -246,12 +248,14 @@ const Analytics = () => {
                     {disponibiliteData.length > 0 ? (
                         <ResponsiveContainer width="100%" height={280}>
                             <PieChart>
-                                <Pie data={disponibiliteData} cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={5} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
+                                <Pie data={disponibiliteData} cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={5} dataKey="value"
+                                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                    labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}>
                                     {disponibiliteData.map((entry, index) => (
                                         <Cell key={index} fill={entry.color} />
                                     ))}
                                 </Pie>
-                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff', fontSize: 13 }} labelStyle={{ color: '#94a3b8', fontSize: 12 }} />
                             </PieChart>
                         </ResponsiveContainer>
                     ) : (
@@ -269,12 +273,14 @@ const Analytics = () => {
                     {meublesData.length > 0 ? (
                         <ResponsiveContainer width="100%" height={280}>
                             <PieChart>
-                                <Pie data={meublesData} cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={5} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
+                                <Pie data={meublesData} cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={5} dataKey="value"
+                                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                    labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}>
                                     {meublesData.map((entry, index) => (
                                         <Cell key={index} fill={entry.color} />
                                     ))}
                                 </Pie>
-                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff', fontSize: 13 }} labelStyle={{ color: '#94a3b8', fontSize: 12 }} />
                             </PieChart>
                         </ResponsiveContainer>
                     ) : (
@@ -294,12 +300,12 @@ const Analytics = () => {
                     </div>
                     {chambresData.length > 0 ? (
                         <ResponsiveContainer width="100%" height={280}>
-                            <BarChart data={chambresData}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                                <XAxis dataKey="name" stroke="#6b7280" fontSize={12} />
-                                <YAxis stroke="#6b7280" fontSize={12} allowDecimals={false} />
-                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
-                                <Bar dataKey="value" name="Biens" radius={[8, 8, 0, 0]}>
+                            <BarChart data={chambresData} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
+                                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                                <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} allowDecimals={false} axisLine={false} tickLine={false} />
+                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff', fontSize: 13 }} labelStyle={{ color: '#94a3b8', fontSize: 12 }} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+                                <Bar dataKey="value" name="Biens" radius={[6, 6, 0, 0]} label={{ position: 'top', fontSize: 12, fill: '#e2e8f0', fontWeight: 700 }}>
                                     {chambresData.map((entry, index) => (
                                         <Cell key={index} fill={entry.color} />
                                     ))}
@@ -320,12 +326,12 @@ const Analytics = () => {
                     </div>
                     {priceData.length > 0 ? (
                         <ResponsiveContainer width="100%" height={280}>
-                            <BarChart data={priceData}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                                <XAxis dataKey="name" stroke="#6b7280" fontSize={11} />
-                                <YAxis stroke="#6b7280" fontSize={12} allowDecimals={false} />
-                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} labelStyle={{ color: '#fff' }} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
-                                <Bar dataKey="value" name="Biens" radius={[8, 8, 0, 0]}>
+                            <BarChart data={priceData} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
+                                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94a3b8' }} angle={-10} textAnchor="end" height={50} axisLine={false} tickLine={false} />
+                                <YAxis tick={{ fontSize: 12, fill: '#94a3b8' }} allowDecimals={false} axisLine={false} tickLine={false} />
+                                <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff', fontSize: 13 }} labelStyle={{ color: '#94a3b8', fontSize: 12 }} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+                                <Bar dataKey="value" name="Biens" radius={[6, 6, 0, 0]} label={{ position: 'top', fontSize: 12, fill: '#e2e8f0', fontWeight: 700 }}>
                                     {priceData.map((entry, index) => (
                                         <Cell key={index} fill={entry.color} />
                                     ))}
@@ -343,7 +349,7 @@ const Analytics = () => {
                 <div className="chart-header">
                     <div>
                         <h3><Building size={18} /> Récapitulatif des biens</h3>
-                        <p>Tous les biens du Google Sheet triés par prix décroissant</p>
+                        <p>Tous les biens triés par prix décroissant</p>
                     </div>
                 </div>
                 <div className="performance-table">
@@ -395,7 +401,7 @@ const Analytics = () => {
                     <div className="chart-header">
                         <div>
                             <h3><Calendar size={18} /> Visites programmées</h3>
-                            <p>Toutes les visites du Google Sheet</p>
+                            <p>Toutes les visites enregistrées</p>
                         </div>
                     </div>
                     <div className="performance-table">

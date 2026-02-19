@@ -115,25 +115,33 @@
     z-index: 1;
 }
 
-.brand-logo {
-    width: 72px;
-    height: 72px;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: var(--radius-md);
+.login-logo-wrapper {
+    margin-bottom: 2rem;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
+}
+
+.login-logo-wrapper .app-logo {
+    padding: 0;
+    gap: 16px;
+}
+
+.login-logo-wrapper .bogbes {
+    font-size: 1.5rem;
     color: white;
-    margin-bottom: 1.5rem;
-    backdrop-filter: blur(10px);
+}
+
+.login-logo-wrapper .groupe {
+    font-size: 1.1rem;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.login-logo-wrapper .sub-brand {
+    font-size: 0.8rem;
 }
 
 .brand-title {
-    font-size: 2.25rem;
-    font-weight: 800;
-    color: white;
-    letter-spacing: -0.5px;
-    margin-bottom: 0.5rem;
+    display: none;
 }
 
 .brand-subtitle {

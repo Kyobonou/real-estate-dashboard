@@ -15,15 +15,17 @@
     --slate-900: #0f172a;
     --slate-950: #020617;
 
-    /* --- COULEURS DE MARQUE --- */
-    --brand-primary: #4f46e5;
-    /* Indigo 600 */
-    --brand-primary-hover: #4338ca;
-    /* Indigo 700 */
-    --brand-primary-light: #e0e7ff;
-    /* Indigo 100 */
-    --brand-secondary: #ec4899;
-    /* Pink 500 */
+    /* --- COULEURS DE MARQUE (Mises à jour selon logo BOGBE'S) --- */
+    --brand-primary: #1B4299;
+    /* Bleu Logo */
+    --brand-primary-hover: #15347a;
+    /* Bleu plus foncé */
+    --brand-primary-light: #e8ebf5;
+    /* Bleu très clair */
+    --brand-secondary: #F29202;
+    /* Orange Logo */
+    --brand-secondary-hover: #d17e02;
+    /* Orange plus foncé */
 
     /* --- COULEURS SÉMANTIQUES (Vibrantes) --- */
     --success: #10b981;
@@ -41,9 +43,12 @@
     --bg-panel: #ffffff;
     --bg-hover: #f8fafc;
 
-    --text-primary: #0f172a;
-    --text-secondary: #475569;
-    --text-muted: #94a3b8;
+    --text-primary: #020617;
+    /* Slate 950 - Presque noir pour un contraste maximal */
+    --text-secondary: #334155;
+    /* Slate 700 - Gris plus foncé pour une meilleure lisibilité */
+    --text-muted: #64748b;
+    /* Slate 500 - Gris moyen */
 
     /* --- CONTOURS & SÉPARATION (HAUT CONTRASTE) --- */
     --border-subtle: #cbd5e1;

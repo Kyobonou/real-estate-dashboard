@@ -3,59 +3,62 @@ import React from 'react';
 class ErrorBoundary extends React.Component {
     constructor(props) {
         super(props);
-        this.state = { hasError: false, error: null, errorInfo: null };
+        this.state = { hasError: false };
     }
 
-    static getDerivedStateFromError(error) {
-        return { hasError: true, error };
+    static getDerivedStateFromError() {
+        return { hasError: true };
     }
 
     componentDidCatch(error, errorInfo) {
-        console.error("Uncaught error:", error, errorInfo);
-        this.setState({ errorInfo });
+        console.error("ErrorBoundary caught:", error, errorInfo);
+    }
+
+    // Auto-reset quand la route change (via prop "resetKey")
+    componentDidUpdate(prevProps) {
+        if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+            this.setState({ hasError: false });
+        }
     }
 
     render() {
         if (this.state.hasError) {
             return (
                 <div style={{
-                    padding: '2rem',
-                    color: 'var(--danger, red)',
-                    backgroundColor: 'var(--bg-panel, #fff)',
-                    height: '100%',
+                    padding: '3rem 2rem',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    textAlign: 'center'
+                    gap: '1rem',
+                    textAlign: 'center',
+                    minHeight: '300px'
                 }}>
-                    <h2>Une erreur est survenue.</h2>
-                    <p>Détails techniques (pour le support) :</p>
-                    <details style={{
-                        whiteSpace: 'pre-wrap',
-                        textAlign: 'left',
-                        marginTop: '1rem',
-                        padding: '1rem',
-                        background: 'rgba(0,0,0,0.05)',
-                        borderRadius: '8px',
-                        maxWidth: '100%',
-                        overflow: 'auto'
-                    }}>
-                        {this.state.error && this.state.error.toString()}
-                    </details>
+                    <div style={{ fontSize: '3rem' }}>⚠️</div>
+                    <h3 style={{ margin: 0, color: 'var(--text-primary, #1e293b)', fontWeight: 700 }}>
+                        Impossible de charger cette section
+                    </h3>
+                    <p style={{ margin: 0, color: 'var(--text-secondary, #64748b)', fontSize: '0.9rem' }}>
+                        Une erreur est survenue. Veuillez recharger la page ou réessayer.
+                    </p>
                     <button
-                        onClick={() => window.location.reload()}
+                        onClick={() => {
+                            this.setState({ hasError: false });
+                            window.location.reload();
+                        }}
                         style={{
-                            marginTop: '1.5rem',
-                            padding: '0.75rem 1.5rem',
+                            marginTop: '0.5rem',
+                            padding: '0.625rem 1.5rem',
                             background: 'var(--brand-primary, #4f46e5)',
                             color: 'white',
                             border: 'none',
                             borderRadius: '8px',
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            fontSize: '0.875rem'
                         }}
                     >
-                        Recharger la page
+                        Recharger
                     </button>
                 </div>
             );

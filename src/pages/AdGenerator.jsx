@@ -148,7 +148,7 @@ const AdGenerator = () => {
                         </div>
 
                         <div className="form-group">
-                            <label>Prix (FCFA)</label>
+                            <label>Prix</label>
                             <input
                                 type="text"
                                 placeholder="Ex: 500 000"
@@ -280,7 +280,40 @@ const generateProfessionalAd = (data) => {
 
     text += featuresList;
 
-    text += `\n\n💰 PRIX : ${data.prix ? data.prix + ' FCFA' : 'Nous consulter'}`;
+    // Intelligent Price Normalization
+    const smartFormatPrice = (p) => {
+        if (!p) return null;
+        let str = String(p).replace(/FCFA|CFA|F/gi, '').trim();
+        let lowerStr = str.toLowerCase();
+        let mult = 1;
+        let hasShorthand = false;
+
+        if (lowerStr.endsWith('m') || lowerStr.includes('mill')) {
+            mult = 1000000;
+            str = str.replace(/m|millions?|mill/gi, '').trim();
+            hasShorthand = true;
+        } else if (lowerStr.endsWith('k')) {
+            mult = 1000;
+            str = str.replace(/k/gi, '').trim();
+            hasShorthand = true;
+        }
+
+        let cleaned;
+        if (hasShorthand) {
+            cleaned = str.replace(',', '.');
+            const parts = cleaned.split('.');
+            if (parts.length > 2) cleaned = cleaned.replace(/\./g, '');
+        } else {
+            cleaned = str.replace(/[\s.,]/g, '');
+        }
+
+        const num = parseFloat(cleaned) * mult;
+        return isNaN(num) ? null : Math.floor(num).toLocaleString('fr-FR');
+    };
+
+    const formattedPrice = smartFormatPrice(data.prix) || 'Nous consulter';
+
+    text += `\n\n💰 PRIX : ${formattedPrice}`;
     text += `\n\n📞 INFOLINE & VISITE :\nContactez-nous dès maintenant pour une visite !`;
 
     return { type: 'pro', text };
@@ -301,7 +334,40 @@ const generateEmotionalAd = (data) => {
     if (data.features.includes('Sécurité 24/7')) text += `\n🛡️ Dormez sur vos deux oreilles grâce à un service de sécurité optimal.`;
 
     text += `\n\nCe bien est une opportunité unique ${isVente ? "d'investir dans votre bonheur" : "de poser vos valises dans un cadre idyllique"}.`;
-    text += `\n\n🏷️ ${data.prix ? data.prix + ' FCFA' : 'Prix sur demande'}`;
+    // Intelligent Price Normalization
+    const smartFormatPriceE = (p) => {
+        if (!p) return null;
+        let str = String(p).replace(/FCFA|CFA|F/gi, '').trim();
+        let lowerStr = str.toLowerCase();
+        let mult = 1;
+        let hasShorthand = false;
+
+        if (lowerStr.endsWith('m') || lowerStr.includes('mill')) {
+            mult = 1000000;
+            str = str.replace(/m|millions?|mill/gi, '').trim();
+            hasShorthand = true;
+        } else if (lowerStr.endsWith('k')) {
+            mult = 1000;
+            str = str.replace(/k/gi, '').trim();
+            hasShorthand = true;
+        }
+
+        let cleaned;
+        if (hasShorthand) {
+            cleaned = str.replace(',', '.');
+            const parts = cleaned.split('.');
+            if (parts.length > 2) cleaned = cleaned.replace(/\./g, '');
+        } else {
+            cleaned = str.replace(/[\s.,]/g, '');
+        }
+
+        const num = parseFloat(cleaned) * mult;
+        return isNaN(num) ? null : Math.floor(num).toLocaleString('fr-FR');
+    };
+
+    const formattedPriceE = smartFormatPriceE(data.prix) || 'Prix sur demande';
+
+    text += `\n\n🏷️ ${formattedPriceE}`;
     text += `\n📅 Visites sur rendez-vous uniquement.`;
 
     return { type: 'emo', text };
@@ -313,7 +379,43 @@ const generateConciseAd = (data) => {
     let text = `🔴 ${isVente ? 'VENTE' : 'LOCATION'} | ${data.commune.toUpperCase()}\n`;
     text += `TYPE: ${data.type} ${data.pieces} Pièces\n`;
     if (data.quartier) text += `QUARTIER: ${data.quartier}\n`;
-    if (data.prix) text += `PRIX: ${data.prix} FCFA\n`;
+    // Intelligent Price Normalization
+    const smartFormatPriceC = (p) => {
+        if (!p) return null;
+        let str = String(p).replace(/FCFA|CFA|F/gi, '').trim();
+        let lowerStr = str.toLowerCase();
+        let mult = 1;
+        let hasShorthand = false;
+
+        if (lowerStr.endsWith('m') || lowerStr.includes('mill')) {
+            mult = 1000000;
+            str = str.replace(/m|millions?|mill/gi, '').trim();
+            hasShorthand = true;
+        } else if (lowerStr.endsWith('k')) {
+            mult = 1000;
+            str = str.replace(/k/gi, '').trim();
+            hasShorthand = true;
+        }
+
+        let cleaned;
+        if (hasShorthand) {
+            cleaned = str.replace(',', '.');
+            const parts = cleaned.split('.');
+            if (parts.length > 2) cleaned = cleaned.replace(/\./g, '');
+        } else {
+            cleaned = str.replace(/[\s.,]/g, '');
+        }
+
+        const num = parseFloat(cleaned) * mult;
+        return isNaN(num) ? null : Math.floor(num).toLocaleString('fr-FR');
+    };
+
+    const formattedPriceC = smartFormatPriceC(data.prix);
+    if (formattedPriceC) {
+        text += `PRIX: ${formattedPriceC}\n`;
+    } else {
+        text += `PRIX: Sur demande\n`;
+    }
     text += `STANDING: ${data.standing}\n\n`;
 
     text += `DETAILS:\n`;

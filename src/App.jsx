@@ -1,5 +1,5 @@
 import React, { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ToastProvider } from './components/Toast';
@@ -33,8 +33,8 @@ const PageLoader = () => (
         <div className="spinner" style={{
             width: '40px',
             height: '40px',
-            border: '3px solid rgba(79, 70, 229, 0.2)',
-            borderTopColor: '#4f46e5',
+            border: '3px solid rgba(27, 66, 153, 0.2)',
+            borderTopColor: '#1B4299',
             borderRadius: '50%',
             animation: 'spin 0.8s linear infinite',
         }}></div>
@@ -43,8 +43,9 @@ const PageLoader = () => (
 );
 
 const AppRoutes = () => {
+    const location = useLocation();
     return (
-        <ErrorBoundary>
+        <ErrorBoundary resetKey={location.pathname}>
             <Routes>
                 <Route path="/" element={
                     <Layout />

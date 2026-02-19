@@ -2,7 +2,9 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     MapPin, Tag, Grid, List, Search, Filter, X, Phone, Eye,
-    Download, Share2, Heart, Home, Key, Loader, RefreshCw, Bed, Building, Map
+    Download, Share2, Home, Key, Loader, Bed, Building, Map,
+    ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Images,
+    User, MessageSquare, Copy, Check
 } from 'lucide-react';
 import * as XLSX from 'xlsx'; // Import bibliothèque Excel
 import apiService from '../services/api';
@@ -76,87 +78,184 @@ const PropertiesSkeleton = ({ viewMode }) => (
 
 const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
     const { addToast } = useToast();
+    const [modalImages, setModalImages] = useState([]);
+    const [activeImgIdx, setActiveImgIdx] = useState(0);
+    const [galleryView, setGalleryView] = useState('carousel');
+    const [msgCopied, setMsgCopied] = useState(false);
+
+    useEffect(() => {
+        if (!isOpen || !property?.publicationId) {
+            setModalImages([]);
+            setActiveImgIdx(0);
+            setGalleryView('carousel');
+            setMsgCopied(false);
+            return;
+        }
+        apiService.getImagesForPublication(property.publicationId).then(imgs => {
+            setModalImages(imgs);
+            setActiveImgIdx(0);
+            setGalleryView('carousel');
+        });
+    }, [isOpen, property?.publicationId]);
+
+    const contactPhone = property?.telephoneBien || property?.telephoneExpediteur || '';
 
     const handleContact = () => {
-        if (property.telephone) {
-            window.open(`tel:${property.telephone}`, '_self');
+        if (!contactPhone) {
+            addToast({ type: 'error', title: 'Erreur', message: 'Numéro de téléphone non disponible' });
+            return;
         }
-        addToast({ type: 'success', title: 'Contact', message: `Appel vers ${property.telephone}` });
+        window.open(`tel:${contactPhone}`, '_self');
+        addToast({ type: 'success', title: 'Contact', message: `Appel vers ${contactPhone}` });
     };
 
     const handleWhatsApp = () => {
-        const phone = property.telephone.replace(/\s/g, '');
-        const message = encodeURIComponent(`Bonjour, je suis intéressé par votre bien: ${property.typeBien} à ${property.zone} (${property.prixFormate})`);
-        window.open(`https://wa.me/225${phone}?text=${message}`, '_blank');
+        const raw = contactPhone.replace(/\D/g, '');
+        if (!raw) {
+            addToast({ type: 'error', title: 'Erreur', message: 'Numéro de téléphone non disponible' });
+            return;
+        }
+        let phone = raw;
+        if (!phone.startsWith('225')) phone = '225' + phone;
+
+        const agentName = property.expediteur || property.publiePar || '';
+        const lieu = [property.commune, property.quartier].filter(Boolean).join(', ') || property.zone || '';
+        const groupeRef = property.groupeWhatsApp ? `\nGroupe source : ${property.groupeWhatsApp}` : '';
+        const msgOrigin = property.description
+            ? `\n\nVotre annonce :\n"${property.description.substring(0, 200)}${property.description.length > 200 ? '...' : ''}"`
+            : '';
+
+        const text = `Bonjour${agentName ? ' ' + agentName : ''},\n\nJe suis intéressé(e) par votre bien : ${property.typeBien} à ${lieu} (${property.prixFormate} FCFA).${groupeRef}${msgOrigin}\n\nMerci de me recontacter.`;
+        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
         addToast({ type: 'success', title: 'WhatsApp', message: 'Ouverture de WhatsApp...' });
     };
 
-    const handleShare = () => {
-        const text = `${property.typeBien} à ${property.zone} - ${property.prixFormate}\nContact: ${property.telephone}`;
-        if (navigator.clipboard) {
-            navigator.clipboard.writeText(text);
-            addToast({ type: 'info', title: 'Copié !', message: 'Infos du bien copiées dans le presse-papier' });
-        }
+    const handleCopyMessage = () => {
+        const text = property.description || property.caracteristiques || '';
+        if (!text) return;
+        navigator.clipboard?.writeText(text).then(() => {
+            setMsgCopied(true);
+            addToast({ type: 'success', title: 'Copié !', message: 'Message original copié dans le presse-papier' });
+            setTimeout(() => setMsgCopied(false), 2000);
+        });
     };
 
     if (!property) return null;
+
+    const localisation = [property.commune, property.quartier, property.zone].filter(Boolean).join(' · ') || '—';
+    const agentName = property.expediteur || property.publiePar || '';
+    const messageOriginal = property.description || '';
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Détails du Bien" size="lg">
             <div className="property-details-modal">
                 <div className="property-details-header">
-                    <div className="property-image-large" style={{
-                        background: `linear-gradient(135deg, ${property.id % 2 === 0 ? '#4f46e5' : '#ec4899'} 0%, ${property.id % 2 === 0 ? '#7c3aed' : '#f97316'} 100%)`
-                    }}>
-                        <div className="property-overlay">
-                            <h2>{property.typeBien}</h2>
-                        </div>
-                    </div>
-
+                    {(() => {
+                        const allUrls = modalImages.length > 0
+                            ? modalImages.map(i => i.lien_image).filter(Boolean)
+                            : (property.imageUrl ? [property.imageUrl] : []);
+                        const hasImages = allUrls.length > 0;
+                        return (
+                            <div style={{ position: 'relative' }}>
+                                {hasImages && allUrls.length > 1 && (
+                                    <div style={{ display: 'flex', gap: 6, padding: '8px 12px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)' }}>
+                                        <button onClick={() => setGalleryView('carousel')}
+                                            style={{ flex: 1, padding: '5px 0', fontSize: '0.78rem', fontWeight: 700, borderRadius: 7, border: 'none', cursor: 'pointer', background: galleryView === 'carousel' ? '#1B4299' : 'var(--bg-primary)', color: galleryView === 'carousel' ? '#fff' : 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                                            <ChevronLeft size={14} /><ChevronRight size={14} /> Carrousel
+                                        </button>
+                                        <button onClick={() => setGalleryView('grid')}
+                                            style={{ flex: 1, padding: '5px 0', fontSize: '0.78rem', fontWeight: 700, borderRadius: 7, border: 'none', cursor: 'pointer', background: galleryView === 'grid' ? '#1B4299' : 'var(--bg-primary)', color: galleryView === 'grid' ? '#fff' : 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                                            <Images size={14} /> Grille ({allUrls.length})
+                                        </button>
+                                    </div>
+                                )}
+                                {(galleryView === 'carousel' || allUrls.length <= 1) && (
+                                    <div className="property-image-large" style={{ position: 'relative', overflow: 'hidden', background: `linear-gradient(135deg, ${property.id % 2 === 0 ? '#4f46e5' : '#ec4899'} 0%, ${property.id % 2 === 0 ? '#7c3aed' : '#f97316'} 100%)` }}>
+                                        {hasImages ? (
+                                            <>
+                                                <img key={activeImgIdx} src={allUrls[activeImgIdx]} alt={`${property.typeBien} ${activeImgIdx + 1}`}
+                                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                    onError={e => { e.target.style.display = 'none'; }} />
+                                                {allUrls.length > 1 && (
+                                                    <>
+                                                        <button onClick={() => setActiveImgIdx(i => (i - 1 + allUrls.length) % allUrls.length)}
+                                                            style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.55)', border: 'none', borderRadius: '50%', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
+                                                            <ChevronLeft size={18} />
+                                                        </button>
+                                                        <button onClick={() => setActiveImgIdx(i => (i + 1) % allUrls.length)}
+                                                            style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.55)', border: 'none', borderRadius: '50%', width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
+                                                            <ChevronRight size={18} />
+                                                        </button>
+                                                        <span style={{ position: 'absolute', bottom: 8, right: 10, background: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 6, padding: '2px 8px', fontSize: '0.72rem', fontWeight: 700 }}>
+                                                            {activeImgIdx + 1} / {allUrls.length}
+                                                        </span>
+                                                        <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 5 }}>
+                                                            {allUrls.map((_, i) => (
+                                                                <div key={i} onClick={() => setActiveImgIdx(i)}
+                                                                    style={{ width: i === activeImgIdx ? 20 : 8, height: 8, borderRadius: 4, background: i === activeImgIdx ? '#fff' : 'rgba(255,255,255,0.45)', cursor: 'pointer', transition: 'width 0.2s' }} />
+                                                            ))}
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+                                                <div className="property-overlay"><h2>{property.typeBien}</h2></div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                {galleryView === 'grid' && allUrls.length > 1 && (
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 6, padding: 10, background: 'var(--bg-secondary)', maxHeight: 320, overflowY: 'auto' }}>
+                                        {allUrls.map((url, i) => (
+                                            <div key={i} onClick={() => { setActiveImgIdx(i); setGalleryView('carousel'); }}
+                                                style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '4/3', cursor: 'pointer', border: i === activeImgIdx ? '2px solid #1B4299' : '2px solid transparent' }}>
+                                                <img src={url} alt={`Photo ${i + 1}`} loading="lazy"
+                                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                    onError={e => { e.target.parentElement.style.display = 'none'; }} />
+                                                <span style={{ position: 'absolute', bottom: 3, right: 4, fontSize: '0.6rem', fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.55)', borderRadius: 4, padding: '1px 4px' }}>{i + 1}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
                     <div className="property-quick-info">
                         <div className="price-section">
                             <span className="price-label">Prix</span>
                             <h3 className="price-value">{property.prixFormate}</h3>
+                            {property.refBien && (
+                                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'monospace', letterSpacing: '0.4px', marginTop: 2 }}>
+                                    Réf&nbsp;{property.refBien}
+                                </span>
+                            )}
                         </div>
                         <div className="status-section">
-                            <span className={`badge ${property.disponible ? 'badge-success' : 'badge-danger'}`}>
-                                {property.status}
-                            </span>
+                            <span className={`badge ${property.disponible ? 'badge-success' : 'badge-danger'}`}>{property.status}</span>
                             {property.typeOffre && <span className="offer-badge">{property.typeOffre}</span>}
                         </div>
                     </div>
                 </div>
 
                 <div className="property-details-body">
+
+                    {/* ── LOCALISATION ── */}
                     <div className="details-section">
-                        <h4>Informations du Google Sheet</h4>
+                        <h4>Localisation</h4>
                         <div className="info-grid">
-                            <div className="info-item">
-                                <MapPin size={18} />
+                            <div className="info-item" style={{ gridColumn: '1 / -1' }}>
+                                <MapPin size={18} style={{ color: 'var(--brand-primary, #4f46e5)', flexShrink: 0 }} />
                                 <div>
-                                    <span className="info-label">Zone</span>
-                                    <span className="info-value">{property.zone}</span>
-                                </div>
-                            </div>
-                            <div className="info-item">
-                                <Phone size={18} />
-                                <div>
-                                    <span className="info-label">Téléphone</span>
-                                    <span className="info-value">{property.telephone}</span>
-                                </div>
-                            </div>
-                            <div className="info-item">
-                                <Tag size={18} />
-                                <div>
-                                    <span className="info-label">Publié par</span>
-                                    <span className="info-value">{property.publiePar || 'Non spécifié'}</span>
+                                    <span className="info-label">Zone / Commune / Quartier</span>
+                                    <span className="info-value" style={{ fontWeight: 600 }}>{localisation}</span>
                                 </div>
                             </div>
                             <div className="info-item">
                                 <Bed size={18} />
                                 <div>
                                     <span className="info-label">Chambres</span>
-                                    <span className="info-value">{property.chambres > 0 ? property.chambres : 'Non spécifié'}</span>
+                                    <span className="info-value">{property.chambres > 0 ? property.chambres : '—'}</span>
                                 </div>
                             </div>
                             <div className="info-item">
@@ -173,42 +272,83 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
                                     <span className="info-value">{property.disponible ? 'Oui' : 'Non'}</span>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-
-                    {property.caracteristiques && (
-                        <div className="details-section">
-                            <h4>Caractéristiques</h4>
-                            <p className="property-full-description">{property.caracteristiques}</p>
-                            {(property.features || []).length > 1 && (
-                                <div className="features-grid">
-                                    {property.features.map((feature, i) => (
-                                        <div key={i} className="feature-item">
-                                            <Tag size={14} />
-                                            <span>{feature}</span>
-                                        </div>
-                                    ))}
+                            {property.datePublication && (
+                                <div className="info-item">
+                                    <Tag size={18} />
+                                    <div>
+                                        <span className="info-label">Publié le</span>
+                                        <span className="info-value">{property.datePublication}</span>
+                                    </div>
                                 </div>
                             )}
                         </div>
-                    )}
+                    </div>
 
-                    {property.datePublication && (
+                    {/* ── CONTACT DE L'AGENT ── */}
+                    <div className="details-section" style={{ background: 'var(--bg-secondary, #f8fafc)', borderRadius: 10, padding: '1rem 1.25rem' }}>
+                        <h4 style={{ marginBottom: '0.75rem' }}>Contact de l'agent</h4>
+                        <div className="info-grid">
+                            {agentName && (
+                                <div className="info-item">
+                                    <User size={18} style={{ color: '#4f46e5', flexShrink: 0 }} />
+                                    <div>
+                                        <span className="info-label">Partagé par</span>
+                                        <span className="info-value" style={{ fontWeight: 600 }}>{agentName}</span>
+                                    </div>
+                                </div>
+                            )}
+                            <div className="info-item">
+                                <Phone size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
+                                <div>
+                                    <span className="info-label">Téléphone</span>
+                                    <span className="info-value" style={{ fontWeight: 600, letterSpacing: '0.3px' }}>{contactPhone || '—'}</span>
+                                </div>
+                            </div>
+                            {property.groupeWhatsApp && (
+                                <div className="info-item" style={{ gridColumn: '1 / -1' }}>
+                                    <MessageSquare size={18} style={{ color: '#25D366', flexShrink: 0 }} />
+                                    <div>
+                                        <span className="info-label">Groupe WhatsApp source</span>
+                                        <span className="info-value" style={{ fontSize: '0.82rem', wordBreak: 'break-all' }}>{property.groupeWhatsApp}</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        {/* Bouton WhatsApp intégré dans la section contact */}
+                        <button
+                            className="btn btn-whatsapp"
+                            onClick={handleWhatsApp}
+                            style={{ marginTop: '0.75rem', width: '100%', justifyContent: 'center', gap: 8 }}
+                        >
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style={{ flexShrink: 0 }}>
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+                            </svg>
+                            Envoyer un message WhatsApp
+                        </button>
+                    </div>
+
+                    {/* ── MESSAGE ORIGINAL ── */}
+                    {messageOriginal && (
                         <div className="details-section">
-                            <h4>Date de publication</h4>
-                            <p className="property-full-description">{property.datePublication}</p>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                <h4 style={{ margin: 0 }}>Message de l'agent</h4>
+                                <button
+                                    onClick={handleCopyMessage}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: '0.78rem', fontWeight: 600, borderRadius: 7, border: '1px solid var(--border-subtle, #e2e8f0)', background: msgCopied ? '#dcfce7' : 'var(--bg-panel, #fff)', color: msgCopied ? '#16a34a' : 'var(--text-secondary)', cursor: 'pointer', transition: 'all 0.2s' }}
+                                >
+                                    {msgCopied ? <Check size={14} /> : <Copy size={14} />}
+                                    {msgCopied ? 'Copié !' : 'Copier'}
+                                </button>
+                            </div>
+                            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit', fontSize: '0.875rem', color: 'var(--text-primary, #1e293b)', lineHeight: 1.6, background: 'var(--bg-secondary, #f8fafc)', padding: '0.875rem 1rem', borderRadius: 8, border: '1px solid var(--border-subtle, #e2e8f0)', maxHeight: '300px', overflowY: 'auto' }}>
+                                {messageOriginal}
+                            </pre>
                         </div>
                     )}
 
+                    {/* ── ACTIONS ── */}
                     <div className="modal-actions">
-                        <button className="btn btn-secondary" onClick={handleShare}>
-                            <Share2 size={18} />
-                            Copier les infos
-                        </button>
-                        <button className="btn btn-whatsapp" onClick={handleWhatsApp}>
-                            WhatsApp
-                        </button>
-                        <button className="btn btn-primary" onClick={handleContact}>
+                        <button className="btn btn-secondary" onClick={handleContact}>
                             <Phone size={18} />
                             Appeler
                         </button>
@@ -219,6 +359,97 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
     );
 };
 
+// --- LIST VIEW COMPONENT (TABLE - style Visits) ---
+const PropertyListView = React.memo(({ properties, onViewDetails, handleContact, sortConfig, onSort }) => {
+    const SortHeader = ({ colKey, label, align = 'left' }) => {
+        const isActive = sortConfig.key === colKey;
+        const icon = isActive
+            ? (sortConfig.direction === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)
+            : <ArrowUpDown size={12} className="sort-icon-muted" />;
+        const justify = align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start';
+        return (
+            <th className="sortable-header" onClick={() => onSort(colKey)} style={{ textAlign: align }}>
+                <div className="header-cell-content" style={{ justifyContent: justify }}>
+                    {label}
+                    <span className={isActive ? 'sort-icon-active' : ''}>{icon}</span>
+                </div>
+            </th>
+        );
+    };
+
+    return (
+        <div className="biens-list-container">
+            <table className="biens-table">
+                <thead>
+                    <tr>
+                        <SortHeader colKey="datePublication" label="Date" />
+                        <SortHeader colKey="typeBien" label="Type" />
+                        <SortHeader colKey="commune" label="Commune" />
+                        <th>Quartier</th>
+                        <SortHeader colKey="rawPrice" label="Prix" align="right" />
+                        <SortHeader colKey="status" label="Statut" align="center" />
+                        <th className="text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {properties.map(property => {
+                        const isLocation = property.typeOffre?.toLowerCase().includes('location');
+                        const isVente = property.typeOffre?.toLowerCase().includes('vente');
+                        return (
+                            <tr key={property.id} onClick={() => onViewDetails(property)} style={{ cursor: 'pointer' }}>
+                                <td className="biens-td-date">
+                                    {property.datePublication || '—'}
+                                </td>
+                                <td>
+                                    <div className="biens-type-cell">
+                                        <span className="biens-type-name">{property.typeBien}</span>
+                                        <div className="biens-type-badges">
+                                            {property.typeOffre && (
+                                                <span className={`biens-offre-badge ${isLocation ? 'offre-location' : isVente ? 'offre-vente' : ''}`}>
+                                                    {property.typeOffre}
+                                                </span>
+                                            )}
+                                            {property.refBien && (
+                                                <span className="biens-ref-badge">#{property.refBien}</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>{property.commune || '—'}</td>
+                                <td className="biens-td-muted">{property.quartier || property.zone || '—'}</td>
+                                <td style={{ textAlign: 'right' }}>
+                                    {property.rawPrice > 0
+                                        ? <strong>{property.prixFormate}</strong>
+                                        : <span className="biens-td-muted">—</span>
+                                    }
+                                </td>
+                                <td className="text-center">
+                                    <span className={`badge ${property.disponible ? 'badge-success' : 'badge-danger'}`}>
+                                        {property.status}
+                                    </span>
+                                </td>
+                                <td className="text-center" onClick={e => e.stopPropagation()}>
+                                    <div className="biens-row-actions">
+                                        <button className="btn btn-secondary btn-sm" onClick={() => onViewDetails(property)} title="Voir les détails">
+                                            <Eye size={14} />
+                                        </button>
+                                        <button className="btn btn-whatsapp btn-sm" onClick={(e) => handleContact(property, e)} title="WhatsApp">
+                                            <Phone size={14} />
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
+            <div className="biens-list-footer">
+                {properties.length} bien{properties.length > 1 ? 's' : ''} affiché{properties.length > 1 ? 's' : ''}
+            </div>
+        </div>
+    );
+});
+
 const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
     const [isHovered, setIsHovered] = useState(false);
     const { addToast } = useToast();
@@ -226,63 +457,17 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
 
     const handleContact = (e) => {
         e.stopPropagation();
-        if (property.telephone) {
-            let phone = property.telephone.replace(/\D/g, '');
-            if (phone.startsWith('0')) {
-                phone = '225' + phone.substring(1);
-            } else if (phone.length === 10) {
-                phone = '225' + phone;
-            }
+        const num = property.telephoneBien || property.telephoneExpediteur || '';
+        if (num) {
+            let phone = num.replace(/\D/g, '');
+            if (!phone.startsWith('225')) phone = '225' + phone;
             const message = encodeURIComponent(`Bonjour, je suis intéressé par: ${property.typeBien} à ${property.zone}`);
             window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
-            addToast({ type: 'success', title: 'Contact', message: `WhatsApp vers ${property.telephone}` });
+            addToast({ type: 'success', title: 'Contact', message: `WhatsApp vers ${num}` });
         } else {
             addToast({ type: 'error', title: 'Erreur', message: 'Numéro de téléphone non disponible' });
         }
     };
-
-    if (viewMode === 'list') {
-        return (
-            <motion.div
-                className="property-list-item"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.05 }}
-                whileHover={{ x: 4 }}
-                onClick={() => onViewDetails(property)}
-            >
-                <div className="property-list-info">
-                    <div className="property-list-header">
-                        <h3>{property.typeBien} {property.typeOffre ? `— ${property.typeOffre}` : ''}</h3>
-                    </div>
-                    <div className="property-list-details">
-                        <span className="property-zone">
-                            <MapPin size={14} /> {property.zone}
-                        </span>
-                        <span className="property-status" style={{ color: statusColor }}>
-                            • {property.status}
-                        </span>
-                    </div>
-                    <div className="property-features-inline">
-                        {property.chambres > 0 && <span className="feature-badge">{property.chambres} ch.</span>}
-                        {property.meuble && <span className="feature-badge">Meublé</span>}
-                        <span className="feature-badge">{property.publiePar}</span>
-                    </div>
-                </div>
-                <div className="property-list-actions">
-                    <span className="list-view-price">{property.prixFormate}</span>
-                    <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); onViewDetails(property); }}
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Eye size={16} /> Détails
-                    </button>
-                    <button className="btn btn-whatsapp btn-sm" onClick={handleContact}
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Phone size={16} /> WhatsApp
-                    </button>
-                </div>
-            </motion.div>
-        );
-    }
 
     return (
         <motion.div
@@ -299,16 +484,36 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
                 <div
                     className="property-image"
                     style={{
+                        position: 'relative', overflow: 'hidden',
                         background: `linear-gradient(135deg, ${property.id % 2 === 0 ? '#4f46e5' : '#ec4899'} 0%, ${property.id % 2 === 0 ? '#7c3aed' : '#f97316'} 100%)`
                     }}
                 >
-                    {/* Overlay text removed to avoid overlap with badges */}
+                    {property.imageUrl && (
+                        <img
+                            src={property.imageUrl}
+                            alt={property.typeBien}
+                            loading="lazy"
+                            decoding="async"
+                            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                            onError={e => { e.target.style.display = 'none'; }}
+                        />
+                    )}
                 </div>
                 <div className="property-badges">
                     <span className={`badge ${property.disponible ? 'badge-success' : 'badge-danger'}`}>
                         {property.status}
                     </span>
                     {property.typeOffre && <span className="badge-offer">{property.typeOffre}</span>}
+                    {property.photoCount > 0 && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 6, padding: '2px 6px', fontSize: '0.72rem', fontWeight: 600 }}>
+                            <Images size={11} /> {property.photoCount}
+                        </span>
+                    )}
+                    {property.photoCount > 0 && property.description && (
+                        <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#fff', background: 'linear-gradient(90deg,#d97706,#f59e0b)', borderRadius: 6, padding: '2px 7px', letterSpacing: '0.3px', boxShadow: '0 1px 4px rgba(217,119,6,0.5)' }}>
+                            📸 Photo&nbsp;+&nbsp;Texte
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -317,13 +522,26 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
                     <h3 className="property-title">{property.typeBien}</h3>
                     <span className="property-price">{property.prixFormate}</span>
                 </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '6px 0 8px', flexWrap: 'wrap' }}>
+                    {property.refBien && (
+                        <span style={{ fontSize: '0.75rem', fontFamily: 'monospace', fontWeight: 800, color: '#fff', background: '#1B4299', borderRadius: 5, padding: '3px 9px', letterSpacing: '0.6px', flexShrink: 0 }}>
+                            # {property.refBien}
+                        </span>
+                    )}
+                    {property.groupeWhatsApp && (
+                        <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#15803d', background: 'rgba(37,211,102,0.12)', border: '1px solid rgba(37,211,102,0.35)', borderRadius: 5, padding: '2px 7px', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            title={property.groupeWhatsApp}>
+                            {property.groupeWhatsApp}
+                        </span>
+                    )}
+                </div>
 
                 <div className="property-location">
                     <MapPin size={16} />
-                    <span>{property.zone}</span>
+                    <span>{property.zone} {property.commune ? `- ${property.commune}` : ''}</span>
                 </div>
 
-                <p className="property-description">{property.caracteristiques}</p>
+                <p className="property-description">{property.description || property.caracteristiques}</p>
 
                 <div className="property-features">
                     {property.chambres > 0 && (
@@ -370,6 +588,7 @@ const Properties = () => {
     const [geocodedProperties, setGeocodedProperties] = useState([]);
     const [geocoding, setGeocoding] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
+    const [sortConfig, setSortConfig] = useState({ key: 'datePublication', direction: 'desc' });
     const ITEMS_PER_PAGE = 20;
     const { addToast } = useToast();
 
@@ -381,16 +600,19 @@ const Properties = () => {
         minPrice: '',
         maxPrice: '',
         status: 'all',
-        meuble: 'all'
+        meuble: 'all',
+        photoTexte: false
     });
 
     useEffect(() => {
         loadProperties();
 
         const unsubscribe = apiService.subscribe('dataUpdate', ({ properties: p }) => {
-            if (p?.success) {
-                setProperties(p.data);
-                geocodePropertiesAsync(p.data);
+            // pollData émet properties comme array directement
+            const arr = Array.isArray(p) ? p : p?.data;
+            if (arr) {
+                setProperties(arr);
+                geocodePropertiesAsync(arr);
             }
         });
 
@@ -427,6 +649,28 @@ const Properties = () => {
         }
     };
 
+    // Fonction de tri
+    const handleSort = (key) => {
+        let direction = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') {
+            direction = 'desc';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const handleTableContact = (property, e) => {
+        const num = property.telephoneBien || property.telephoneExpediteur || '';
+        if (num) {
+            let phone = num.replace(/\D/g, '');
+            if (!phone.startsWith('225')) phone = '225' + phone;
+            const message = encodeURIComponent(`Bonjour, je suis intéressé par: ${property.typeBien} à ${property.zone}`);
+            window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+            addToast({ type: 'success', title: 'Contact', message: `WhatsApp vers ${num}` });
+        } else {
+            addToast({ type: 'error', title: 'Erreur', message: 'Numéro de téléphone non disponible' });
+        }
+    };
+
     // Extraire les options uniques depuis les données réelles (mémorisé)
     const uniqueTypes = useMemo(() =>
         [...new Set(properties.map(p => p.typeBien).filter(Boolean))].sort(),
@@ -448,14 +692,16 @@ const Properties = () => {
         [properties]
     );
 
-    // Filtrage des propriétés (mémorisé pour éviter recalculs)
+    // Filtrage et Tri mémorisé
     const filteredProperties = useMemo(() => {
-        return properties.filter(property => {
+        let items = properties.filter(property => {
             const matchesSearch =
+                (property.refBien || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (property.commune || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (property.zone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (property.typeBien || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (property.publiePar || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (property.groupeWhatsApp || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (property.caracteristiques || '').toLowerCase().includes(searchTerm.toLowerCase());
 
             const matchesType = filters.type === 'all' || property.typeBien === filters.type;
@@ -478,9 +724,57 @@ const Properties = () => {
             if (filters.minPrice && property.rawPrice < parseFloat(filters.minPrice)) matchesPrice = false;
             if (filters.maxPrice && property.rawPrice > parseFloat(filters.maxPrice)) matchesPrice = false;
 
-            return matchesSearch && matchesType && matchesStatus && matchesMeuble && matchesPieces && matchesCommune && matchesQuartier && matchesPrice;
+            const matchesPhotoTexte = !filters.photoTexte ||
+                (property.photoCount > 0 && property.description && property.description.length > 0);
+
+            return matchesSearch && matchesType && matchesStatus && matchesMeuble && matchesPieces && matchesCommune && matchesQuartier && matchesPrice && matchesPhotoTexte;
         });
-    }, [properties, searchTerm, filters]);
+
+        // Appliquer le tri
+        if (sortConfig.key) {
+            items.sort((a, b) => {
+                let aValue = a[sortConfig.key];
+                let bValue = b[sortConfig.key];
+
+                // Spécial pour les nombres
+                if (sortConfig.key === 'rawPrice' || sortConfig.key === 'chambres') {
+                    aValue = parseFloat(aValue) || 0;
+                    bValue = parseFloat(bValue) || 0;
+                }
+                // Spécial pour les dates (format attendu: DD/MM/YYYY HH:MM)
+                else if (sortConfig.key === 'datePublication') {
+                    const parseDateStr = (d) => {
+                        if (!d || typeof d !== 'string') return 0;
+                        if (d.includes('/')) {
+                            const cleanStr = d.replace(/le\s+/gi, '').trim();
+                            const [datePart, timePart] = cleanStr.split(' ');
+                            const [day, month, year] = datePart.split('/');
+
+                            if (timePart) {
+                                const [hour, minute] = timePart.split(':');
+                                return new Date(year, month - 1, day, hour, minute || 0).getTime();
+                            }
+                            return new Date(year, month - 1, day).getTime();
+                        }
+                        return new Date(d).getTime() || 0;
+                    };
+                    aValue = parseDateStr(aValue);
+                    bValue = parseDateStr(bValue);
+                }
+                else {
+                    // String comparison
+                    aValue = String(aValue || '').toLowerCase();
+                    bValue = String(bValue || '').toLowerCase();
+                }
+
+                if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+
+        return items;
+    }, [properties, searchTerm, filters, sortConfig]);
 
     // Optimisation Vercel: Croisement efficace O(N) pour la carte au lieu de duplication O(N*M)
     const filteredGeocodedProperties = useMemo(() => {
@@ -562,7 +856,7 @@ const Properties = () => {
     }, [filteredProperties, addToast]);
 
     const resetFilters = useCallback(() => {
-        setFilters({ type: 'all', status: 'all', meuble: 'all', pieces: 'all', commune: 'all', quartier: 'all' });
+        setFilters({ type: 'all', status: 'all', meuble: 'all', pieces: 'all', commune: 'all', quartier: 'all', photoTexte: false });
         setSearchTerm('');
     }, []);
 
@@ -597,7 +891,7 @@ const Properties = () => {
                         <Search size={18} />
                         <input
                             type="text"
-                            placeholder="Rechercher par commune, type, publieur..."
+                            placeholder="Rechercher par Réf, commune, type, zone..."
                             defaultValue={searchTerm}
                             onChange={(e) => debouncedSearch(e.target.value)}
                         />
@@ -609,6 +903,22 @@ const Properties = () => {
                     </div>
 
                     <button
+                        onClick={() => setFilters(f => ({ ...f, photoTexte: !f.photoTexte }))}
+                        style={{
+                            padding: '8px 14px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                            fontWeight: 700, fontSize: '0.8rem', whiteSpace: 'nowrap',
+                            background: filters.photoTexte ? 'linear-gradient(90deg,#d97706,#f59e0b)' : 'var(--bg-secondary)',
+                            color: filters.photoTexte ? '#fff' : 'var(--text-secondary)',
+                            boxShadow: filters.photoTexte ? '0 2px 8px rgba(217,119,6,0.4)' : 'none',
+                            border: filters.photoTexte ? 'none' : '1px solid var(--border-color)',
+                            transition: 'all 0.2s'
+                        }}
+                        title="Afficher uniquement les biens avec photos ET message"
+                    >
+                        📸 Photo + Texte
+                    </button>
+
+                    <button
                         className={`btn btn-secondary filter-btn ${filterOpen ? 'active' : ''}`}
                         onClick={() => setFilterOpen(!filterOpen)}
                     >
@@ -617,16 +927,35 @@ const Properties = () => {
                     </button>
                 </div>
 
-                <div className="view-toggle">
-                    <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')} aria-label="Vue Grille">
-                        <Grid size={18} />
-                    </button>
-                    <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')} aria-label="Vue Liste">
-                        <List size={18} />
-                    </button>
-                    <button className={`view-btn ${viewMode === 'map' ? 'active' : ''}`} onClick={() => setViewMode('map')} title="Vue Carte" aria-label="Vue Carte">
-                        <Map size={18} />
-                    </button>
+                <div className="view-toggle" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                    <select
+                        value={`${sortConfig.key}-${sortConfig.direction}`}
+                        onChange={(e) => {
+                            const [key, direction] = e.target.value.split('-');
+                            setSortConfig({ key, direction });
+                        }}
+                        className="sort-select"
+                        title="Trier par"
+                    >
+                        <option value="datePublication-desc">Date (Récent → Ancien)</option>
+                        <option value="datePublication-asc">Date (Ancien → Récent)</option>
+                        <option value="rawPrice-asc">Prix (Croissant)</option>
+                        <option value="rawPrice-desc">Prix (Décroissant)</option>
+                        <option value="typeBien-asc">Type (A-Z)</option>
+                        <option value="commune-asc">Commune (A-Z)</option>
+                    </select>
+
+                    <div className="view-toggle-inner" style={{ display: 'flex', gap: '2px', background: 'var(--bg-app)', padding: '4px', borderRadius: 'var(--radius-md)' }}>
+                        <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')} aria-label="Vue Grille">
+                            <Grid size={18} />
+                        </button>
+                        <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')} aria-label="Vue Liste">
+                            <List size={18} />
+                        </button>
+                        <button className={`view-btn ${viewMode === 'map' ? 'active' : ''}`} onClick={() => setViewMode('map')} title="Vue Carte" aria-label="Vue Carte">
+                            <Map size={18} />
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -674,7 +1003,7 @@ const Properties = () => {
                         </div>
 
                         <div className="filter-group">
-                            <label>Prix Min (FCFA)</label>
+                            <label>Prix Min</label>
                             <input
                                 type="number"
                                 placeholder="Ex: 50000"
@@ -694,7 +1023,7 @@ const Properties = () => {
                         </div>
 
                         <div className="filter-group">
-                            <label>Prix Max (FCFA)</label>
+                            <label>Prix Max</label>
                             <input
                                 type="number"
                                 placeholder="Ex: 500000"
@@ -751,6 +1080,14 @@ const Properties = () => {
                         onPropertyClick={handleViewDetails}
                     />
                 </div>
+            ) : viewMode === 'list' ? (
+                <PropertyListView
+                    properties={paginatedProperties}
+                    onViewDetails={handleViewDetails}
+                    handleContact={handleTableContact}
+                    sortConfig={sortConfig}
+                    onSort={handleSort}
+                />
             ) : (
                 <div className={`properties-container ${viewMode}`}>
                     <AnimatePresence mode="wait">

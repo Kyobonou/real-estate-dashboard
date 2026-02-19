@@ -236,3 +236,33 @@ body.dark .message-content {
     cursor: not-allowed;
     transform: none;
 }
+
+/* Mobile: chat en bottom sheet */
+@media (max-width: 640px) {
+    .chat-fab {
+        bottom: 1.25rem;
+        right: 1rem;
+        width: 52px;
+        height: 52px;
+        font-size: 1.25rem;
+    }
+
+    .chat-window {
+        position: fixed;
+        bottom: 0;
+        right: 0;
+        left: 0;
+        width: 100%;
+        max-width: 100%;
+        min-width: unset;
+        height: 75vh;
+        border-radius: 16px 16px 0 0;
+        border-bottom: none;
+    }
+}
+
+@media (max-width: 380px) {
+    .chat-window {
+        height: 85vh;
+    }
+}

@@ -486,6 +486,36 @@
     letter-spacing: 0.05em;
 }
 
+.sortable-header {
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s;
+}
+
+.sortable-header:hover {
+    background-color: var(--bg-hover) !important;
+}
+
+.header-cell-content {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sort-icon-muted {
+    opacity: 0.3;
+    transition: opacity 0.2s;
+}
+
+.sortable-header:hover .sort-icon-muted {
+    opacity: 0.7;
+}
+
+.sort-icon-active {
+    color: var(--brand-primary);
+    opacity: 1;
+}
+
 .clients-table td {
     padding: 1.25rem 1.5rem;
     border-bottom: 1px solid var(--border-subtle);

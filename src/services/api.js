@@ -45,6 +45,10 @@ class ApiService {
         return this.sheetsApi.getImagesProperties(forceRefresh);
     }
 
+    async getImagesForPublication(publicationId) {
+        return this.sheetsApi.getImagesForPublication(publicationId);
+    }
+
     // Clients - extraits des visites
     async getClients(forceRefresh = false) {
         return this.sheetsApi.getClients(forceRefresh);

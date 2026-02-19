@@ -348,7 +348,7 @@
 
 /* WELCOME BANNER */
 .welcome-banner {
-    background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+    background: linear-gradient(135deg, #1B4299 0%, #3a5cba 100%);
     border-radius: var(--radius-lg);
     padding: 1.5rem;
     color: white;
@@ -460,6 +460,44 @@
 
     .header-text h1 {
         font-size: 1.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .dashboard-v2 {
+        padding: 0.75rem 0.5rem;
+    }
+
+    .dashboard-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .header-text h1 {
+        font-size: 1.25rem;
+    }
+
+    .stat-card-v3 {
+        padding: 1rem;
+    }
+
+    .stat-body h3 {
+        font-size: 1.5rem;
+    }
+
+    .welcome-banner {
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .welcome-text h3 {
+        font-size: 1.1rem;
+    }
+
+    .welcome-text p {
+        font-size: 0.875rem;
     }
 }
 

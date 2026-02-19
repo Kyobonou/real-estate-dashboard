@@ -2,43 +2,45 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     MapPin, Tag, Grid, List, Search, Filter, X, Phone, Eye,
-    Share2, Home, Key, Loader, Bed, Building, RefreshCw
+    Share2, Home, Key, Loader, Bed, Building, RefreshCw,
+    ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
-import apiService from '../services/googleSheetsApi';
+import apiService from '../services/api';
 import { useToast } from '../components/Toast';
 import Modal from '../components/Modal';
 import './Properties.css';
 
 const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
     const { addToast } = useToast();
+    const [imgFailed, setImgFailed] = useState(false);
+
+    useEffect(() => { setImgFailed(false); }, [property?.id]);
+
+    const hasValidImage = property?.imageUrl && !imgFailed;
 
     const handleContact = () => {
-        if (property.telephone) {
-            window.open(`tel:${property.telephone}`, '_self');
+        if (property.telephoneBien) {
+            window.open(`tel:${property.telephoneBien}`, '_self');
         }
-        addToast({ type: 'success', title: 'Contact', message: `Appel vers ${property.telephone}` });
+        addToast({ type: 'success', title: 'Contact', message: `Appel vers ${property.telephoneBien}` });
     };
 
     const handleWhatsApp = () => {
-        if (!property.telephone) {
+        if (!property.telephoneBien) {
             addToast({ type: 'warning', title: 'Erreur', message: 'Numéro de téléphone manquant' });
             return;
         }
 
-        let phone = property.telephone.replace(/\D/g, '');
-        if (phone.startsWith('0')) {
-            phone = '225' + phone.substring(1);
-        } else if (phone.length === 10) {
-            phone = '225' + phone;
-        }
+        let phone = property.telephoneBien.replace(/\D/g, '');
+        if (!phone.startsWith('225')) phone = '225' + phone;
 
-        const message = encodeURIComponent(`Bonjour, je suis intéressé par votre bien vu dans la galerie: ${property.typeBien} à ${property.zone} (${property.prixFormate})`);
+        const message = encodeURIComponent(`Bonjour, je suis intéressé par votre bien vu dans la galerie: ${property.typeBien} à ${property.zone} (${property.prixFormate} FCFA)`);
         window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
         addToast({ type: 'success', title: 'WhatsApp', message: 'Ouverture de WhatsApp...' });
     };
 
     const handleShare = () => {
-        const text = `${property.typeBien} à ${property.zone} - ${property.prixFormate}\nContact: ${property.telephone}\nImage: ${property.imageUrl}`;
+        const text = `${property.typeBien} à ${property.zone} - ${property.prixFormate}\nContact: ${property.telephoneBien}\nImage: ${property.imageUrl}`;
         if (navigator.clipboard) {
             navigator.clipboard.writeText(text);
             addToast({ type: 'info', title: 'Copié !', message: 'Infos du bien copiées dans le presse-papier' });
@@ -52,11 +54,14 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
             <div className="property-details-modal">
                 <div className="property-details-header">
                     <div className="property-image-large" style={{
-                        background: property.imageUrl
+                        background: hasValidImage
                             ? `url(${property.imageUrl}) center/cover no-repeat`
                             : `linear-gradient(135deg, ${property.id % 2 === 0 ? '#667eea' : '#f093fb'} 0%, ${property.id % 2 === 0 ? '#764ba2' : '#f5576c'} 100%)`
                     }}>
-                        {!property.imageUrl && (
+                        {hasValidImage && (
+                            <img src={property.imageUrl} alt="" style={{ display: 'none' }} onError={() => setImgFailed(true)} />
+                        )}
+                        {!hasValidImage && (
                             <div className="property-overlay">
                                 <h2>{property.typeBien}</h2>
                             </div>
@@ -92,7 +97,7 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
                                 <Phone size={18} />
                                 <div>
                                     <span className="info-label">Téléphone</span>
-                                    <span className="info-value">{property.telephone}</span>
+                                    <span className="info-value">{property.telephoneBien}</span>
                                 </div>
                             </div>
                             <div className="info-item">
@@ -158,15 +163,86 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
     );
 };
 
+// --- LIST VIEW COMPONENT (TABLE BASED) ---
+const ImagePropertyListView = React.memo(({ properties, onViewDetails, handleContact, sortConfig, onSort }) => {
+    const getSortIcon = (key) => {
+        if (sortConfig.key !== key) return <ArrowUpDown size={14} className="sort-icon-muted" />;
+        return sortConfig.direction === 'asc' ? <ArrowUp size={14} className="sort-icon-active" /> : <ArrowDown size={14} className="sort-icon-active" />;
+    };
+
+    return (
+        <div className="properties-list-wrapper">
+            <table className="properties-table">
+                <thead>
+                    <tr>
+                        <th onClick={() => onSort('datePublication')} className="sortable-header">
+                            <div className="header-cell-content">Date {getSortIcon('datePublication')}</div>
+                        </th>
+                        <th onClick={() => onSort('typeBien')} className="sortable-header">
+                            <div className="header-cell-content">Type {getSortIcon('typeBien')}</div>
+                        </th>
+                        <th onClick={() => onSort('commune')} className="sortable-header">
+                            <div className="header-cell-content">Commune {getSortIcon('commune')}</div>
+                        </th>
+                        <th onClick={() => onSort('zone')} className="sortable-header">
+                            <div className="header-cell-content">Quartier {getSortIcon('zone')}</div>
+                        </th>
+                        <th onClick={() => onSort('rawPrice')} className="sortable-header">
+                            <div className="header-cell-content">Prix {getSortIcon('rawPrice')}</div>
+                        </th>
+                        <th onClick={() => onSort('status')} className="sortable-header">
+                            <div className="header-cell-content">Statut {getSortIcon('status')}</div>
+                        </th>
+                        <th className="text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {properties.map((property) => (
+                        <tr key={property.id} onClick={() => onViewDetails(property)} className="property-row">
+                            <td className="date-cell">{property.datePublication || '-'}</td>
+                            <td>
+                                <div className="type-cell">
+                                    <strong>{property.typeBien}</strong>
+                                    {property.typeOffre && <span className="type-offre">{property.typeOffre}</span>}
+                                </div>
+                            </td>
+                            <td>{property.commune || '-'}</td>
+                            <td>{property.zone || '-'}</td>
+                            <td className="price-cell">{property.prixFormate}</td>
+                            <td>
+                                <span className={`badge ${property.disponible ? 'badge-success' : 'badge-danger'}`}>
+                                    {property.status}
+                                </span>
+                            </td>
+                            <td className="text-center" onClick={e => e.stopPropagation()}>
+                                <div className="table-actions">
+                                    <button className="btn btn-ghost btn-icon-sm" onClick={() => onViewDetails(property)} title="Détails">
+                                        <Eye size={16} />
+                                    </button>
+                                    <button className="btn btn-whatsapp btn-icon-sm" onClick={(e) => handleContact(property, e)} title="WhatsApp">
+                                        <Phone size={16} />
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+});
+
 const ImagePropertyCard = ({ property, index, viewMode, onViewDetails }) => {
     const [isHovered, setIsHovered] = useState(false);
+    const [imgFailed, setImgFailed] = useState(false);
     const { addToast } = useToast();
     const statusColor = property.disponible ? 'var(--success)' : 'var(--danger)';
+    const hasValidImage = property.imageUrl && !imgFailed;
 
     const handleContact = (e) => {
         e.stopPropagation();
-        if (property.telephone) {
-            let phone = property.telephone.replace(/\D/g, '');
+        if (property.telephoneBien) {
+            let phone = property.telephoneBien.replace(/\D/g, '');
             if (phone.startsWith('0')) {
                 phone = '225' + phone.substring(1);
             } else if (phone.length === 10) {
@@ -179,56 +255,6 @@ const ImagePropertyCard = ({ property, index, viewMode, onViewDetails }) => {
             addToast({ type: 'error', title: 'Erreur', message: 'Numéro de téléphone non disponible' });
         }
     };
-
-    if (viewMode === 'list') {
-        return (
-            <motion.div
-                className="property-list-item"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.05 }}
-                whileHover={{ x: 4 }}
-                onClick={() => onViewDetails(property)}
-            >
-                <div className="property-list-image" style={{ width: '120px', height: '120px', marginRight: '1rem', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
-                    <div style={{
-                        width: '100%', height: '100%',
-                        background: property.imageUrl
-                            ? `url(${property.imageUrl}) center/cover no-repeat`
-                            : `linear-gradient(135deg, ${property.id % 2 === 0 ? '#667eea' : '#f093fb'} 0%, ${property.id % 2 === 0 ? '#764ba2' : '#f5576c'} 100%)`
-                    }}></div>
-                </div>
-                <div className="property-list-info">
-                    <div className="property-list-header">
-                        <h3>{property.typeBien} {property.typeOffre ? `— ${property.typeOffre}` : ''}</h3>
-                        <span className="property-price">{property.prixFormate}</span>
-                    </div>
-                    <div className="property-list-details">
-                        <span className="property-zone">
-                            <MapPin size={14} /> {property.zone}
-                        </span>
-                        <span className="property-status" style={{ color: statusColor }}>
-                            • {property.status}
-                        </span>
-                    </div>
-                    <div className="property-features-inline">
-                        {property.chambres > 0 && <span className="feature-badge">{property.chambres} ch.</span>}
-                        {property.meuble && <span className="feature-badge">Meublé</span>}
-                    </div>
-                </div>
-                <div className="property-list-actions">
-                    <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); onViewDetails(property); }}
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Eye size={16} /> Détails
-                    </button>
-                    <button className="btn btn-whatsapp btn-sm" onClick={handleContact}
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Phone size={16} /> WhatsApp
-                    </button>
-                </div>
-            </motion.div>
-        );
-    }
 
     return (
         <motion.div
@@ -245,12 +271,15 @@ const ImagePropertyCard = ({ property, index, viewMode, onViewDetails }) => {
                 <div
                     className="property-image"
                     style={{
-                        background: property.imageUrl
+                        background: hasValidImage
                             ? `url(${property.imageUrl}) center/cover no-repeat`
                             : `linear-gradient(135deg, ${property.id % 2 === 0 ? '#667eea' : '#f093fb'} 0%, ${property.id % 2 === 0 ? '#764ba2' : '#f5576c'} 100%)`
                     }}
                 >
-                    {!property.imageUrl && (
+                    {hasValidImage && (
+                        <img src={property.imageUrl} alt="" style={{ display: 'none' }} onError={() => setImgFailed(true)} />
+                    )}
+                    {!hasValidImage && (
                         <div className="property-overlay">
                             <span className="property-type">{property.typeBien}</span>
                         </div>
@@ -272,7 +301,7 @@ const ImagePropertyCard = ({ property, index, viewMode, onViewDetails }) => {
 
                 <div className="property-location">
                     <MapPin size={16} />
-                    <span>{property.zone}</span>
+                    <span>{property.zone} {property.commune ? `- ${property.commune}` : ''}</span>
                 </div>
 
                 <p className="property-description">{property.caracteristiques}</p>
@@ -316,6 +345,7 @@ const ImageGallery = () => {
     const [filterOpen, setFilterOpen] = useState(false);
     const [selectedProperty, setSelectedProperty] = useState(null);
     const [modalOpen, setModalOpen] = useState(false);
+    const [sortConfig, setSortConfig] = useState({ key: 'datePublication', direction: 'desc' });
     const { addToast } = useToast();
 
     const [filters, setFilters] = useState({
@@ -354,41 +384,114 @@ const ImageGallery = () => {
         loadProperties(true);
     };
 
+    // Fonction de tri
+    const handleSort = (key) => {
+        let direction = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') {
+            direction = 'desc';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const handleTableContact = (property, e) => {
+        if (property.telephoneBien) {
+            let phone = property.telephoneBien.replace(/\D/g, '');
+            if (phone.startsWith('0')) {
+                phone = '225' + phone.substring(1);
+            } else if (phone.length === 10) {
+                phone = '225' + phone;
+            }
+            const message = encodeURIComponent(`Bonjour, je suis intéressé par ce bien vu sur la galerie: ${property.typeBien} à ${property.zone}`);
+            window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+            addToast({ type: 'success', title: 'Contact', message: 'Ouverture de WhatsApp...' });
+        } else {
+            addToast({ type: 'error', title: 'Erreur', message: 'Numéro de téléphone non disponible' });
+        }
+    };
+
     // Extraire les options uniques
     const uniqueTypes = [...new Set(properties.map(p => p.typeBien).filter(Boolean))].sort();
     const uniqueCommunes = [...new Set(properties.map(p => p.commune).filter(Boolean))].sort();
     const uniqueQuartiers = [...new Set(properties.map(p => p.zone).filter(Boolean))].sort();
     const uniquePieces = [...new Set(properties.map(p => p.chambres).filter(p => p > 0))].sort((a, b) => a - b);
 
-    const filteredProperties = properties.filter(property => {
-        const matchesSearch =
-            (property.commune || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (property.zone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (property.typeBien || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (property.caracteristiques || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const filteredProperties = useMemo(() => {
+        let items = properties.filter(property => {
+            const matchesSearch =
+                (property.commune || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (property.zone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (property.typeBien || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (property.caracteristiques || '').toLowerCase().includes(searchTerm.toLowerCase());
 
-        const matchesType = filters.type === 'all' || property.typeBien === filters.type;
+            const matchesType = filters.type === 'all' || property.typeBien === filters.type;
 
-        const matchesStatus = filters.status === 'all' ||
-            (filters.status === 'Disponible' && property.disponible) ||
-            (filters.status === 'Occupé' && !property.disponible);
+            const matchesStatus = filters.status === 'all' ||
+                (filters.status === 'Disponible' && property.disponible) ||
+                (filters.status === 'Occupé' && !property.disponible);
 
-        const matchesMeuble = filters.meuble === 'all' ||
-            (filters.meuble === 'oui' && property.meuble) ||
-            (filters.meuble === 'non' && !property.meuble);
+            const matchesMeuble = filters.meuble === 'all' ||
+                (filters.meuble === 'oui' && property.meuble) ||
+                (filters.meuble === 'non' && !property.meuble);
 
-        const matchesPieces = filters.pieces === 'all' || property.chambres === parseInt(filters.pieces);
+            const matchesPieces = filters.pieces === 'all' || property.chambres === parseInt(filters.pieces);
 
-        const matchesCommune = filters.commune === 'all' || property.commune === filters.commune;
+            const matchesCommune = filters.commune === 'all' || property.commune === filters.commune;
 
-        const matchesQuartier = filters.quartier === 'all' || property.zone === filters.quartier;
+            const matchesQuartier = filters.quartier === 'all' || property.zone === filters.quartier;
 
-        let matchesPrice = true;
-        if (filters.minPrice && property.rawPrice < parseFloat(filters.minPrice)) matchesPrice = false;
-        if (filters.maxPrice && property.rawPrice > parseFloat(filters.maxPrice)) matchesPrice = false;
+            let matchesPrice = true;
+            if (filters.minPrice && property.rawPrice < parseFloat(filters.minPrice)) matchesPrice = false;
+            if (filters.maxPrice && property.rawPrice > parseFloat(filters.maxPrice)) matchesPrice = false;
 
-        return matchesSearch && matchesType && matchesStatus && matchesMeuble && matchesPieces && matchesCommune && matchesQuartier && matchesPrice;
-    });
+            return matchesSearch && matchesType && matchesStatus && matchesMeuble && matchesPieces && matchesCommune && matchesQuartier && matchesPrice;
+        });
+
+        // Appliquer le tri
+        if (sortConfig.key) {
+            items.sort((a, b) => {
+                let aValue = a[sortConfig.key];
+                let bValue = b[sortConfig.key];
+
+                // Spécial pour les nombres
+                if (sortConfig.key === 'rawPrice' || sortConfig.key === 'chambres') {
+                    aValue = parseFloat(aValue) || 0;
+                    bValue = parseFloat(bValue) || 0;
+                }
+                // Spécial pour les dates (format: DD/MM/YYYY HH:MM)
+                else if (sortConfig.key === 'datePublication') {
+                    const parseDateStr = (d) => {
+                        if (!d || typeof d !== 'string') return 0;
+                        if (d.includes('/')) {
+                            // Nettoyer la chaîne pour enlever les mots comme "le" ou les tirets si présents
+                            const cleanStr = d.replace(/le\s+/gi, '').trim();
+                            const [datePart, timePart] = cleanStr.split(' ');
+                            const [day, month, year] = datePart.split('/');
+
+                            if (timePart) {
+                                const [hour, minute] = timePart.split(':');
+                                return new Date(year, month - 1, day, hour, minute || 0).getTime();
+                            }
+                            return new Date(year, month - 1, day).getTime();
+                        }
+                        return new Date(d).getTime() || 0;
+                    };
+                    aValue = parseDateStr(aValue);
+                    bValue = parseDateStr(bValue);
+                }
+                else {
+                    // String comparison
+                    aValue = String(aValue || '').toLowerCase();
+                    bValue = String(bValue || '').toLowerCase();
+                }
+
+                if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+
+        return items;
+    }, [properties, searchTerm, filters, sortConfig]);
 
     const handleViewDetails = (property) => {
         setSelectedProperty(property);
@@ -485,7 +588,26 @@ const ImageGallery = () => {
                     </button>
                 </div>
 
-                <div className="toolbar-right" style={{ display: 'flex', gap: '0.5rem' }}>
+                <div className="toolbar-right" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                    <div className="sort-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <select
+                            value={`${sortConfig.key}-${sortConfig.direction}`}
+                            onChange={(e) => {
+                                const [key, direction] = e.target.value.split('-');
+                                setSortConfig({ key, direction });
+                            }}
+                            className="sort-select"
+                            title="Trier par"
+                        >
+                            <option value="datePublication-desc">Date (Récent → Ancien)</option>
+                            <option value="datePublication-asc">Date (Ancien → Récent)</option>
+                            <option value="rawPrice-asc">Prix (Croissant)</option>
+                            <option value="rawPrice-desc">Prix (Décroissant)</option>
+                            <option value="typeBien-asc">Type (A-Z)</option>
+                            <option value="commune-asc">Commune (A-Z)</option>
+                        </select>
+                    </div>
+
                     <div className="view-toggle">
                         <button
                             className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`}
@@ -500,6 +622,13 @@ const ImageGallery = () => {
                             title="Vue Liste"
                         >
                             <List size={18} />
+                        </button>
+                        <button
+                            className={`view-btn ${viewMode === 'grouped' ? 'active' : ''}`}
+                            onClick={() => setViewMode('grouped')}
+                            title="Grouper par auteur"
+                        >
+                            <Users size={18} />
                         </button>
                     </div>
                 </div>
@@ -607,38 +736,48 @@ const ImageGallery = () => {
                 )}
             </AnimatePresence>
 
-            <div className={`properties-container ${viewMode}`}>
-                {filteredProperties.length > 0 ? (
-                    filteredProperties.map((property, index) => (
-                        <ImagePropertyCard
-                            key={index}
-                            property={property}
-                            index={index}
-                            viewMode={viewMode}
-                            onViewDetails={handleViewDetails}
-                        />
-                    ))
-                ) : (
-                    <div className="empty-state">
-                        <Home size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
-                        <p>Aucun bien ne correspond à vos critères.</p>
-                        <button
-                            onClick={resetFilters}
-                            style={{
-                                marginTop: '1rem',
-                                background: 'var(--primary)',
-                                color: 'white',
-                                border: 'none',
-                                padding: '0.5rem 1rem',
-                                borderRadius: 'var(--radius-sm)',
-                                cursor: 'pointer'
-                            }}
-                        >
-                            Effacer les filtres
-                        </button>
-                    </div>
-                )}
-            </div>
+            {viewMode === 'list' ? (
+                <ImagePropertyListView
+                    properties={filteredProperties}
+                    onViewDetails={handleViewDetails}
+                    handleContact={handleTableContact}
+                    sortConfig={sortConfig}
+                    onSort={handleSort}
+                />
+            ) : (
+                <div className={`properties-container ${viewMode}`}>
+                    {filteredProperties.length > 0 ? (
+                        filteredProperties.map((property, index) => (
+                            <ImagePropertyCard
+                                key={index}
+                                property={property}
+                                index={index}
+                                viewMode={viewMode}
+                                onViewDetails={handleViewDetails}
+                            />
+                        ))
+                    ) : (
+                        <div className="empty-state">
+                            <Home size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
+                            <p>Aucun bien ne correspond à vos critères.</p>
+                            <button
+                                onClick={resetFilters}
+                                style={{
+                                    marginTop: '1rem',
+                                    background: 'var(--primary)',
+                                    color: 'white',
+                                    border: 'none',
+                                    padding: '0.5rem 1rem',
+                                    borderRadius: 'var(--radius-sm)',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Effacer les filtres
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
 
             <PropertyDetailsModal
                 property={selectedProperty}

@@ -254,9 +254,9 @@ const Dashboard = () => {
                     boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
                     color: '#f1f5f9'
                 }}>
-                    <p style={{ fontSize: '11px', marginBottom: '2px', opacity: 0.7, textTransform: 'uppercase' }}>{label || payload[0].name}</p>
-                    <p style={{ fontSize: '13px', fontWeight: 'bold', color: payload[0].payload.fill || payload[0].color }}>
-                        {payload[0].value} {payload[0].name === 'Prix' ? 'FCFA' : ''}
+                    <p style={{ fontSize: '12px', marginBottom: '3px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label || payload[0].name}</p>
+                    <p style={{ fontSize: '14px', fontWeight: 'bold', color: payload[0].payload.fill || payload[0].color }}>
+                        {payload[0].value}
                     </p>
                 </div>
             );
@@ -340,7 +340,7 @@ const Dashboard = () => {
                                     <BarChart data={communeData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
                                         <XAxis type="number" hide />
-                                        <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                                        <YAxis dataKey="name" type="category" width={110} tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                                         <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
                                         <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={24}>
                                             {communeData.map((entry, index) => (

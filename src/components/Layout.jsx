@@ -27,6 +27,7 @@ import apiService from '../services/api';
 import { useNotifications } from '../contexts/NotificationContext';
 import NotificationPanel from './NotificationPanel';
 import ChatAssistant from './ChatAssistant';
+import Logo from './Logo';
 import './Layout.css';
 
 const Layout = () => {
@@ -64,9 +65,8 @@ const Layout = () => {
         { path: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'agent', 'viewer'] },
         { path: '/pipeline', icon: Trello, label: 'Pipeline', roles: ['admin', 'agent'] },
         { path: '/properties', icon: Building, label: 'Biens', roles: ['admin', 'agent', 'viewer'] },
-        { path: '/gallery', icon: Building, label: 'Galerie', roles: ['admin', 'agent', 'viewer'] },
+        { path: '/gallery', icon: Building, label: 'Catalogue', roles: ['admin', 'agent', 'viewer'] },
         { path: '/visits', icon: Calendar, label: 'Visites', roles: ['admin', 'agent'] },
-        { path: '/images', icon: Building, label: 'Images WhatsApp', roles: ['admin', 'agent', 'viewer'] },
         { path: '/requests', icon: MessageCircle, label: 'Demandes', roles: ['admin', 'agent'] },
         { path: '/clients', icon: Users, label: 'Clients', roles: ['admin', 'agent'] },
         { path: '/tools/ad-generator', icon: Wand2, label: 'Rédaction IA', roles: ['admin', 'agent'] },
@@ -104,22 +104,13 @@ const Layout = () => {
             >
                 <div className="sidebar-header">
                     <motion.div
-                        className="logo"
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
+                        className="logo-container"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => navigate('/')}
+                        style={{ cursor: 'pointer' }}
                     >
-                        <div className="logo-icon">
-                            <Building className="icon" size={28} />
-                        </div>
-                        {sidebarOpen && (
-                            <motion.h1
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                            >
-                                ImmoDash
-                            </motion.h1>
-                        )}
+                        <Logo collapsed={!sidebarOpen} />
                     </motion.div>
 
                     <button

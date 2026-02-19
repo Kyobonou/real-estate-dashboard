@@ -1,8 +1,8 @@
 :root {
-    --request-primary: #4f46e5;
+    --request-primary: #1B4299;
     --request-bg-light: #eef2ff;
-    --text-gray: #64748b;
-    --text-dark: #1e293b;
+    --text-gray: #334155;
+    --text-dark: #020617;
 }
 
 .requests-page-container {
@@ -396,4 +396,216 @@ body.dark .message-content {
         overflow-x: auto;
         padding-bottom: 0.5rem;
     }
+}
+
+@media (max-width: 768px) {
+    .requests-page-container {
+        padding: 1rem 0.75rem;
+    }
+
+    .requests-header {
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .page-title-large {
+        font-size: 1.375rem;
+    }
+
+    .page-subtitle {
+        font-size: 0.875rem;
+        margin-top: 0.25rem;
+    }
+
+    .header-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .requests-toolbar {
+        padding: 0.75rem;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .search-field {
+        min-width: unset;
+        width: 100%;
+    }
+
+    .filters-group {
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+
+    .filters-group::-webkit-scrollbar {
+        display: none;
+    }
+
+    .filter-chip {
+        white-space: nowrap;
+        padding: 0.4rem 0.875rem;
+        font-size: 0.8rem;
+    }
+
+    /* Grille: 1 colonne sur mobile */
+    .requests-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .request-card-header {
+        padding: 1rem;
+    }
+
+    .request-card-body {
+        padding: 1rem;
+    }
+
+    .request-card-footer {
+        padding: 0.875rem 1rem;
+    }
+
+    .btn-whatsapp-action {
+        padding: 0.5rem 1rem;
+        font-size: 0.8rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .requests-page-container {
+        padding: 0.75rem 0.5rem;
+    }
+
+    .page-title-large {
+        font-size: 1.125rem;
+        gap: 0.5rem;
+    }
+
+    .sender-info {
+        gap: 0.75rem;
+    }
+
+    .sender-avatar {
+        width: 36px;
+        height: 36px;
+        font-size: 0.875rem;
+    }
+
+    .meta-phone {
+        font-size: 0.875rem;
+    }
+
+    /* Footer: stack vertical sur très petit écran */
+    .request-card-footer {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+
+    .btn-whatsapp-action {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* ─── TABS ──────────────────────────────────────────────────────────────── */
+
+.requests-tabs {
+    display: flex;
+    gap: 0.25rem;
+    background: var(--bg-secondary, #f1f5f9);
+    border-radius: 12px;
+    padding: 0.25rem;
+    margin-bottom: 0.75rem;
+    width: fit-content;
+}
+
+.req-tab {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1.25rem;
+    border: none;
+    background: transparent;
+    border-radius: 10px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary, #64748b);
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.req-tab:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover, rgba(0,0,0,0.05));
+}
+
+.req-tab.active {
+    background: var(--bg-panel, #ffffff);
+    color: var(--primary, #1B4299);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
+
+.tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    background: var(--primary, #1B4299);
+    color: #fff;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.tab-count-private {
+    background: #7c3aed;
+}
+
+.tab-description {
+    font-size: 0.8rem;
+    color: var(--text-muted, #94a3b8);
+    margin: 0 0 1rem 0;
+    padding-left: 0.25rem;
+}
+
+/* ─── SOURCE BADGES ─────────────────────────────────────────────────────── */
+
+.badge-source {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.65rem;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    flex-shrink: 0;
+}
+
+.badge-group {
+    background: rgba(27, 66, 153, 0.1);
+    color: #1B4299;
+}
+
+.badge-private {
+    background: rgba(124, 58, 237, 0.1);
+    color: #7c3aed;
+}
+
+/* ─── PRIVATE AVATAR ────────────────────────────────────────────────────── */
+
+.sender-private {
+    background: linear-gradient(135deg, #7c3aed, #a855f7) !important;
+}
+
+/* ─── DISABLED BUTTON ───────────────────────────────────────────────────── */
+
+.btn-whatsapp-action.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
 }

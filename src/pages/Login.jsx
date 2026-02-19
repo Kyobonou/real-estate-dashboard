@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, Lock, Eye, EyeOff, Building2, ArrowRight, Shield, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import Logo from '../components/Logo';
 import './Login.css';
 
 const Login = () => {
@@ -102,13 +103,14 @@ const Login = () => {
                 >
                     <div className="brand-content">
                         <motion.div
-                            className="brand-logo"
-                            animate={{ rotate: [0, 5, -5, 0] }}
-                            transition={{ repeat: Infinity, duration: 6, ease: 'easeInOut' }}
+                            className="login-logo-wrapper"
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ duration: 0.5 }}
                         >
-                            <Building2 size={40} />
+                            <Logo />
                         </motion.div>
-                        <h1 className="brand-title">ImmoDash</h1>
+                        <h1 className="brand-title" style={{ display: 'none' }}>ImmoDash</h1>
                         <p className="brand-subtitle">Plateforme de gestion immobilière intelligente</p>
 
                         <div className="brand-features">
