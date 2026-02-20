@@ -14,6 +14,22 @@
     margin-bottom: 2rem;
 }
 
+@media (max-width: 768px) {
+    .properties-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .properties-header .header-actions {
+        width: 100%;
+    }
+
+    .properties-header .header-actions button {
+        width: 100%;
+    }
+}
+
 .header-left {
     display: flex;
     flex-direction: column;
@@ -48,6 +64,24 @@
     box-shadow: var(--shadow-sm);
 }
 
+@media (max-width: 768px) {
+    .properties-toolbar {
+        flex-direction: column;
+        padding: 1rem;
+        gap: 1rem;
+    }
+
+    .search-filter-group {
+        width: 100%;
+        flex-direction: column !important;
+    }
+
+    .view-toggle {
+        width: 100% !important;
+        justify-content: space-between;
+    }
+}
+
 .search-filter-group {
     display: flex;
     align-items: center;
@@ -66,6 +100,14 @@
     padding: 0 1rem;
     width: 100%;
     max-width: 400px;
+    min-width: 200px;
+}
+
+@media (max-width: 768px) {
+    .search-input {
+        max-width: 100%;
+        min-width: auto;
+    }
 }
 
 .search-input svg {
@@ -182,6 +224,18 @@
     background-color: var(--bg-panel);
 }
 
+@media (max-width: 768px) {
+    .map-view-container {
+        height: 400px;
+    }
+}
+
+@media (max-width: 480px) {
+    .map-view-container {
+        height: 300px;
+    }
+}
+
 .map-loading-overlay {
     position: absolute;
     top: 0;
@@ -207,6 +261,26 @@
     gap: 1.5rem;
 }
 
+@media (max-width: 1024px) {
+    .properties-container.grid {
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .properties-container.grid {
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .properties-container.grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+}
+
 .property-card-v2 {
     /* Inherits .card styles */
     overflow: hidden;
@@ -224,6 +298,18 @@
     position: relative;
     height: 150px;
     overflow: hidden;
+}
+
+@media (max-width: 768px) {
+    .property-image-wrapper {
+        height: 120px;
+    }
+}
+
+@media (max-width: 480px) {
+    .property-image-wrapper {
+        height: 100px;
+    }
 }
 
 .property-image {
@@ -421,6 +507,35 @@
         110px       /* statut */
         76px;       /* actions */
     align-items: center;
+}
+
+@media (max-width: 1024px) {
+    .lv-header,
+    .lv-row {
+        grid-template-columns:
+            36px        /* # */
+            60px        /* thumb */
+            1fr         /* bien */
+            100px       /* localisation */
+            100px       /* prix */
+            90px        /* statut */
+            60px;       /* actions */
+    }
+}
+
+@media (max-width: 768px) {
+    .lv-header,
+    .lv-row {
+        grid-template-columns:
+            40px        /* # */
+            1fr         /* bien + prix + statut stacked */
+            50px;       /* actions */
+    }
+
+    .lv-th, .lv-td {
+        font-size: 0.75rem;
+        padding: 0.5rem 0.25rem;
+    }
 }
 
 /* --- En-tête --- */

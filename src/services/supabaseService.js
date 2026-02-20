@@ -84,6 +84,18 @@ class SupabaseService {
         return num.toLocaleString('fr-FR');
     }
 
+    formatDateShort(raw) {
+        if (!raw) return '';
+        try {
+            const d = new Date(raw);
+            if (isNaN(d.getTime())) return raw;
+            return d.toLocaleDateString('fr-FR', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            });
+        } catch { return raw; }
+    }
+
     normalizePropertyType(type) {
         if (!type) return 'Autre';
         const lowerType = type.toLowerCase().trim();
@@ -126,7 +138,8 @@ class SupabaseService {
             const { data, error } = await supabase
                 .from('images')
                 .select('*')
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false })
+                .limit(2000);
 
             if (error) throw error;
 
@@ -224,7 +237,8 @@ class SupabaseService {
             if (cached) return cached;
         }
         try {
-            const { data, error } = await supabase.from('locaux').select('*');
+            // Add LIMIT to prevent loading ALL records - fetch in batches if needed
+            const { data, error } = await supabase.from('locaux').select('*').limit(1000);
             if (error) throw error;
 
             const transformed = data.map(p => {
@@ -264,40 +278,53 @@ class SupabaseService {
                     disponible: isDispo,
                     groupeWhatsApp: p.groupe_whatsapp_origine || '',
                     imageUrl: p.lien_image || '',
-                    datePublication: p.date_publication || '',
+                    datePublication: this.formatDateShort(p.date_publication),
                     shares: (() => { try { return p.shares ? (typeof p.shares === 'string' ? JSON.parse(p.shares) : p.shares) : []; } catch { return []; } })(),
                     status: isDispo ? 'Disponible' : 'Occupé',
                     prixFormate: this.formatPrice(rawPrice)
                 };
             });
 
-            // Passe 1 : déduplication par publication_id
-            // (même message WaSender traité plusieurs fois par le workflow)
+            // Optimized single-pass deduplication
+            // Combines: publication_id, content_hash, and text fingerprint checks
             const seenPubIds = new Set();
-            const pass1 = [];
-            for (const p of transformed) {
-                const key = p.publicationId || ('id:' + p.id);
-                if (!seenPubIds.has(key)) {
-                    seenPubIds.add(key);
-                    pass1.push(p);
-                }
-            }
-
-            // Passe 2 : déduplication par content_hash
-            // (même bien partagé dans plusieurs groupes WhatsApp avec des publication_id différents)
             const seenHashes = new Set();
+            const seenTextFp = new Set();
             const deduped = [];
-            for (const p of pass1) {
-                if (p.contentHash) {
-                    if (seenHashes.has(p.contentHash)) continue;
-                    seenHashes.add(p.contentHash);
+
+            for (const p of transformed) {
+                // Skip if demand (misclassified)
+                if (_isDemand(p.description)) continue;
+
+                // Check publication_id (same message processed multiple times)
+                const pubKey = p.publicationId || ('id:' + p.id);
+                if (seenPubIds.has(pubKey)) continue;
+                seenPubIds.add(pubKey);
+
+                // Check content_hash (same property shared in multiple groups)
+                if (p.contentHash && seenHashes.has(p.contentHash)) continue;
+                if (p.contentHash) seenHashes.add(p.contentHash);
+
+                // Check text fingerprint (copied messages with same content)
+                let isDupText = false;
+                if (p.description && p.description.length > 20) {
+                    const fp = p.description
+                        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]/g, '')
+                        .substring(0, 250);
+                    if (fp.length > 20) {
+                        if (seenTextFp.has(fp)) isDupText = true;
+                        else seenTextFp.add(fp);
+                    }
                 }
+                if (isDupText) continue;
+
                 deduped.push(p);
             }
 
-            // Passe 3 : exclure les entrées qui sont en réalité des demandes
-            // (le workflow IA les a mal classifiées comme propriétés)
-            const trueProperties = deduped.filter(p => !_isDemand(p.description));
+            console.debug(`[Dédup] DB:${transformed.length} → deduplicated:${deduped.length}`);
+            const trueProperties = deduped;
 
             const result = { success: true, data: trueProperties, source: 'supabase' };
             this._setCache('properties', result);
@@ -378,7 +405,7 @@ class SupabaseService {
             if (cached) return cached;
         }
         try {
-            const { data, error } = await supabase.from('visite_programmee').select('*');
+            const { data, error } = await supabase.from('visite_programmee').select('*').limit(500);
             if (error) throw error;
 
             const transformed = data.map(v => {

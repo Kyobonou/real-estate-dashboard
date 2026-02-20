@@ -15,6 +15,18 @@
     margin-bottom: 2rem;
 }
 
+@media (max-width: 768px) {
+    .clients-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .clients-header button {
+        width: 100%;
+    }
+}
+
 .clients-header h1 {
     font-size: 1.875rem;
     font-weight: 700;
@@ -34,6 +46,19 @@
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
     gap: 1.5rem;
     margin-bottom: 2rem;
+}
+
+@media (max-width: 1024px) {
+    .clients-kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .clients-kpi-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
 }
 
 /* KPI GRID REFINED */
@@ -260,6 +285,19 @@
     gap: 1.5rem;
 }
 
+@media (max-width: 1024px) {
+    .clients-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .clients-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+}
+
 .client-card {
     background: var(--bg-panel);
     border: none;
@@ -472,6 +510,23 @@
     width: 100%;
     border-collapse: collapse;
     min-width: 800px;
+}
+
+@media (max-width: 768px) {
+    .clients-table {
+        min-width: 100%;
+        font-size: 0.85rem;
+    }
+
+    .clients-table th,
+    .clients-table td {
+        padding: 0.75rem 0.5rem;
+        font-size: 0.75rem;
+    }
+
+    .clients-table th {
+        font-size: 0.7rem;
+    }
 }
 
 .clients-table th {
