@@ -12,6 +12,7 @@ import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 import PropertyMap from '../components/PropertyMap';
 import Skeleton from '../components/Skeleton';
+import EmptyState from '../components/EmptyState';
 import geocodingService from '../services/geocodingService';
 import { debounce } from '../utils/performance';
 import './Properties.css';
@@ -1107,14 +1108,17 @@ const Properties = () => {
                 </div>
             )}
 
-            {filteredProperties.length === 0 && (
-                <motion.div className="empty-state" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                    <Building size={48} />
-                    <p>Aucun bien trouvé avec ces critères</p>
-                    <button className="btn btn-primary" onClick={resetFilters}>
-                        Réinitialiser les filtres
-                    </button>
-                </motion.div>
+            {filteredProperties.length === 0 && !loading && (
+                <EmptyState
+                    icon={Building}
+                    title="Aucun bien trouvé"
+                    description={searchTerm || Object.values(filters).some(v => v !== 'all' && v !== '' && v !== false)
+                        ? "Essayez de modifier vos filtres ou votre recherche"
+                        : "Aucun bien disponible pour le moment"}
+                    actionLabel="Réinitialiser les filtres"
+                    onAction={resetFilters}
+                    size="medium"
+                />
             )}
 
             {/* Pagination Controls */}

@@ -10,6 +10,7 @@ import apiService from '../services/api';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../contexts/AuthContext';
 import Skeleton from '../components/Skeleton';
+import EmptyState from '../components/EmptyState';
 import { debounce } from '../utils/performance';
 import './Clients.css';
 
@@ -691,14 +692,17 @@ const Clients = () => {
             )}
 
             {/* Empty State */}
-            {filteredClients.length === 0 && (
-                <div className="empty-state">
-                    <Users size={48} />
-                    <p>Aucun client ne correspond à vos critères</p>
-                    <button className="btn btn-secondary" onClick={() => { setFilter('all'); setSearchTerm(''); }}>
-                        Effacer les filtres
-                    </button>
-                </div>
+            {filteredClients.length === 0 && !loading && (
+                <EmptyState
+                    icon={Users}
+                    title="Aucun client trouvé"
+                    description={searchTerm || filter !== 'all'
+                        ? "Essayez de modifier vos filtres ou votre recherche"
+                        : "Aucun client pour le moment. Créez des visites pour commencer"}
+                    actionLabel="Effacer les filtres"
+                    onAction={() => { setFilter('all'); setSearchTerm(''); }}
+                    size="medium"
+                />
             )}
 
             {/* Detail Modal */}
