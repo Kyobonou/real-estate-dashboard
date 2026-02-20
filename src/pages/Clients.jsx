@@ -607,6 +607,7 @@ const Clients = () => {
                         className={`btn btn-secondary ${refreshing ? 'spinning' : ''}`}
                         onClick={handleRefresh}
                         disabled={refreshing}
+                        title="Recharger les données clients depuis le serveur"
                     >
                         <RefreshCw size={18} className={refreshing ? 'spin' : ''} />
                         <span className="desktop-only">{refreshing ? 'Actualisation...' : 'Actualiser'}</span>
@@ -624,7 +625,7 @@ const Clients = () => {
 
             {/* Modern Toolbar */}
             <div className="clients-toolbar-modern">
-                <div className="toolbar-search-wrapper">
+                <div className="toolbar-search-wrapper" title="Cherchez parmi tous vos clients">
                     <div className="search-icon">
                         <Search size={20} />
                     </div>
@@ -634,21 +635,31 @@ const Clients = () => {
                         placeholder="Rechercher par nom, téléphone..."
                         defaultValue={searchTerm}
                         onChange={(e) => debouncedSearch(e.target.value)}
+                        title="Tapez le nom ou le téléphone du client"
                     />
                 </div>
 
                 <div className="toolbar-actions-wrapper">
                     <div className="filter-tabs-modern">
-                        {['all', 'Nouveau', 'Actif', 'Inactif'].map(status => (
-                            <button
-                                key={status}
-                                className={`filter-tab ${filter === status ? 'active' : ''}`}
-                                onClick={() => { setFilter(status); setCurrentPage(1); }}
-                            >
-                                {status === 'all' ? 'Tous' : status}
-                                {status === 'all' && <span className="count-badge">{clients.length}</span>}
-                            </button>
-                        ))}
+                        {['all', 'Nouveau', 'Actif', 'Inactif'].map(status => {
+                            const tooltips = {
+                                'all': 'Afficher tous les clients',
+                                'Nouveau': 'Clients ayant moins de visites',
+                                'Actif': 'Clients avec visites confirmées ou récentes',
+                                'Inactif': 'Clients inactifs depuis 3 mois'
+                            };
+                            return (
+                                <button
+                                    key={status}
+                                    className={`filter-tab ${filter === status ? 'active' : ''}`}
+                                    onClick={() => { setFilter(status); setCurrentPage(1); }}
+                                    title={tooltips[status]}
+                                >
+                                    {status === 'all' ? 'Tous' : status}
+                                    {status === 'all' && <span className="count-badge">{clients.length}</span>}
+                                </button>
+                            );
+                        })}
                     </div>
 
                     <div className="toolbar-separator"></div>
@@ -658,14 +669,14 @@ const Clients = () => {
                             <button
                                 className={`toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
                                 onClick={() => setViewMode('grid')}
-                                title="Vue Grille"
+                                title="Afficher les clients en grille - Vue compacte"
                             >
                                 <LayoutGrid size={18} />
                             </button>
                             <button
                                 className={`toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
                                 onClick={() => setViewMode('list')}
-                                title="Vue Liste"
+                                title="Afficher les clients en liste - Tableau détaillé"
                             >
                                 <List size={18} />
                             </button>

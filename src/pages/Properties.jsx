@@ -917,13 +917,14 @@ const Properties = () => {
 
             <div className="properties-toolbar">
                 <div className="search-filter-group">
-                    <div className="search-input">
+                    <div className="search-input" title="Recherchez par référence, commune, quartier, type de bien...">
                         <Search size={18} />
                         <input
                             type="text"
                             placeholder="Rechercher par Réf, commune, type, zone..."
                             defaultValue={searchTerm}
                             onChange={(e) => debouncedSearch(e.target.value)}
+                            title="Tapez pour chercher dans tous les biens"
                         />
                         {searchTerm && (
                             <button onClick={() => { setSearchTerm(''); }}>
@@ -946,6 +947,7 @@ const Properties = () => {
                     <button
                         className={`btn btn-secondary filter-btn ${filterOpen ? 'active' : ''}`}
                         onClick={() => setFilterOpen(!filterOpen)}
+                        title="Filtrez par type, commune, prix, disponibilité, etc."
                     >
                         <Filter size={18} />
                         Filtres
@@ -960,7 +962,7 @@ const Properties = () => {
                             setSortConfig({ key, direction });
                         }}
                         className="sort-select"
-                        title="Trier par"
+                        title="Triez les biens par date, prix ou type"
                     >
                         <option value="datePublication-desc">Date (Récent → Ancien)</option>
                         <option value="datePublication-asc">Date (Ancien → Récent)</option>
@@ -971,13 +973,28 @@ const Properties = () => {
                     </select>
 
                     <div className="view-toggle-inner" style={{ display: 'flex', gap: '2px', background: 'var(--bg-app)', padding: '4px', borderRadius: 'var(--radius-md)' }}>
-                        <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')} aria-label="Vue Grille">
+                        <button
+                            className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                            onClick={() => setViewMode('grid')}
+                            title="Afficher en grille - Vue compacte des biens"
+                            aria-label="Vue Grille"
+                        >
                             <Grid size={18} />
                         </button>
-                        <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')} aria-label="Vue Liste">
+                        <button
+                            className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
+                            onClick={() => setViewMode('list')}
+                            title="Afficher en liste - Tableau détaillé de tous les biens"
+                            aria-label="Vue Liste"
+                        >
                             <List size={18} />
                         </button>
-                        <button className={`view-btn ${viewMode === 'map' ? 'active' : ''}`} onClick={() => setViewMode('map')} title="Vue Carte" aria-label="Vue Carte">
+                        <button
+                            className={`view-btn ${viewMode === 'map' ? 'active' : ''}`}
+                            onClick={() => setViewMode('map')}
+                            title="Afficher sur la carte - Visualisez les biens par localisation"
+                            aria-label="Vue Carte"
+                        >
                             <Map size={18} />
                         </button>
                     </div>
