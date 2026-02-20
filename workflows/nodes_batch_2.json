@@ -1,0 +1,361 @@
+[
+  {
+    "parameters": {
+      "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/publications?telephone=eq.{{ encodeURIComponent($json.Telephone) }}&groupe=eq.{{ encodeURIComponent($json.Groupe) }}&message_timestamp=gte.{{ $json.Timestamp - 120 }}&message_timestamp=lte.{{ $json.Timestamp + 120 }}&order=message_timestamp.desc&limit=1&select=publication_id,message_timestamp",
+      "sendHeaders": true,
+      "headerParameters": {
+        "parameters": [
+          {
+            "name": "apikey",
+            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          },
+          {
+            "name": "Authorization",
+            "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          }
+        ]
+      },
+      "options": {}
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+      -3664,
+      -32
+    ],
+    "id": "4ac7354b-61ad-460a-86d0-b2a0f43787e5",
+    "name": "Chercher Publication Existante"
+  },
+  {
+    "parameters": {
+      "jsCode": "let extracted; try { extracted = $('Injecter Transcription').first().json; } catch(e) { extracted = $('Extraction Commune').first().json; } const searchResult = $input.first().json; let publicationId = ''; let isNewPublication = true; let imageOrder = 1; if (Array.isArray(searchResult) && searchResult.length > 0 && searchResult[0].publication_id) { publicationId = searchResult[0].publication_id; isNewPublication = false; imageOrder = 2; } else if (searchResult && !Array.isArray(searchResult) && searchResult.publication_id) { publicationId = searchResult.publication_id; isNewPublication = false; imageOrder = 2; } else { const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let code = ''; for (let i = 0; i < 6; i++) { code += chars.charAt(Math.floor(Math.random() * chars.length)); } publicationId = 'PUB-' + extracted.Timestamp + '-' + code; isNewPublication = true; imageOrder = 1; } return [{ json: { ...extracted, Publication_ID: publicationId, Is_New_Publication: isNewPublication, Image_Order: imageOrder } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -3440,
+      -32
+    ],
+    "id": "87fbade1-5f61-4249-bc5a-2d3fd9b4d029",
+    "name": "Generer Publication ID"
+  },
+  {
+    "parameters": {
+      "conditions": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "loose",
+          "version": 1
+        },
+        "conditions": [
+          {
+            "id": "cond-has-image",
+            "leftValue": "={{ $json.has_image }}",
+            "rightValue": true,
+            "operator": {
+              "type": "boolean",
+              "operation": "equals"
+            }
+          }
+        ],
+        "combinator": "and"
+      },
+      "options": {
+        "looseTypeValidation": true
+      }
+    },
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2,
+    "position": [
+      -3216,
+      -32
+    ],
+    "id": "217b2469-374b-411d-a872-0fae6df20a3e",
+    "name": "A une Image?"
+  },
+  {
+    "parameters": {
+      "method": "POST",
+      "url": "https://www.wasenderapi.com/api/decrypt-media",
+      "sendHeaders": true,
+      "headerParameters": {
+        "parameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer d5c9e3e991ef6c1032622dea850799388f52e917f8e2dae3351459c1f447f5cd"
+          },
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ]
+      },
+      "sendBody": true,
+      "specifyBody": "json",
+      "jsonBody": "={\n  \"data\": {\n    \"messages\": {\n      \"key\": { \"id\": \"{{ $json.originalKeyId }}\" },\n      \"message\": {\n        \"imageMessage\": {\n          \"url\": \"{{ $json.imageInfo.url }}\",\n          \"mimetype\": \"{{ $json.imageInfo.mimetype }}\",\n          \"mediaKey\": \"{{ $json.imageInfo.mediaKey }}\",\n          \"directPath\": \"{{ $json.imageInfo.directPath }}\",\n          \"fileEncSha256\": \"{{ $json.imageInfo.fileEncSha256 }}\",\n          \"fileSha256\": \"{{ $json.imageInfo.fileSha256 }}\",\n          \"fileLength\": \"{{ $json.imageInfo.fileLength }}\"\n        }\n      }\n    }\n  }\n}",
+      "options": {
+        "timeout": 30000
+      }
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.4,
+    "position": [
+      -2992,
+      -128
+    ],
+    "id": "0d4858a7-eca3-4655-be3e-84119229beae",
+    "name": "Decrypter Image"
+  },
+  {
+    "parameters": {
+      "jsCode": "const decryptResult = $input.first().json; let publicUrl = ''; if (decryptResult.publicUrl) publicUrl = decryptResult.publicUrl; else if (decryptResult.data?.publicUrl) publicUrl = decryptResult.data.publicUrl; else if (decryptResult.url) publicUrl = decryptResult.url; else if (decryptResult.data?.url) publicUrl = decryptResult.data.url; if (publicUrl && publicUrl.startsWith('http')) { return [{ json: { publicUrl, decrypt_ok: true } }]; } else { return [{ json: { publicUrl: '', decrypt_ok: false } }]; }"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -2768,
+      -128
+    ],
+    "id": "adf883be-846a-43b5-b3cd-3e9f8abf6ec1",
+    "name": "Verifier Decryptage"
+  },
+  {
+    "parameters": {
+      "conditions": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "loose",
+          "version": 1
+        },
+        "conditions": [
+          {
+            "id": "cond-decrypt-ok",
+            "leftValue": "={{ $json.decrypt_ok }}",
+            "rightValue": true,
+            "operator": {
+              "type": "boolean",
+              "operation": "equals"
+            }
+          }
+        ],
+        "combinator": "and"
+      },
+      "options": {
+        "looseTypeValidation": true
+      }
+    },
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2,
+    "position": [
+      -2544,
+      -128
+    ],
+    "id": "27ef3ccd-4fe8-40bb-85b2-f1478945c88f",
+    "name": "Decryptage OK?"
+  },
+  {
+    "parameters": {
+      "method": "POST",
+      "url": "https://api.imgbb.com/1/upload",
+      "sendBody": true,
+      "contentType": "form-urlencoded",
+      "bodyParameters": {
+        "parameters": [
+          {
+            "name": "key",
+            "value": "9f8a1a2b1ec266006878b8e5e20f713e"
+          },
+          {
+            "name": "image",
+            "value": "={{ $('Verifier Decryptage').first().json.publicUrl }}"
+          }
+        ]
+      },
+      "options": {
+        "timeout": 30000
+      }
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.4,
+    "position": [
+      -2320,
+      -224
+    ],
+    "id": "3112e81a-6f93-4a37-aa8b-f6d11023ca4d",
+    "name": "Upload ImgBB"
+  },
+  {
+    "parameters": {
+      "jsCode": "const imgbbResult = $input.first().json; const extracted = $('Generer Publication ID').first().json; let lienImage = ''; if (imgbbResult?.data?.url) lienImage = imgbbResult.data.url; else if (imgbbResult?.data?.display_url) lienImage = imgbbResult.data.display_url; else { try { lienImage = $('Verifier Decryptage').first().json.publicUrl || '[Upload echoue]'; } catch(e) { lienImage = '[Upload echoue]'; } } return [{ json: { Horodatage: extracted.Horodatage, Groupe: extracted.Groupe, Nom_Groupe: extracted.Nom_Groupe, Expediteur: extracted.Expediteur, Telephone: extracted.Telephone, Message_ID: extracted.Message_ID, Publication_ID: extracted.Publication_ID, Type: extracted.Type, Message: extracted.Message, Lien_Image: lienImage, has_text: extracted.has_text, Image_Order: extracted.Image_Order, Timestamp: extracted.Timestamp } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -2096,
+      -224
+    ],
+    "id": "8621613c-afa5-46c9-b703-c9f9f28f2eef",
+    "name": "Construire Donnees Image"
+  },
+  {
+    "parameters": {
+      "jsCode": "const extracted = $('Generer Publication ID').first().json; return [{ json: { Horodatage: extracted.Horodatage, Groupe: extracted.Groupe, Nom_Groupe: extracted.Nom_Groupe, Expediteur: extracted.Expediteur, Telephone: extracted.Telephone, Message_ID: extracted.Message_ID, Publication_ID: extracted.Publication_ID, Type: extracted.Type, Message: extracted.Message, Lien_Image: '[Decryptage echoue]', has_text: extracted.has_text, Image_Order: extracted.Image_Order, Timestamp: extracted.Timestamp } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -2096,
+      20
+    ],
+    "id": "e20ec802-311d-479f-8117-b5c4975b99fa",
+    "name": "Fallback Image"
+  },
+  {
+    "parameters": {
+      "method": "POST",
+      "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/images?on_conflict=message_id",
+      "sendHeaders": true,
+      "headerParameters": {
+        "parameters": [
+          {
+            "name": "apikey",
+            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          },
+          {
+            "name": "Authorization",
+            "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          },
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "name": "Prefer",
+            "value": "return=minimal,resolution=merge-duplicates"
+          }
+        ]
+      },
+      "sendBody": true,
+      "specifyBody": "json",
+      "jsonBody": "={\n  \"publication_id\": {{ JSON.stringify($json.Publication_ID) }},\n  \"horodatage\": {{ JSON.stringify($json.Horodatage) }},\n  \"groupe\": {{ JSON.stringify($json.Groupe) }},\n  \"nom_groupe\": {{ JSON.stringify($json.Nom_Groupe) }},\n  \"telephone\": {{ JSON.stringify($json.Telephone) }},\n  \"expediteur\": {{ JSON.stringify($json.Expediteur) }},\n  \"type\": {{ JSON.stringify($json.Type) }},\n  \"lien_image\": {{ JSON.stringify($json.Lien_Image) }},\n  \"message_id\": {{ JSON.stringify($json.Message_ID) }},\n  \"message_timestamp\": {{ $json.Timestamp }},\n  \"image_order\": {{ $json.Image_Order }}\n}",
+      "options": {}
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+      -1872,
+      -128
+    ],
+    "id": "d26672d1-6c96-4cbe-9223-5ede90d149cb",
+    "name": "Supabase IMAGES"
+  },
+  {
+    "parameters": {
+      "conditions": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "loose",
+          "version": 1
+        },
+        "conditions": [
+          {
+            "id": "cond-has-caption",
+            "leftValue": "={{ $('Generer Publication ID').first().json.has_text }}",
+            "rightValue": true,
+            "operator": {
+              "type": "boolean",
+              "operation": "equals"
+            }
+          }
+        ],
+        "combinator": "and"
+      },
+      "options": {
+        "looseTypeValidation": true
+      }
+    },
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2,
+    "position": [
+      -1648,
+      -128
+    ],
+    "id": "ccdf78e7-ca50-47d1-8825-a1911c865158",
+    "name": "A aussi du texte?"
+  },
+  {
+    "parameters": {
+      "jsCode": "const extracted = $('Generer Publication ID').first().json; let lienImage = ''; try { lienImage = $('Construire Donnees Image').first().json.Lien_Image || ''; } catch(e) { try { lienImage = $('Fallback Image').first().json.Lien_Image || ''; } catch(e2) { lienImage = '[Non disponible]'; } } return [{ json: { Horodatage: extracted.Horodatage, Groupe: extracted.Groupe, Nom_Groupe: extracted.Nom_Groupe, Expediteur: extracted.Expediteur, Telephone: extracted.Telephone, Type: 'image', Message: '[Image sans description textuelle]', Lien_Image: lienImage, Message_ID: extracted.Message_ID, Publication_ID: extracted.Publication_ID, Is_New_Publication: extracted.Is_New_Publication, Timestamp: extracted.Timestamp } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -1424,
+      -32
+    ],
+    "id": "b0ed683d-d866-4223-bc0e-7645e6a52553",
+    "name": "Preparer Image Seule"
+  },
+  {
+    "parameters": {
+      "jsCode": "const extracted = $('Generer Publication ID').first().json; let lienImage = ''; try { lienImage = $('Construire Donnees Image').first().json.Lien_Image || ''; } catch(e) { try { lienImage = $('Fallback Image').first().json.Lien_Image || ''; } catch(e2) { lienImage = '[Non disponible]'; } } return [{ json: { Horodatage: extracted.Horodatage, Groupe: extracted.Groupe, Nom_Groupe: extracted.Nom_Groupe, Expediteur: extracted.Expediteur, Telephone: extracted.Telephone, Type: extracted.Type, Message: extracted.Message, Lien_Image: lienImage, Message_ID: extracted.Message_ID, Publication_ID: extracted.Publication_ID, Is_New_Publication: extracted.Is_New_Publication, Timestamp: extracted.Timestamp } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -1424,
+      -224
+    ],
+    "id": "3698b692-4f30-43cf-a186-ff8aed8c1b39",
+    "name": "Preparer Pub Image Texte"
+  },
+  {
+    "parameters": {
+      "jsCode": "const extracted = $('Generer Publication ID').first().json; return [{ json: { Horodatage: extracted.Horodatage, Groupe: extracted.Groupe, Nom_Groupe: extracted.Nom_Groupe, Expediteur: extracted.Expediteur, Telephone: extracted.Telephone, Type: extracted.Type, Message: extracted.Message, Lien_Image: '', Message_ID: extracted.Message_ID, Publication_ID: extracted.Publication_ID, Is_New_Publication: extracted.Is_New_Publication, Timestamp: extracted.Timestamp } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -1424,
+      188
+    ],
+    "id": "df154197-fca4-4571-9c00-51a57bb0e197",
+    "name": "Preparer Pub Texte"
+  },
+  {
+    "parameters": {
+      "conditions": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "strict",
+          "version": 3
+        },
+        "conditions": [
+          {
+            "id": "check-new-pub",
+            "leftValue": "={{ $json.Is_New_Publication }}",
+            "rightValue": true,
+            "operator": {
+              "type": "boolean",
+              "operation": "equals"
+            }
+          }
+        ],
+        "combinator": "and"
+      },
+      "options": {}
+    },
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2.3,
+    "position": [
+      -1200,
+      -32
+    ],
+    "id": "9268cc89-a649-4f0a-b0fd-1e3cb9ac84e3",
+    "name": "Nouvelle Publication?"
+  }
+]

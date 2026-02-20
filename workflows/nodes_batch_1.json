@@ -1,0 +1,337 @@
+[
+  {
+    "parameters": {
+      "httpMethod": "POST",
+      "path": "wassender-immobilier",
+      "options": {
+        "rawBody": false
+      }
+    },
+    "type": "n8n-nodes-base.webhook",
+    "typeVersion": 2,
+    "position": [
+      -6944,
+      232
+    ],
+    "id": "1870e6a9-6b02-4de6-94e8-23210c9e7341",
+    "name": "Webhook Wassender",
+    "webhookId": "wassender-immobilier-webhook"
+  },
+  {
+    "parameters": {
+      "jsCode": "const body = $input.first().json.body || $input.first().json; const event = body.event || ''; const data = body.data || body; if (event && !event.includes('message')) { return []; } let msg = null; if (Array.isArray(data.messages)) { msg = data.messages[0]; } else if (data.messages && typeof data.messages === 'object') { msg = data.messages; } else if (data.message) { msg = data.message; } else { msg = data; } if (!msg) return []; const key = msg.key || {}; const message = msg.message || {}; const remoteJid = key.remoteJid || msg.remoteJid || ''; const fromMe = key.fromMe === true || key.fromMe === 'true'; const pushName = msg.pushName || msg.senderName || ''; const messageTimestamp = msg.messageTimestamp || msg.timestamp || Math.floor(Date.now() / 1000); const messageId = key.id || msg.id || ''; const participant = key.participant || msg.participant || ''; if (remoteJid === 'status@broadcast') return []; if (message.reactionMessage) return []; if (message.protocolMessage) return []; if (message.senderKeyDistributionMessage && !message.conversation && !message.extendedTextMessage && !message.imageMessage && !message.audioMessage && !message.videoMessage && !message.documentMessage) return []; let messageBody = msg.messageBody || msg.body || ''; if (!messageBody && message.conversation) messageBody = message.conversation; if (!messageBody && message.extendedTextMessage?.text) messageBody = message.extendedTextMessage.text; if (!messageBody && message.imageMessage?.caption) messageBody = message.imageMessage.caption; if (!messageBody && message.videoMessage?.caption) messageBody = message.videoMessage.caption; if (!messageBody && message.documentMessage?.caption) messageBody = message.documentMessage.caption; const isGroup = remoteJid.includes('g.us'); let cleanedSenderPn = ''; if (isGroup) { if (key.cleanedParticipantPn) cleanedSenderPn = key.cleanedParticipantPn; else if (key.participantPn) cleanedSenderPn = key.participantPn.replace(/@s\\.whatsapp\\.net/g, ''); else if (participant && participant.includes('@s.whatsapp.net')) cleanedSenderPn = participant.replace(/@s\\.whatsapp\\.net/g, ''); else if (msg.cleanedParticipantPn) cleanedSenderPn = msg.cleanedParticipantPn; else if (participant) cleanedSenderPn = participant.replace(/@lid/g, '').replace(/@s\\.whatsapp\\.net/g, ''); } else if (remoteJid) { cleanedSenderPn = remoteJid.replace(/@s\\.whatsapp\\.net/g, ''); } if (!cleanedSenderPn && key.cleanedSenderPn) cleanedSenderPn = key.cleanedSenderPn; if (!cleanedSenderPn && msg.cleanedSenderPn) cleanedSenderPn = msg.cleanedSenderPn; return [{ json: { remoteJid, fromMe, pushName, messageTimestamp, messageBody, messageId, participant, cleanedSenderPn, isGroup, key, message, rawMsg: msg } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -6720,
+      232
+    ],
+    "id": "7f18d7ba-eb72-4266-a5e4-f4f56f7426e8",
+    "name": "Normaliser Webhook"
+  },
+  {
+    "parameters": {
+      "conditions": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "loose",
+          "version": 1
+        },
+        "conditions": [
+          {
+            "id": "cond-group",
+            "leftValue": "={{ $json.remoteJid }}",
+            "rightValue": "g.us",
+            "operator": {
+              "type": "string",
+              "operation": "contains"
+            }
+          }
+        ],
+        "combinator": "and"
+      },
+      "options": {
+        "looseTypeValidation": true
+      }
+    },
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2,
+    "position": [
+      -6496,
+      232
+    ],
+    "id": "7730ae8a-d24e-4784-bb61-01d7bea272ea",
+    "name": "Est un Groupe?"
+  },
+  {
+    "parameters": {
+      "method": "POST",
+      "url": "https://www.wasenderapi.com/api/getGroupMetadata",
+      "sendHeaders": true,
+      "headerParameters": {
+        "parameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer d5c9e3e991ef6c1032622dea850799388f52e917f8e2dae3351459c1f447f5cd"
+          },
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ]
+      },
+      "sendBody": true,
+      "specifyBody": "json",
+      "jsonBody": "={\n  \"groupId\": \"{{ $json.remoteJid }}\"\n}",
+      "options": {
+        "timeout": 10000
+      }
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.4,
+    "position": [
+      -6272,
+      40
+    ],
+    "id": "7d4b40bd-c354-40b5-9827-63e6a9387748",
+    "name": "Recuperer Nom Groupe"
+  },
+  {
+    "parameters": {
+      "jsCode": "const groupResult = $input.first().json; const normalized = $('Normaliser Webhook').first().json; let nomGroupe = ''; try { const candidates = [ groupResult.subject, groupResult.name, groupResult.groupName, groupResult.group_name, groupResult.title, groupResult.data?.subject, groupResult.data?.name, groupResult.data?.groupName, groupResult.data?.group_name, groupResult.data?.title, groupResult.group?.subject, groupResult.group?.name, groupResult.metadata?.subject, groupResult.metadata?.name, groupResult.result?.subject, groupResult.result?.name, groupResult.response?.subject, groupResult.response?.name, groupResult.data?.group?.subject, groupResult.data?.group?.name, groupResult.data?.metadata?.subject, groupResult.result?.group?.subject, groupResult.result?.data?.subject, groupResult.response?.data?.subject, ]; for (const candidate of candidates) { if (candidate && typeof candidate === 'string' && candidate.trim() !== '') { nomGroupe = candidate.trim(); break; } } if (!nomGroupe) { function findGroupName(obj, depth) { if (!obj || typeof obj !== 'object' || depth > 4) return ''; const keys = ['subject', 'name', 'groupName', 'group_name', 'title']; for (const key of keys) { if (obj[key] && typeof obj[key] === 'string' && obj[key].trim() !== '') { return obj[key].trim(); } } for (const key of Object.keys(obj)) { if (typeof obj[key] === 'object' && obj[key] !== null) { const found = findGroupName(obj[key], depth + 1); if (found) return found; } } return ''; } nomGroupe = findGroupName(groupResult, 0); } } catch(e) { nomGroupe = ''; } if (!nomGroupe || nomGroupe.trim() === '') { const jid = normalized.remoteJid || ''; const cleanJid = jid.replace(/@g\\.us/g, '').replace(/@s\\.whatsapp\\.net/g, ''); nomGroupe = cleanJid ? 'Groupe ' + cleanJid : 'Groupe inconnu'; } return [{ json: { ...normalized, nomGroupe: nomGroupe } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -6048,
+      40
+    ],
+    "id": "e35a8bb3-ab78-483f-9939-a98db0666afd",
+    "name": "Extraire Nom Groupe"
+  },
+  {
+    "parameters": {
+      "conditions": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "loose",
+          "version": 1
+        },
+        "conditions": [
+          {
+            "id": "cond-fromme",
+            "leftValue": "={{ $json.fromMe }}",
+            "rightValue": true,
+            "operator": {
+              "type": "boolean",
+              "operation": "equals"
+            }
+          }
+        ],
+        "combinator": "and"
+      },
+      "options": {
+        "looseTypeValidation": true
+      }
+    },
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2,
+    "position": [
+      -5824,
+      40
+    ],
+    "id": "2d69d84d-7d16-42bb-8ecb-afbed092f91d",
+    "name": "Message Sortant?"
+  },
+  {
+    "parameters": {},
+    "type": "n8n-nodes-base.noOp",
+    "typeVersion": 1,
+    "position": [
+      -5600,
+      -56
+    ],
+    "id": "df79859e-b1fc-4f03-9401-5623ee2f508c",
+    "name": "Ignorer sortant"
+  },
+  {
+    "parameters": {
+      "jsCode": "const normalized = $('Extraire Nom Groupe').first().json; const message = normalized.message || {}; const key = normalized.key || {}; const hasImage = !!message.imageMessage; const hasAudio = !!message.audioMessage; const hasVideo = !!message.videoMessage; const hasDocument = !!message.documentMessage; const hasContact = !!message.contactMessage || !!message.contactsArrayMessage; const hasLocation = !!message.locationMessage || !!message.liveLocationMessage; const hasConversation = !!message.conversation; const hasExtendedText = !!(message.extendedTextMessage && message.extendedTextMessage.text); const hasCaption = !!(message.imageMessage?.caption || message.videoMessage?.caption || message.documentMessage?.caption); const messageBody = normalized.messageBody || ''; const hasMessageBody = messageBody.trim().length > 0; const hasSticker = !!message.stickerMessage; if (hasSticker && !hasMessageBody && !hasImage && !hasAudio && !hasVideo && !hasDocument) { return [{ json: { _skip: true, _reason: 'Sticker seul', Message: '', has_image: false, has_text: false } }]; } const hasAnyContent = hasImage || hasAudio || hasVideo || hasDocument || hasContact || hasLocation || hasConversation || hasExtendedText || hasMessageBody; if (!hasAnyContent) { return [{ json: { _skip: true, _reason: 'Aucun contenu d\u00e9tectable', Message: '', has_image: false, has_text: false } }]; } let telephone = normalized.cleanedSenderPn || ''; if (!telephone) { const participant = normalized.participant || ''; if (participant) { telephone = participant.replace(/@s\\.whatsapp\\.net/g, '').replace(/@lid/g, ''); } if (!telephone && key.remoteJid) { telephone = key.remoteJid.replace(/@s\\.whatsapp\\.net/g, '').replace(/@g\\.us/g, ''); } } if (!telephone) { telephone = 'inconnu_' + (normalized.messageId || Date.now()); } const ts = normalized.messageTimestamp; let tsNum = 0; try { tsNum = typeof ts === 'string' ? parseInt(ts) : (ts || 0); if (isNaN(tsNum)) tsNum = Math.floor(Date.now() / 1000); } catch(e) { tsNum = Math.floor(Date.now() / 1000); } let horodatage = ''; try { horodatage = new Date(tsNum * 1000).toLocaleString('fr-FR', { timeZone: 'Africa/Abidjan' }); } catch(e) { horodatage = new Date().toLocaleString('fr-FR', { timeZone: 'Africa/Abidjan' }); } let texte = ''; if (message.imageMessage?.caption) texte = message.imageMessage.caption; else if (message.videoMessage?.caption) texte = message.videoMessage.caption; else if (message.documentMessage?.caption) texte = message.documentMessage.caption; else if (hasMessageBody) texte = messageBody; else if (hasConversation) texte = message.conversation; else if (hasExtendedText) texte = message.extendedTextMessage.text; let type = 'texte'; if (hasAudio) type = 'audio'; else if (hasVideo && texte.length > 0) type = 'video+texte'; else if (hasVideo) type = 'video'; else if (hasImage && texte.length > 0) type = 'image+texte'; else if (hasImage) type = 'image'; else if (hasDocument) type = 'document'; else if (hasContact) type = 'contact'; else if (hasLocation) type = 'location'; let imageInfo = null; if (hasImage) { const im = message.imageMessage; imageInfo = { url: im.url || '', mimetype: im.mimetype || 'image/jpeg', mediaKey: im.mediaKey || '', directPath: im.directPath || '', fileEncSha256: im.fileEncSha256 || '', fileSha256: im.fileSha256 || '', fileLength: im.fileLength || '' }; } let audioInfo = null; if (hasAudio) { const au = message.audioMessage; audioInfo = { url: au.url || '', mimetype: au.mimetype || 'audio/ogg', mediaKey: au.mediaKey || '', directPath: au.directPath || '', fileEncSha256: au.fileEncSha256 || '', fileSha256: au.fileSha256 || '', fileLength: au.fileLength || '', seconds: au.seconds || 0, ptt: au.ptt || false }; } let videoInfo = null; if (hasVideo) { const vi = message.videoMessage; videoInfo = { url: vi.url || '', mimetype: vi.mimetype || 'video/mp4', mediaKey: vi.mediaKey || '', directPath: vi.directPath || '', fileEncSha256: vi.fileEncSha256 || '', fileSha256: vi.fileSha256 || '', fileLength: vi.fileLength || '', seconds: vi.seconds || 0, caption: vi.caption || '' }; } let documentInfo = null; if (hasDocument) { const doc = message.documentMessage; documentInfo = { url: doc.url || '', mimetype: doc.mimetype || '', mediaKey: doc.mediaKey || '', directPath: doc.directPath || '', fileName: doc.fileName || '', fileLength: doc.fileLength || '', caption: doc.caption || '' }; if (!texte && doc.fileName) texte = '[Document: ' + doc.fileName + ']'; } if (hasContact) { const ct = message.contactMessage || {}; const displayName = ct.displayName || ''; const vcard = ct.vcard || ''; const telMatch = vcard.match(/TEL[^:]*:([+\\d\\s-]+)/i); const contactTel = telMatch ? telMatch[1].replace(/[\\s-]/g, '') : ''; if (!texte) texte = '[Contact partag\u00e9: ' + displayName + (contactTel ? ' - ' + contactTel : '') + ']'; } if (hasLocation) { const loc = message.locationMessage || message.liveLocationMessage || {}; const lat = loc.degreesLatitude || ''; const lng = loc.degreesLongitude || ''; const locName = loc.name || ''; const locAddress = loc.address || ''; if (!texte) texte = '[Localisation: ' + (locName || locAddress || lat + ',' + lng) + ']'; } if (hasAudio && !texte) { texte = '[Message vocal - ' + (audioInfo.seconds || '?') + 's]'; } return [{ json: { _skip: false, Horodatage: horodatage, Groupe: normalized.remoteJid, Nom_Groupe: normalized.nomGroupe || '', Expediteur: normalized.pushName || 'Inconnu', Telephone: telephone, Message_ID: normalized.messageId, Type: type, Message: texte, has_image: hasImage, has_audio: hasAudio, has_video: hasVideo, has_document: hasDocument, has_contact: hasContact, has_location: hasLocation, has_text: (texte.length > 0), imageInfo: imageInfo, audioInfo: audioInfo, videoInfo: videoInfo, documentInfo: documentInfo, originalKeyId: key.id || normalized.messageId, Timestamp: tsNum, Timestamp_raw: normalized.messageTimestamp } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -5600,
+      136
+    ],
+    "id": "e84792de-cf1c-4851-bfc8-f8e14d498682",
+    "name": "Extraction Commune"
+  },
+  {
+    "parameters": {
+      "conditions": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "loose",
+          "version": 1
+        },
+        "conditions": [
+          {
+            "id": "cond-skip",
+            "leftValue": "={{ $json._skip }}",
+            "rightValue": false,
+            "operator": {
+              "type": "boolean",
+              "operation": "equals"
+            }
+          }
+        ],
+        "combinator": "and"
+      },
+      "options": {
+        "looseTypeValidation": true
+      }
+    },
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2,
+    "position": [
+      -5376,
+      136
+    ],
+    "id": "d79663c6-b4a9-4641-8acd-209e30fc4ac9",
+    "name": "Contenu Exploitable?"
+  },
+  {
+    "parameters": {},
+    "type": "n8n-nodes-base.noOp",
+    "typeVersion": 1,
+    "position": [
+      -5152,
+      236
+    ],
+    "id": "1d97c675-1aa6-48f1-bbfe-abb6276bcd08",
+    "name": "Ignorer Sticker"
+  },
+  {
+    "parameters": {
+      "conditions": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "loose",
+          "version": 1
+        },
+        "conditions": [
+          {
+            "id": "cond-has-audio-group",
+            "leftValue": "={{ $json.has_audio }}",
+            "rightValue": true,
+            "operator": {
+              "type": "boolean",
+              "operation": "equals"
+            }
+          }
+        ],
+        "combinator": "and"
+      },
+      "options": {
+        "looseTypeValidation": true
+      }
+    },
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2,
+    "position": [
+      -5152,
+      -32
+    ],
+    "id": "e5ff6a75-a492-44c5-a522-19893114dbc6",
+    "name": "Audio dans Groupe?"
+  },
+  {
+    "parameters": {
+      "method": "POST",
+      "url": "https://www.wasenderapi.com/api/decrypt-media",
+      "sendHeaders": true,
+      "headerParameters": {
+        "parameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer d5c9e3e991ef6c1032622dea850799388f52e917f8e2dae3351459c1f447f5cd"
+          }
+        ]
+      },
+      "sendBody": true,
+      "specifyBody": "json",
+      "jsonBody": "={\n  \"data\": {\n    \"messages\": {\n      \"key\": { \"id\": \"{{ $json.originalKeyId }}\" },\n      \"message\": {\n        \"audioMessage\": {\n          \"url\": \"{{ $json.audioInfo.url }}\",\n          \"mimetype\": \"{{ $json.audioInfo.mimetype }}\",\n          \"mediaKey\": \"{{ $json.audioInfo.mediaKey }}\",\n          \"directPath\": \"{{ $json.audioInfo.directPath }}\",\n          \"fileEncSha256\": \"{{ $json.audioInfo.fileEncSha256 }}\",\n          \"fileSha256\": \"{{ $json.audioInfo.fileSha256 }}\",\n          \"fileLength\": \"{{ $json.audioInfo.fileLength }}\"\n        }\n      }\n    }\n  }\n}",
+      "options": {
+        "timeout": 30000
+      }
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.3,
+    "position": [
+      -4808,
+      -104
+    ],
+    "id": "9d167600-1ec5-4ecc-afa4-9987d63a478c",
+    "name": "Decrypter Audio Groupe"
+  },
+  {
+    "parameters": {
+      "url": "={{ $json.publicUrl }}",
+      "options": {
+        "response": {
+          "response": {
+            "responseFormat": "file"
+          }
+        }
+      }
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+      -4400,
+      -104
+    ],
+    "id": "7045bd46-ca21-4d42-aac7-43a064261992",
+    "name": "Telecharger Audio Groupe"
+  },
+  {
+    "parameters": {
+      "resource": "audio",
+      "operation": "transcribe",
+      "options": {}
+    },
+    "type": "@n8n/n8n-nodes-langchain.openAi",
+    "typeVersion": 2.1,
+    "position": [
+      -4112,
+      -104
+    ],
+    "id": "e0e75f09-cf42-4586-9251-78db9c63147b",
+    "name": "Transcrire Audio Groupe",
+    "credentials": {
+      "openAiApi": {
+        "id": "toKKNKCxt5GPmAor",
+        "name": "API Agent Immo"
+      }
+    }
+  },
+  {
+    "parameters": {
+      "jsCode": "const extracted = $('Extraction Commune').first().json; const transcription = $input.first().json.text || ''; if (!transcription || transcription.trim().length < 5) { return [{ json: { ...extracted, Message: '[Vocal inaudible ou trop court]', Type: 'audio', has_text: true } }]; } return [{ json: { ...extracted, Message: transcription.trim(), Type: 'audio', has_text: true, has_audio: true, _audio_transcribed: true } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -3888,
+      -104
+    ],
+    "id": "a165a347-85c0-4ed5-86ae-595959679fd9",
+    "name": "Injecter Transcription"
+  }
+]

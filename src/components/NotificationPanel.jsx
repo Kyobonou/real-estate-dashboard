@@ -106,25 +106,35 @@ const NotificationPanel = ({ onClose }) => {
                     overflow: hidden;
                 }
 
-                @media (max-width: 480px) {
+                @media (max-width: 768px) {
                     .notification-panel {
                         position: fixed; /* Fixed on mobile for better visibility */
-                        top: 70px; /* Below header */
+                        top: 60px; /* Below header */
                         left: 50%;
                         transform: translateX(-50%);
                         right: auto;
-                        width: 95vw;
+                        width: calc(100vw - 1rem);
+                        max-width: 380px;
+                        max-height: 70vh;
+                    }
+                }
+
+                @media (max-width: 480px) {
+                    .notification-panel {
+                        width: calc(100vw - 0.5rem);
                         max-width: 360px;
+                        max-height: 75vh;
                     }
                 }
 
                 .panel-header {
-                    padding: 1rem;
+                    padding: 1rem 1.25rem;
                     border-bottom: 1px solid var(--glass-border);
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
                     background: rgba(var(--bg-primary-rgb), 0.8);
+                    min-height: 48px;
                 }
 
                 .panel-header h3 {
@@ -143,12 +153,14 @@ const NotificationPanel = ({ onClose }) => {
                     border: none;
                     color: var(--text-muted);
                     cursor: pointer;
-                    padding: 4px;
+                    padding: 6px;
                     border-radius: 4px;
                     transition: all 0.2s;
                     display: flex;
                     align-items: center;
                     justify-content: center;
+                    min-width: 32px;
+                    min-height: 32px;
                 }
 
                 .actions button:hover {
@@ -165,11 +177,12 @@ const NotificationPanel = ({ onClose }) => {
                 .notification-item {
                     display: flex;
                     gap: 1rem;
-                    padding: 0.75rem;
+                    padding: 0.875rem;
                     border-radius: var(--radius-md);
                     cursor: pointer;
                     transition: background 0.2s;
                     position: relative;
+                    min-height: 44px;
                 }
 
                 .notification-item:hover {

@@ -1,0 +1,247 @@
+[
+  {
+    "parameters": {
+      "jsCode": "const items = $input.all(); let count = 0; for (const item of items) { const data = item.json; if (Array.isArray(data)) { count = data.length; break; } if (data && typeof data === 'object' && Object.keys(data).length > 0) { if (data.id || data.numero || data.nom_prenom || data.local_interesse) count++; } } return [{ json: { visite_existe_deja: count > 0 } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -3440,
+      524
+    ],
+    "id": "60723e3e-401e-4d2a-8d55-33b7443281fc",
+    "name": "Evaluer Resultat Visite"
+  },
+  {
+    "parameters": {
+      "conditions": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "strict",
+          "version": 3
+        },
+        "conditions": [
+          {
+            "id": "check-vide",
+            "leftValue": "={{ $json.visite_existe_deja }}",
+            "rightValue": false,
+            "operator": {
+              "type": "boolean",
+              "operation": "equals"
+            }
+          }
+        ],
+        "combinator": "and"
+      },
+      "options": {}
+    },
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2.3,
+    "position": [
+      -3216,
+      524
+    ],
+    "id": "f1aee9a5-da7b-4eaf-978a-a3bafd7d2a4f",
+    "name": "Pas encore programmee?"
+  },
+  {
+    "parameters": {
+      "method": "POST",
+      "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/visite_programmee",
+      "sendHeaders": true,
+      "headerParameters": {
+        "parameters": [
+          {
+            "name": "apikey",
+            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          },
+          {
+            "name": "Authorization",
+            "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          },
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "name": "Prefer",
+            "value": "return=minimal"
+          }
+        ]
+      },
+      "sendBody": true,
+      "specifyBody": "json",
+      "jsonBody": "={\n  \"nom_prenom\": {{ JSON.stringify($('Parser Analyse1').first().json.nom) }},\n  \"numero\": {{ JSON.stringify($('Normaliser Webhook').first().json.cleanedSenderPn) }},\n  \"date_rv\": {{ JSON.stringify($('Parser Analyse1').first().json.date_rv) }},\n  \"local_interesse\": {{ JSON.stringify($('Parser Analyse1').first().json.local_interesse) }},\n  \"ref_bien\": {{ JSON.stringify($('Parser Analyse1').first().json.ref_bien) }},\n  \"visite_prog\": \"Oui\"\n}",
+      "options": {}
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+      -2992,
+      428
+    ],
+    "id": "3570a9b0-d540-473b-bfa0-419e6263624b",
+    "name": "Enregistrer Visite Programmee"
+  },
+  {
+    "parameters": {
+      "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux?disponible=eq.Oui&select=*",
+      "sendHeaders": true,
+      "headerParameters": {
+        "parameters": [
+          {
+            "name": "apikey",
+            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          },
+          {
+            "name": "Authorization",
+            "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          }
+        ]
+      },
+      "options": {}
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+      -2768,
+      428
+    ],
+    "id": "3868dcb1-ac20-481b-945b-15e84c6263eb",
+    "name": "Chercher Local"
+  },
+  {
+    "parameters": {
+      "jsCode": "const localInteresse = $('Parser Analyse1').first().json.local_interesse || ''; const refBien = $('Parser Analyse1').first().json.ref_bien || ''; if (!localInteresse || localInteresse.trim() === '') { return [{ json: { telephone: '', ref_bien: refBien, search_error: 'local_interesse vide' } }]; } function normalize(str) { if (!str) return ''; return String(str).toLowerCase().trim() .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '') .replace(/[\\s\\-.,;:\\/\\\\]+/g, ' ').replace(/\\s+/g, ' ').trim(); } const searchTerms = normalize(localInteresse).split(' ').filter(w => w.length > 2); if (searchTerms.length === 0) return [{ json: { telephone: '', ref_bien: refBien } }]; let allLocaux = []; try { const items = $('Chercher Local').all(); for (const item of items) { const d = item.json; if (Array.isArray(d)) allLocaux = allLocaux.concat(d); else if (d && d.id) allLocaux.push(d); } } catch(e) { return [{ json: { telephone: '', ref_bien: refBien } }]; } if (allLocaux.length === 0) return [{ json: { telephone: '', ref_bien: refBien } }]; if (refBien) { const byRef = allLocaux.find(r => r.ref_bien === refBien); if (byRef) return [{ json: { ...byRef, _match_score: 100 } }]; } let bestMatch = null, bestScore = 0; for (const row of allLocaux) { if (!row || !row.type_de_bien) continue; const rowText = normalize((row.type_de_bien||'') + ' ' + (row.zone_geographique||'') + ' ' + (row.commune||'') + ' ' + (row.quartier||'') + ' ' + (row.prix||'') + ' ' + (row.caracteristiques||'')); let score = 0; for (const term of searchTerms) { if (rowText.includes(term)) score++; } const pct = (score / searchTerms.length) * 100; if (pct > bestScore && pct >= 40) { bestScore = pct; bestMatch = row; } } return bestMatch ? [{ json: { ...bestMatch, _match_score: bestScore } }] : [{ json: { telephone: '', ref_bien: refBien } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -2544,
+      428
+    ],
+    "id": "546eadce-b84e-47d0-bf73-5a8ab134736c",
+    "name": "Recherche Intelligente Local"
+  },
+  {
+    "parameters": {
+      "conditions": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "strict",
+          "version": 3
+        },
+        "conditions": [
+          {
+            "id": "check-tel",
+            "leftValue": "={{ $json.telephone }}",
+            "rightValue": "",
+            "operator": {
+              "type": "string",
+              "operation": "notEmpty"
+            }
+          }
+        ],
+        "combinator": "and"
+      },
+      "options": {}
+    },
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2.3,
+    "position": [
+      -2320,
+      428
+    ],
+    "id": "d39fef38-03c6-4738-8b22-4303a6f0acc7",
+    "name": "Telephone Proprietaire Trouve?"
+  },
+  {
+    "parameters": {
+      "method": "POST",
+      "url": "https://www.wasenderapi.com/api/send-message",
+      "sendHeaders": true,
+      "headerParameters": {
+        "parameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer d5c9e3e991ef6c1032622dea850799388f52e917f8e2dae3351459c1f447f5cd"
+          }
+        ]
+      },
+      "sendBody": true,
+      "contentType": "multipart-form-data",
+      "bodyParameters": {
+        "parameters": [
+          {
+            "name": "to",
+            "value": "2250544872051"
+          },
+          {
+            "name": "text",
+            "value": "=\ud83c\udfe0 DEMANDE DE VISITE\n\n\ud83d\udccb R\u00e9f : {{ $('Recherche Intelligente Local').first().json.ref_bien || $('Parser Analyse1').first().json.ref_bien || '?' }}\n\ud83d\udc64 {{ $('Parser Analyse1').first().json.nom }}\n\ud83d\udcf1 {{ $('Normaliser Webhook').first().json.cleanedSenderPn }}\n\ud83c\udfe1 {{ $('Parser Analyse1').first().json.local_interesse }}\n\ud83d\udcc5 {{ $('Parser Analyse1').first().json.date_rv }}\n\nMerci de contacter rapidement."
+          }
+        ]
+      },
+      "options": {}
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+      -2096,
+      332
+    ],
+    "id": "8d355865-01b2-402d-9cfe-3a831f4b5207",
+    "name": "Notifier Proprietaire"
+  },
+  {
+    "parameters": {
+      "method": "POST",
+      "url": "https://www.wasenderapi.com/api/send-message",
+      "sendHeaders": true,
+      "headerParameters": {
+        "parameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer d5c9e3e991ef6c1032622dea850799388f52e917f8e2dae3351459c1f447f5cd"
+          }
+        ]
+      },
+      "sendBody": true,
+      "contentType": "multipart-form-data",
+      "bodyParameters": {
+        "parameters": [
+          {
+            "name": "to",
+            "value": "2250778311541"
+          },
+          {
+            "name": "text",
+            "value": "=\u26a0\ufe0f VISITE \u00c0 TRAITER\n\n\ud83d\udccb R\u00e9f : {{ $('Parser Analyse1').first().json.ref_bien || '?' }}\n\ud83d\udc64 {{ $('Parser Analyse1').first().json.nom }}\n\ud83d\udcf1 {{ $('Normaliser Webhook').first().json.cleanedSenderPn }}\n\ud83c\udfe1 {{ $('Parser Analyse1').first().json.local_interesse }}\n\ud83d\udcc5 {{ $('Parser Analyse1').first().json.date_rv }}\n\n\u274c T\u00e9l propri\u00e9taire non trouv\u00e9."
+          }
+        ]
+      },
+      "options": {}
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+      -2096,
+      524
+    ],
+    "id": "0b853c9d-8a4e-48ea-a90f-910ff5277f08",
+    "name": "Notifier Agence (Fallback)"
+  },
+  {
+    "parameters": {},
+    "type": "n8n-nodes-base.noOp",
+    "typeVersion": 1,
+    "position": [
+      -2992,
+      620
+    ],
+    "id": "8aa7b935-f4d6-4653-8716-d8969f51597e",
+    "name": "Deja programmee - Ignorer"
+  }
+]

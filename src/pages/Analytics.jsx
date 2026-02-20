@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
-    Building, Users, MapPin, Home, Key, Calendar,
-    BarChart3, PieChart as PieIcon, Loader, RefreshCw, Bed, Tag
+    Building, Home, Key, Calendar,
+    BarChart3, PieChart as PieIcon, Loader, RefreshCw, Bed, Tag,
+    ChevronLeft, ChevronRight
 } from 'lucide-react';
 import {
     PieChart, Pie, Cell, BarChart, Bar,
@@ -22,11 +23,25 @@ const tooltipStyle = {
     color: '#ffffff', // Force White Text
 };
 
+// Limite un dataset au top N entrées, groupe le reste en "Autres"
+const topN = (data, n = 8) => {
+    if (data.length <= n) return data;
+    const sorted = [...data].sort((a, b) => b.value - a.value);
+    const top = sorted.slice(0, n);
+    const restValue = sorted.slice(n).reduce((acc, d) => acc + d.value, 0);
+    if (restValue > 0) top.push({ name: 'Autres', value: restValue, color: '#94a3b8' });
+    return top;
+};
+
+const PAGE_SIZE = 10;
+
 const Analytics = () => {
     const [stats, setStats] = useState(null);
     const [properties, setProperties] = useState([]);
     const [visits, setVisits] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [propPage, setPropPage] = useState(0);
+    const [visitPage, setVisitPage] = useState(0);
 
     useEffect(() => {
         loadData();
@@ -68,15 +83,15 @@ const Analytics = () => {
 
     // === TOUTES les données calulées depuis le Sheet ===
 
-    // Distribution par type de bien
-    const typeData = stats ? Object.entries(stats.parType).map(([name, value], i) => ({
+    // Distribution par type de bien — top 6
+    const typeData = topN(stats ? Object.entries(stats.parType).map(([name, value], i) => ({
         name, value, color: COLORS[i % COLORS.length]
-    })) : [];
+    })) : [], 6);
 
-    // Distribution par zone
-    const zoneData = stats ? Object.entries(stats.parZone).map(([name, value], i) => ({
+    // Distribution par zone — top 8
+    const zoneData = topN(stats ? Object.entries(stats.parZone).map(([name, value], i) => ({
         name, value, color: COLORS[i % COLORS.length]
-    })) : [];
+    })) : [], 8);
 
     // Disponibilité
     const disponibiliteData = stats ? [
@@ -96,19 +111,9 @@ const Analytics = () => {
         const ch = p.chambres > 0 ? `${p.chambres} ch.` : 'N/A';
         chambresMap[ch] = (chambresMap[ch] || 0) + 1;
     });
-    const chambresData = Object.entries(chambresMap).map(([name, value], i) => ({
+    const chambresData = topN(Object.entries(chambresMap).map(([name, value], i) => ({
         name, value, color: COLORS[i % COLORS.length]
-    }));
-
-    // Distribution par publieur
-    const publisherMap = {};
-    properties.forEach(p => {
-        const pub = p.publiePar || 'Inconnu';
-        publisherMap[pub] = (publisherMap[pub] || 0) + 1;
-    });
-    const publisherData = Object.entries(publisherMap).map(([name, value], i) => ({
-        name, value, color: COLORS[i % COLORS.length]
-    }));
+    })), 7);
 
     // Distribution des prix par tranche
     const priceRanges = { '< 500K': 0, '500K - 2M': 0, '2M - 5M': 0, '5M - 10M': 0, '> 10M': 0 };
@@ -123,8 +128,12 @@ const Analytics = () => {
         name, value, color: COLORS[i % COLORS.length]
     })).filter(d => d.value > 0);
 
-    // Tableau détaillé de tous les biens
+    // Tableaux paginés
     const sortedProperties = [...properties].sort((a, b) => b.rawPrice - a.rawPrice);
+    const propPageCount  = Math.ceil(sortedProperties.length / PAGE_SIZE);
+    const propPageItems  = sortedProperties.slice(propPage * PAGE_SIZE, (propPage + 1) * PAGE_SIZE);
+    const visitPageCount = Math.ceil(visits.length / PAGE_SIZE);
+    const visitPageItems = visits.slice(visitPage * PAGE_SIZE, (visitPage + 1) * PAGE_SIZE);
 
     return (
         <div className="analytics-page">
@@ -344,12 +353,21 @@ const Analytics = () => {
                 </motion.div>
             </div>
 
-            {/* Tableau récapitulatif des biens */}
+            {/* Tableau récapitulatif des biens — paginé */}
             <motion.div className="chart-card full-width" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
                 <div className="chart-header">
                     <div>
                         <h3><Building size={18} /> Récapitulatif des biens</h3>
-                        <p>Tous les biens triés par prix décroissant</p>
+                        <p>{sortedProperties.length} biens triés par prix décroissant</p>
+                    </div>
+                    <div className="table-pagination">
+                        <button className="page-btn" onClick={() => setPropPage(p => Math.max(0, p - 1))} disabled={propPage === 0}>
+                            <ChevronLeft size={16} />
+                        </button>
+                        <span>{propPage + 1} / {propPageCount || 1}</span>
+                        <button className="page-btn" onClick={() => setPropPage(p => Math.min(propPageCount - 1, p + 1))} disabled={propPage >= propPageCount - 1}>
+                            <ChevronRight size={16} />
+                        </button>
                     </div>
                 </div>
                 <div className="performance-table">
@@ -366,42 +384,38 @@ const Analytics = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {sortedProperties.map((prop, index) => (
-                                <motion.tr
-                                    key={prop.id}
-                                    initial={{ opacity: 0, x: -10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: 0.9 + index * 0.03 }}
-                                >
+                            {propPageItems.map((prop) => (
+                                <tr key={prop.id}>
                                     <td className="zone-name">{prop.typeBien}</td>
-                                    <td>{prop.zone}</td>
+                                    <td>{prop.locationLabel || prop.zone}</td>
                                     <td className="revenue-cell">{prop.prixFormate}</td>
                                     <td>{prop.chambres > 0 ? prop.chambres : '—'}</td>
-                                    <td>
-                                        <span className={`rate-badge ${prop.meuble ? 'high' : 'low'}`}>
-                                            {prop.meuble ? 'Oui' : 'Non'}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span className={`rate-badge ${prop.disponible ? 'high' : 'low'}`}>
-                                            {prop.disponible ? 'Oui' : 'Non'}
-                                        </span>
-                                    </td>
-                                    <td>{prop.publiePar}</td>
-                                </motion.tr>
+                                    <td><span className={`rate-badge ${prop.meuble ? 'high' : 'low'}`}>{prop.meuble ? 'Oui' : 'Non'}</span></td>
+                                    <td><span className={`rate-badge ${prop.disponible ? 'high' : 'low'}`}>{prop.disponible ? 'Oui' : 'Non'}</span></td>
+                                    <td>{prop.publiePar || '—'}</td>
+                                </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
             </motion.div>
 
-            {/* Tableau des visites */}
+            {/* Tableau des visites — paginé */}
             {visits.length > 0 && (
                 <motion.div className="chart-card full-width" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.0 }}>
                     <div className="chart-header">
                         <div>
                             <h3><Calendar size={18} /> Visites programmées</h3>
-                            <p>Toutes les visites enregistrées</p>
+                            <p>{visits.length} visite(s) enregistrée(s)</p>
+                        </div>
+                        <div className="table-pagination">
+                            <button className="page-btn" onClick={() => setVisitPage(p => Math.max(0, p - 1))} disabled={visitPage === 0}>
+                                <ChevronLeft size={16} />
+                            </button>
+                            <span>{visitPage + 1} / {visitPageCount || 1}</span>
+                            <button className="page-btn" onClick={() => setVisitPage(p => Math.min(visitPageCount - 1, p + 1))} disabled={visitPage >= visitPageCount - 1}>
+                                <ChevronRight size={16} />
+                            </button>
                         </div>
                     </div>
                     <div className="performance-table">
@@ -416,23 +430,14 @@ const Analytics = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {visits.map((visit, index) => (
-                                    <motion.tr
-                                        key={visit.id}
-                                        initial={{ opacity: 0, x: -10 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: 1.1 + index * 0.03 }}
-                                    >
+                                {visitPageItems.map((visit) => (
+                                    <tr key={visit.id}>
                                         <td className="zone-name">{visit.nomPrenom}</td>
                                         <td>{visit.numero}</td>
                                         <td>{visit.dateRv}</td>
                                         <td>{visit.localInteresse}</td>
-                                        <td>
-                                            <span className={`rate-badge ${visit.visiteProg ? 'high' : 'low'}`}>
-                                                {visit.status}
-                                            </span>
-                                        </td>
-                                    </motion.tr>
+                                        <td><span className={`rate-badge ${visit.visiteProg ? 'high' : 'low'}`}>{visit.status}</span></td>
+                                    </tr>
                                 ))}
                             </tbody>
                         </table>

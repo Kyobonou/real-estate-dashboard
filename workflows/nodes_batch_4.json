@@ -1,0 +1,346 @@
+[
+  {
+    "parameters": {
+      "method": "POST",
+      "url": "https://www.wasenderapi.com/api/decrypt-media",
+      "sendHeaders": true,
+      "headerParameters": {
+        "parameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer d5c9e3e991ef6c1032622dea850799388f52e917f8e2dae3351459c1f447f5cd"
+          }
+        ]
+      },
+      "sendBody": true,
+      "specifyBody": "json",
+      "jsonBody": "={{ JSON.stringify({ data: { messages: { key: { id: $('Normaliser Webhook').first().json.messageId }, message: { audioMessage: { url: $('Normaliser Webhook').first().json.message.audioMessage.url, mimetype: $('Normaliser Webhook').first().json.message.audioMessage.mimetype, mediaKey: $('Normaliser Webhook').first().json.message.audioMessage.mediaKey } } } } }) }}",
+      "options": {}
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.3,
+    "position": [
+      -5824,
+      428
+    ],
+    "id": "982ee01e-7443-4c0d-8244-34f5ec0511a8",
+    "name": "Decrypter L'audio1"
+  },
+  {
+    "parameters": {
+      "url": "={{ $json.publicUrl }}",
+      "options": {
+        "response": {
+          "response": {
+            "responseFormat": "file"
+          }
+        }
+      }
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+      -5600,
+      428
+    ],
+    "id": "fc4e2ffc-41a1-431a-b176-5a7a88c7d418",
+    "name": "Telecharger Audio1"
+  },
+  {
+    "parameters": {
+      "resource": "audio",
+      "operation": "transcribe",
+      "options": {}
+    },
+    "type": "@n8n/n8n-nodes-langchain.openAi",
+    "typeVersion": 2.1,
+    "position": [
+      -5376,
+      428
+    ],
+    "id": "476795df-fa35-451d-a145-7f225a06b41f",
+    "name": "Transcribe a recording1",
+    "credentials": {
+      "openAiApi": {
+        "id": "toKKNKCxt5GPmAor",
+        "name": "API Agent Immo"
+      }
+    }
+  },
+  {
+    "parameters": {
+      "assignments": {
+        "assignments": [
+          {
+            "id": "f9699fa6",
+            "name": "text",
+            "value": "={{ $json.text }}",
+            "type": "string"
+          }
+        ]
+      },
+      "options": {}
+    },
+    "type": "n8n-nodes-base.set",
+    "typeVersion": 3.4,
+    "position": [
+      -5152,
+      428
+    ],
+    "id": "a278bca3-a9be-4cd5-999c-84621b4ca149",
+    "name": "Recuperer l'audio en text1"
+  },
+  {
+    "parameters": {
+      "jsCode": "const messageBody = $('Normaliser Webhook').first().json.messageBody || ''; if (!messageBody.trim()) return []; return [{ json: { text: messageBody } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -5152,
+      620
+    ],
+    "id": "e997485f-12c1-4dd7-82d3-08c350083182",
+    "name": "Recuperer le message texte1"
+  },
+  {
+    "parameters": {
+      "promptType": "define",
+      "text": "=Message de l'utilisateur: {{ $json.text }}",
+      "options": {
+        "systemMessage": "# IDENTIT\u00c9\nTu es l'assistant virtuel de BOGBE'S GROUPE MULTI-SERVICES, une agence immobili\u00e8re bas\u00e9e en C\u00f4te d'Ivoire.\nTu communiques via WhatsApp avec des prospects qui cherchent un logement.\n\n# R\u00c8GLES ABSOLUES\n1. Ne JAMAIS r\u00e9v\u00e9ler que tu es une IA.\n2. Ne JAMAIS inventer d'informations.\n3. Messages courts (max 80 mots), adapt\u00e9s \u00e0 WhatsApp.\n4. Ton professionnel et chaleureux.\n5. Maximum 2 offres par message.\n6. Ne JAMAIS proposer proactivement l'adresse.\n7. Quand le client donne son nom, utilise M. ou Mme.\n\n# FORMAT DES PRIX\nFormater avec espaces : 50000 \u2192 50 000. Pas de devise.\n\n# COMPORTEMENT\n1. Accueil \u2192 2. Crit\u00e8res \u2192 3. Recherche \u2192 4. Pr\u00e9sentation (ref_bien) \u2192 5. Nom \u2192 6. Date visite \u2192 7. Confirmation \u2192 8. Transfert si demand\u00e9\n\nR\u00e9ponds UNIQUEMENT avec le texte du message destin\u00e9 au client."
+      }
+    },
+    "type": "@n8n/n8n-nodes-langchain.agent",
+    "typeVersion": 3.1,
+    "position": [
+      -4872,
+      524
+    ],
+    "id": "6f1a6921-3245-45a8-ad9e-b6d852c30917",
+    "name": "Agent Conversationnel1"
+  },
+  {
+    "parameters": {
+      "model": {
+        "__rl": true,
+        "value": "gpt-4.1-mini",
+        "mode": "list",
+        "cachedResultName": "gpt-4.1-mini"
+      },
+      "builtInTools": {},
+      "options": {}
+    },
+    "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+    "typeVersion": 1.3,
+    "position": [
+      -4928,
+      748
+    ],
+    "id": "2dadca18-6c7c-4a16-b7d9-593389284a5a",
+    "name": "OpenAI Chat Model1",
+    "credentials": {
+      "openAiApi": {
+        "id": "toKKNKCxt5GPmAor",
+        "name": "API Agent Immo"
+      }
+    }
+  },
+  {
+    "parameters": {
+      "sessionIdType": "customKey",
+      "sessionKey": "={{ $('Normaliser Webhook').first().json.cleanedSenderPn }}"
+    },
+    "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+    "typeVersion": 1.3,
+    "position": [
+      -4800,
+      748
+    ],
+    "id": "84c2c3ed-1cb3-4988-9cae-4301b2f022bc",
+    "name": "Simple Memory1"
+  },
+  {
+    "parameters": {
+      "name": "recherche_biens_immobiliers",
+      "description": "Recherche tous les biens immobiliers disponibles.",
+      "jsCode": "const response = await this.helpers.httpRequest({ method: 'GET', url: 'https: headers: { 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk', 'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk' } }); if (!response || (Array.isArray(response) && response.length === 0)) { return 'Aucun bien disponible actuellement.'; } const biens = Array.isArray(response) ? response : [response]; function formatPrix(prix) { if (!prix) return '?'; const s = String(prix).replace(/[^0-9]/g, ''); if (!s) return String(prix); return s.replace(/\\B(?=(\\d{3})+(?!\\d))/g, ' '); } return biens.map((b, i) => `Bien ${i+1} [R\u00e9f: ${b.ref_bien || '?'}]: ${b.type_de_bien || '?'} | ${b.type_offre || 'Location'} | Commune: ${b.commune || '?'} | Quartier: ${b.quartier || '?'} | Prix: ${formatPrix(b.prix)} | Meubl\u00e9: ${b.meubles || 'Non'} | Chambres: ${b.chambre || '?'} | ${b.caracteristiques || '-'} | Zone: ${b.zone_geographique || '-'} | Contact: ${b.telephone || '-'}`).join('\\n');"
+    },
+    "type": "@n8n/n8n-nodes-langchain.toolCode",
+    "typeVersion": 1.1,
+    "position": [
+      -4672,
+      748
+    ],
+    "id": "aaff9d2c-67c3-48d6-af34-bc5e9d2e2b5e",
+    "name": "Outil Recherche Locaux"
+  },
+  {
+    "parameters": {
+      "modelId": {
+        "__rl": true,
+        "value": "gpt-4.1-mini",
+        "mode": "list",
+        "cachedResultName": "GPT-4.1-MINI"
+      },
+      "responses": {
+        "values": [
+          {
+            "role": "system",
+            "content": "Analyseur de conversations immobili\u00e8res. Extrais en JSON : interesse, transfert_urgent, montrer_media, visite_programme, nom, date_rv, local_interesse, ref_bien. UNIQUEMENT JSON valide."
+          },
+          {
+            "content": "=Message: {{ $json.text }}\nR\u00e9ponse assistant: {{ $('Agent Conversationnel1').first().json.output }}\n\n{\"interesse\":false,\"transfert_urgent\":false,\"montrer_media\":false,\"visite_programme\":false,\"nom\":\"\",\"date_rv\":\"\",\"local_interesse\":\"\",\"ref_bien\":\"\"}"
+          }
+        ]
+      },
+      "builtInTools": {},
+      "options": {
+        "textFormat": {
+          "textOptions": {
+            "type": "json_object"
+          }
+        },
+        "temperature": 0
+      }
+    },
+    "type": "@n8n/n8n-nodes-langchain.openAi",
+    "typeVersion": 2.1,
+    "position": [
+      -4464,
+      524
+    ],
+    "id": "2f25dd86-6004-4b31-9e5e-43566e35f919",
+    "name": "Agent Analyseur1",
+    "credentials": {
+      "openAiApi": {
+        "id": "toKKNKCxt5GPmAor",
+        "name": "API Agent Immo"
+      }
+    }
+  },
+  {
+    "parameters": {
+      "jsCode": "const agentReply = $('Agent Conversationnel1').first().json.output; const raw = $('Agent Analyseur1').first().json; let analysis; try { let output = raw.output; if (typeof output === 'string') { const jsonMatch = output.match(/\\{[\\s\\S]*\\}/); analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(output); } else if (Array.isArray(output)) { const text = output[0]?.content?.[0]?.text || output[0]?.text || ''; analysis = typeof text === 'string' ? JSON.parse(text) : text; } else if (typeof output === 'object' && output !== null) { analysis = output; } else { throw new Error('Format inattendu'); } } catch(e) { analysis = { interesse: false, transfert_urgent: false, montrer_media: false, visite_programme: false, nom: '', date_rv: '', local_interesse: '', ref_bien: '' }; } function toBool(val) { if (typeof val === 'boolean') return val; if (typeof val === 'string') return val.toLowerCase() === 'true'; return false; } return [{ json: { reply: agentReply, interesse: toBool(analysis.interesse), transfert_urgent: toBool(analysis.transfert_urgent), montrer_media: toBool(analysis.montrer_media), visite_programme: toBool(analysis.visite_programme), nom: String(analysis.nom || ''), date_rv: String(analysis.date_rv || ''), local_interesse: String(analysis.local_interesse || ''), ref_bien: String(analysis.ref_bien || '') } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -4112,
+      524
+    ],
+    "id": "cb04c94f-bfc8-404a-9da8-98c0081bf7cf",
+    "name": "Parser Analyse1"
+  },
+  {
+    "parameters": {
+      "method": "POST",
+      "url": "https://www.wasenderapi.com/api/send-message",
+      "sendHeaders": true,
+      "headerParameters": {
+        "parameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer d5c9e3e991ef6c1032622dea850799388f52e917f8e2dae3351459c1f447f5cd"
+          }
+        ]
+      },
+      "sendBody": true,
+      "contentType": "multipart-form-data",
+      "bodyParameters": {
+        "parameters": [
+          {
+            "name": "to",
+            "value": "={{ $('Normaliser Webhook').first().json.cleanedSenderPn }}"
+          },
+          {
+            "name": "text",
+            "value": "={{ $('Parser Analyse1').first().json.reply }}"
+          }
+        ]
+      },
+      "options": {
+        "timeout": 10000
+      }
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+      -3888,
+      236
+    ],
+    "id": "b969ed5a-ee70-46c8-a26a-8547ad4a20c8",
+    "name": "Envoyer Reponse WhatsApp1"
+  },
+  {
+    "parameters": {
+      "conditions": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "strict",
+          "version": 3
+        },
+        "conditions": [
+          {
+            "id": "a0e3d7c4",
+            "leftValue": "={{ $('Parser Analyse1').first().json.visite_programme }}",
+            "rightValue": true,
+            "operator": {
+              "type": "boolean",
+              "operation": "equals"
+            }
+          }
+        ],
+        "combinator": "and"
+      },
+      "options": {}
+    },
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2.3,
+    "position": [
+      -3888,
+      620
+    ],
+    "id": "7df3021b-4a0f-48f8-94b1-f491de82f216",
+    "name": "Visite Programmee?1"
+  },
+  {
+    "parameters": {},
+    "type": "n8n-nodes-base.noOp",
+    "typeVersion": 1,
+    "position": [
+      -3664,
+      716
+    ],
+    "id": "f9b1ab42-6c3a-4813-9b57-17effbc78cbe",
+    "name": "Pas de visite - Ignorer1"
+  },
+  {
+    "parameters": {
+      "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/visite_programmee?numero=eq.{{ encodeURIComponent($('Normaliser Webhook').first().json.cleanedSenderPn) }}&local_interesse=eq.{{ encodeURIComponent($('Parser Analyse1').first().json.local_interesse) }}",
+      "sendHeaders": true,
+      "headerParameters": {
+        "parameters": [
+          {
+            "name": "apikey",
+            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          },
+          {
+            "name": "Authorization",
+            "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          }
+        ]
+      },
+      "options": {}
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+      -3664,
+      524
+    ],
+    "id": "3421049b-7b42-4449-9a6b-6fbab94c5600",
+    "name": "Verifier Visite Existante"
+  }
+]

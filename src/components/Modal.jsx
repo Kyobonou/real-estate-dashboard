@@ -16,7 +16,7 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
                         exit={{ opacity: 0 }}
                         onClick={onClose}
                     />
-                    <div className="modal-wrapper">
+                    <div className="modal-wrapper" onClick={onClose}>
                         <motion.div
                             className={`modal modal-${size}`}
                             initial={{ opacity: 0, scale: 0.9, y: 20 }}

@@ -180,6 +180,51 @@ body.dark .message-content {
     }
 }
 
+/* Suggestions rapides */
+.chat-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.6rem 1rem;
+    border-top: 1px solid var(--border-subtle);
+    background: var(--bg-panel);
+}
+
+.suggestion-chip {
+    font-size: 0.72rem;
+    padding: 0.28rem 0.65rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 20px;
+    background: var(--bg-app);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+.suggestion-chip:hover:not(:disabled) {
+    background: var(--brand-primary);
+    color: white;
+    border-color: var(--brand-primary);
+}
+
+.suggestion-chip:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Icône de chargement dans le header */
+.chat-loading-icon {
+    animation: chatSpin 1s linear infinite;
+    color: rgba(255, 255, 255, 0.75);
+}
+
+@keyframes chatSpin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
 /* Input Area */
 .chat-input-area {
     padding: 1rem;
@@ -245,6 +290,11 @@ body.dark .message-content {
         width: 52px;
         height: 52px;
         font-size: 1.25rem;
+    }
+
+    /* Cacher le FAB quand le chat est ouvert : le X du header suffit */
+    .chat-fab.is-open {
+        display: none;
     }
 
     .chat-window {

@@ -1,0 +1,371 @@
+[
+  {
+    "parameters": {
+      "method": "POST",
+      "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/publications",
+      "sendHeaders": true,
+      "headerParameters": {
+        "parameters": [
+          {
+            "name": "apikey",
+            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          },
+          {
+            "name": "Authorization",
+            "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          },
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "name": "Prefer",
+            "value": "return=representation"
+          }
+        ]
+      },
+      "sendBody": true,
+      "specifyBody": "json",
+      "jsonBody": "={\n  \"publication_id\": {{ JSON.stringify($json.Publication_ID) }},\n  \"message_id\": {{ JSON.stringify($json.Message_ID) }},\n  \"horodatage\": {{ JSON.stringify($json.Horodatage) }},\n  \"groupe\": {{ JSON.stringify($json.Groupe) }},\n  \"nom_groupe\": {{ JSON.stringify($json.Nom_Groupe) }},\n  \"expediteur\": {{ JSON.stringify($json.Expediteur) }},\n  \"telephone\": {{ JSON.stringify($json.Telephone) }},\n  \"type\": {{ JSON.stringify($json.Type) }},\n  \"message\": {{ JSON.stringify($json.Message) }},\n  \"lien_image\": {{ JSON.stringify($json.Lien_Image) }},\n  \"message_timestamp\": {{ $json.Timestamp }}\n}",
+      "options": {}
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+      -976,
+      -128
+    ],
+    "id": "11c7ef45-05e5-48a8-93fe-bff82b65f96f",
+    "name": "Supabase PUBLICATION"
+  },
+  {
+    "parameters": {},
+    "type": "n8n-nodes-base.noOp",
+    "typeVersion": 1,
+    "position": [
+      -976,
+      64
+    ],
+    "id": "7c03e041-ef97-435c-a890-4d40c2cad26a",
+    "name": "Image rattachee - Ignorer IA"
+  },
+  {
+    "parameters": {
+      "jsCode": "const items = $input.all(); let pub = null; for (const item of items) { const raw = item.json; if (Array.isArray(raw)) { if (raw.length > 0) { pub = raw[0]; break; } } else if (raw && typeof raw === 'object' && raw.publication_id) { pub = raw; break; } else if (raw && typeof raw === 'object' && raw.message_id) { pub = raw; break; } else if (raw && typeof raw === 'object' && raw.message && raw.expediteur) { pub = raw; break; } else if (raw && typeof raw === 'object' && raw.id && raw.message) { pub = raw; break; } else if (raw && (raw.error || raw.statusCode >= 400)) { continue; } else if (raw && raw.Message !== undefined) { pub = { expediteur: raw.Expediteur || '', groupe: raw.Groupe || '', nom_groupe: raw.Nom_Groupe || '', message: raw.Message || '', telephone: raw.Telephone || '', horodatage: raw.Horodatage || '', type: raw.Type || '', lien_image: raw.Lien_Image || '', message_id: raw.Message_ID || '', publication_id: raw.Publication_ID || '', Timestamp: raw.Timestamp || '' }; break; } } if (!pub || !pub.message) { try { const ext = $('Generer Publication ID').first().json; let lienImage = ''; try { lienImage = $('Construire Donnees Image').first().json.Lien_Image || ''; } catch(e1) { try { lienImage = $('Fallback Image').first().json.Lien_Image || ''; } catch(e2) {} } pub = { expediteur: ext.Expediteur || '', groupe: ext.Groupe || '', nom_groupe: ext.Nom_Groupe || '', message: ext.Message || '[Image sans description]', telephone: ext.Telephone || '', horodatage: ext.Horodatage || '', type: ext.Type || '', lien_image: lienImage, message_id: ext.Message_ID || '', publication_id: ext.Publication_ID || '', Timestamp: ext.Timestamp || '' }; } catch(e) { pub = { expediteur: '', groupe: '', nom_groupe: '', message: '[Donn\u00e9es non extraites]', telephone: '', horodatage: '', type: '', lien_image: '', message_id: 'unknown_' + Date.now(), publication_id: '', Timestamp: '' }; } } if (!pub.nom_groupe) { try { pub.nom_groupe = $('Generer Publication ID').first().json.Nom_Groupe || ''; } catch(e) {} } if (!pub.publication_id) { try { pub.publication_id = $('Generer Publication ID').first().json.Publication_ID || ''; } catch(e) {} } return [{ json: { expediteur: String(pub.expediteur || ''), groupe: String(pub.groupe || ''), nom_groupe: String(pub.nom_groupe || ''), message: String(pub.message || '[Vide]'), telephone: String(pub.telephone || ''), horodatage: String(pub.horodatage || ''), type: String(pub.type || ''), lien_image: String(pub.lien_image || ''), message_id: String(pub.message_id || ''), publication_id: String(pub.publication_id || ''), Timestamp: String(pub.Timestamp || pub.timestamp || '') } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -752,
+      -128
+    ],
+    "id": "88d45752-12c6-4d07-8cbc-3a614d9bc5ca",
+    "name": "Extraire Donnees Publication"
+  },
+  {
+    "parameters": {
+      "modelId": {
+        "__rl": true,
+        "value": "gpt-4.1-mini",
+        "mode": "list",
+        "cachedResultName": "GPT-4.1-MINI"
+      },
+      "responses": {
+        "values": [
+          {
+            "role": "system",
+            "content": "Tu es un assistant expert en immobilier ivoirien qui extrait des informations structur\u00e9es \u00e0 partir de publications post\u00e9es dans des groupes WhatsApp.\n\n# R\u00c8GLES D'EXTRACTION G\u00c9OGRAPHIQUE\n1. Zone g\u00e9ographique pr\u00e9cise : Recopie EXACTEMENT la localisation compl\u00e8te\n2. Commune : Extrais UNIQUEMENT le nom de la commune. Communes connues d'Abidjan : Cocody, Yopougon, Marcory, Koumassi, Treichville, Plateau, Adjam\u00e9, Abobo, Att\u00e9coub\u00e9, Port-Bou\u00ebt, Bingerville, Songon, Anyama.\n3. Quartier : Extrais le quartier ou sous-quartier.\n\n# R\u00c8GLES DE PRIX\nConvertis le prix en NOMBRE ENTIER UNIQUEMENT. Pas de FCFA, F, CFA.\nSi pas mentionn\u00e9, laisse vide \"\".\n\n# OUTPUT (JSON UNIQUEMENT)\n{\n  \"type_de_bien\": \"\",\n  \"type_offre\": \"Location/Vente\",\n  \"zone_geographique\": \"\",\n  \"commune\": \"\",\n  \"quartier\": \"\",\n  \"prix\": \"\",\n  \"telephone\": \"\",\n  \"caracteristiques\": \"\",\n  \"publie_par\": \"\",\n  \"meubles\": \"Oui/Non\",\n  \"chambre\": \"\",\n  \"disponible\": \"Oui/Non\"\n}\n\n# R\u00c8GLES STRICTES\n- Ne JAMAIS inventer de donn\u00e9es.\n- Pour \"disponible\", mets \"Oui\" sauf si explicitement pris.\n- Si le message contient '[Image sans description]', '[Vocal inaudible]', '[Document:', '[Contact partag\u00e9:', ou '[Localisation:', retourne JSON avec champs vides sauf disponible: \"Non\".\n- Donne UNIQUEMENT le JSON en output."
+          },
+          {
+            "content": "=Publication de {{ $json.expediteur }} dans le groupe {{ $json.nom_groupe || $json.groupe }}\n\nContenu du message : {{ $json.message }}\n\nContact du publieur : {{ $json.telephone }}"
+          }
+        ]
+      },
+      "builtInTools": {},
+      "options": {
+        "textFormat": {
+          "textOptions": {
+            "type": "json_object"
+          }
+        },
+        "temperature": 0
+      }
+    },
+    "type": "@n8n/n8n-nodes-langchain.openAi",
+    "typeVersion": 2.1,
+    "position": [
+      -528,
+      -128
+    ],
+    "id": "efa7540f-87c4-4a90-a06f-9202cd00da2e",
+    "name": "Analyse IA Immobilier",
+    "credentials": {
+      "openAiApi": {
+        "id": "toKKNKCxt5GPmAor",
+        "name": "API Agent Immo"
+      }
+    }
+  },
+  {
+    "parameters": {
+      "jsCode": "const data = $input.first().json; let rawAI; try { let output = data.output; if (!output && data.message) { if (typeof data.message === 'object' && data.message.content) output = data.message.content; else output = data.message; } if (!output && data.content) output = data.content; if (!output && data.text) output = data.text; if (!output && data.type_de_bien !== undefined) rawAI = data; else if (Array.isArray(output)) { const firstItem = output[0]; if (firstItem && firstItem.content && Array.isArray(firstItem.content)) { const textContent = firstItem.content.find(c => c.type === 'text'); rawAI = textContent ? (typeof textContent.text === 'string' ? JSON.parse(textContent.text) : textContent.text) : (typeof firstItem.content[0].text === 'string' ? JSON.parse(firstItem.content[0].text) : firstItem.content[0].text); } else if (firstItem && firstItem.text) { rawAI = typeof firstItem.text === 'string' ? JSON.parse(firstItem.text) : firstItem.text; } else if (typeof firstItem === 'string') { rawAI = JSON.parse(firstItem); } else if (firstItem && typeof firstItem === 'object') { rawAI = firstItem; } } else if (typeof output === 'string') { const cleaned = output.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim(); const jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/); rawAI = JSON.parse(jsonMatch ? jsonMatch[0] : cleaned); } else if (typeof output === 'object' && output !== null) { if (output.type_de_bien !== undefined) rawAI = output; else { for (const k of Object.keys(output)) { if (typeof output[k] === 'object' && output[k] && output[k].type_de_bien !== undefined) { rawAI = output[k]; break; } } if (!rawAI) rawAI = output; } } else { throw new Error('Format inattendu'); } } catch(e) { rawAI = data; } if (!rawAI || typeof rawAI !== 'object') rawAI = {}; function normalizePrix(prixStr) { if (!prixStr) return ''; if (typeof prixStr === 'number') return Math.round(prixStr).toString(); let s = String(prixStr).trim(); if (!s) return ''; s = s.replace(/f\\s*cfa|fcfa|fCFA|FCFA|cfa|CFA|francs?|franc|F\\b/gi, '').trim(); s = s.replace(/par\\s*mois|\\/mois|\\/m|mensuel|mois/gi, '').trim(); s = s.replace(/\\s+/g, ' ').trim(); const millionMatch = s.match(/([\\d]+[.,]?[\\d]*)\\s*(?:millions?|M)/i); if (millionMatch) { const num = parseFloat(millionMatch[1].replace(',', '.')); if (!isNaN(num)) return Math.round(num * 1000000).toString(); } const kMatch = s.match(/([\\d]+[.,]?[\\d]*)\\s*[kK]/i); if (kMatch) { const num = parseFloat(kMatch[1].replace(',', '.')); if (!isNaN(num)) return Math.round(num * 1000).toString(); } const numOnly = s.replace(/[^\\d]/g, ''); if (numOnly && numOnly.length >= 3) { const parsed = parseInt(numOnly, 10); if (!isNaN(parsed) && parsed > 0) return parsed.toString(); } return ''; } return [{ json: { ...rawAI, prix: normalizePrix(rawAI.prix || ''), _prix_original: rawAI.prix || '' } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -176,
+      -128
+    ],
+    "id": "0a134868-f3f3-4ae0-92a2-f6e3e52b0b3a",
+    "name": "Normaliser Prix"
+  },
+  {
+    "parameters": {
+      "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux?select=*",
+      "sendHeaders": true,
+      "headerParameters": {
+        "parameters": [
+          {
+            "name": "apikey",
+            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          },
+          {
+            "name": "Authorization",
+            "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          }
+        ]
+      },
+      "options": {}
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+      48,
+      -128
+    ],
+    "id": "be241e15-a8e0-4976-af5b-1174fe37c7eb",
+    "name": "Lecture Locaux"
+  },
+  {
+    "parameters": {
+      "jsCode": "const rawAI = $('Normaliser Prix').first().json; let sourceData; try { sourceData = $('Extraire Donnees Publication').first().json || {}; } catch(e) { sourceData = {}; } const newLocal = rawAI; if (!newLocal || typeof newLocal !== 'object') { return [{ json: { _is_duplicate: false, _skip: true, _reason: 'newLocal null' } }]; } const hasContent = (newLocal.type_de_bien || '').trim() !== '' || (newLocal.commune || '').trim() !== '' || (newLocal.prix || '').trim() !== '' || (newLocal.zone_geographique || '').trim() !== '' || (newLocal.quartier || '').trim() !== '' || (newLocal.caracteristiques || '').trim() !== ''; if (!hasContent) { return [{ json: { ...newLocal, _is_duplicate: false, _skip: true, _reason: 'Aucune info' } }]; } function normalize(str) { if (!str) return ''; return String(str).toLowerCase().trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[\\s\\-.,;:\\/\\\\]+/g, ' ').replace(/\\s+/g, ' ').replace(/fcfa|f cfa|cfa|francs?/gi, '').replace(/[^a-z0-9\\s]/g, '').trim(); } function extractNumbers(str) { if (!str) return ''; return String(str).replace(/[^0-9]/g, ''); } function generateRefBien() { const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let code = ''; for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length)); return 'BG-' + code; } let existingItems = []; try { const rawItems = $('Lecture Locaux').all(); for (const item of rawItems) { const data = item.json; if (Array.isArray(data)) { existingItems = existingItems.concat(data.filter(d => d && d.id)); } else if (data && data.id) { existingItems.push(data); } } } catch(e) { existingItems = []; } const existingRefs = new Set(existingItems.map(r => r.ref_bien).filter(Boolean)); let refBien = generateRefBien(); let attempts = 0; while (existingRefs.has(refBien) && attempts < 100) { refBien = generateRefBien(); attempts++; } if (existingItems.length === 0) { return [{ json: { ...newLocal, _is_duplicate: false, _match_score: 0, _matched_with: null, _source_groupe: sourceData.groupe || '', _source_nom_groupe: sourceData.nom_groupe || '', _source_timestamp: sourceData.Timestamp || '', _source_lien_image: sourceData.lien_image || '', _source_message_initial: sourceData.message || '', _source_publication_id: sourceData.publication_id || '', _ref_bien: refBien } }]; } const nT=normalize(newLocal.type_de_bien||''), nZ=normalize(newLocal.zone_geographique||''), nC=normalize(newLocal.commune||''), nQ=normalize(newLocal.quartier||''), nP=extractNumbers(newLocal.prix||''), nCh=extractNumbers(newLocal.chambre||''), nM=normalize(newLocal.meubles||''); let isDup=false, mScore=0, mRow=null; for (const row of existingItems) { if (!row || !row.type_de_bien) continue; let s=0, mx=0; mx+=3; const eT=normalize(row.type_de_bien||''); if(eT&&nT){if(eT===nT)s+=3;else if(eT.includes(nT)||nT.includes(eT))s+=2;} mx+=2; const eC=normalize(row.commune||''); if(eC&&nC){if(eC===nC)s+=2;else if(eC.includes(nC)||nC.includes(eC))s+=1;} mx+=2; const eQ=normalize(row.quartier||''); if(eQ&&nQ){if(eQ===nQ)s+=2;else if(eQ.includes(nQ)||nQ.includes(eC))s+=1;} mx+=2; const eZ=normalize(row.zone_geographique||''); if(eZ&&nZ){if(eZ===nZ)s+=2;else{const w1=eZ.split(' ').filter(w=>w.length>2),w2=nZ.split(' ').filter(w=>w.length>2);const c=w1.filter(w=>w2.includes(w));const o=c.length/Math.max(w1.length,w2.length,1);if(o>=0.6)s+=1.5;else if(o>=0.3)s+=0.5;}} mx+=2; const eP=extractNumbers(row.prix||''); if(eP&&nP){if(eP===nP)s+=2;else{const p1=parseInt(eP)||0,p2=parseInt(nP)||0;if(p1>0&&p2>0){const d=Math.abs(p1-p2)/Math.max(p1,p2);if(d<=0.1)s+=1.5;else if(d<=0.2)s+=1;}}} mx+=1.5; const eCh=extractNumbers(row.chambre||''); if(eCh&&nCh){if(eCh===nCh)s+=1.5;}else if(!eCh&&!nCh)s+=0.5; mx+=0.5; const eM=normalize(row.meubles||''); if(eM&&nM&&eM===nM)s+=0.5; const sim=mx>0?(s/mx)*100:0; if(sim>=75&&sim>mScore){isDup=true;mScore=sim;mRow=row;} } return [{ json: { ...newLocal, _is_duplicate: isDup, _match_score: mScore, _matched_with: mRow?`${mRow.type_de_bien} - ${mRow.commune} ${mRow.quartier} - ${mRow.prix}`:null, _source_groupe: sourceData.groupe||'', _source_nom_groupe: sourceData.nom_groupe||'', _source_timestamp: sourceData.Timestamp||'', _source_lien_image: sourceData.lien_image||'', _source_message_initial: sourceData.message||'', _source_publication_id: sourceData.publication_id||'', _ref_bien: refBien } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      272,
+      -128
+    ],
+    "id": "a536ff46-de40-4279-9797-ad93d815c5a9",
+    "name": "Detecteur Doublons Locaux"
+  },
+  {
+    "parameters": {
+      "conditions": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "strict",
+          "version": 3
+        },
+        "conditions": [
+          {
+            "id": "check-doublon",
+            "leftValue": "={{ $json._is_duplicate }}",
+            "rightValue": true,
+            "operator": {
+              "type": "boolean",
+              "operation": "equals"
+            }
+          }
+        ],
+        "combinator": "and"
+      },
+      "options": {}
+    },
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2.3,
+    "position": [
+      496,
+      -128
+    ],
+    "id": "49822806-190f-4655-bcd0-51e03f5cceab",
+    "name": "Doublon detecte?"
+  },
+  {
+    "parameters": {},
+    "type": "n8n-nodes-base.noOp",
+    "typeVersion": 1,
+    "position": [
+      720,
+      -224
+    ],
+    "id": "6145ff42-4a1f-4a36-9730-ac07a9313d1a",
+    "name": "Doublon - Ignorer"
+  },
+  {
+    "parameters": {
+      "conditions": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "loose",
+          "version": 3
+        },
+        "conditions": [
+          {
+            "id": "check-skip",
+            "leftValue": "={{ $json._skip }}",
+            "rightValue": true,
+            "operator": {
+              "type": "boolean",
+              "operation": "notEquals"
+            }
+          }
+        ],
+        "combinator": "and"
+      },
+      "options": {}
+    },
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2.3,
+    "position": [
+      720,
+      -32
+    ],
+    "id": "a4d13a4e-01ba-4e74-9379-85cc28662ca4",
+    "name": "Donnees valides?"
+  },
+  {
+    "parameters": {
+      "method": "POST",
+      "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux",
+      "sendHeaders": true,
+      "headerParameters": {
+        "parameters": [
+          {
+            "name": "apikey",
+            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          },
+          {
+            "name": "Authorization",
+            "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          },
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "name": "Prefer",
+            "value": "return=representation"
+          }
+        ]
+      },
+      "sendBody": true,
+      "specifyBody": "json",
+      "jsonBody": "={\n  \"ref_bien\": {{ JSON.stringify($json._ref_bien || '') }},\n  \"type_de_bien\": {{ JSON.stringify($json.type_de_bien || '') }},\n  \"type_offre\": {{ JSON.stringify($json.type_offre || '') }},\n  \"zone_geographique\": {{ JSON.stringify($json.zone_geographique || '') }},\n  \"commune\": {{ JSON.stringify($json.commune || '') }},\n  \"quartier\": {{ JSON.stringify($json.quartier || '') }},\n  \"prix\": {{ JSON.stringify($json.prix || '') }},\n  \"telephone\": {{ JSON.stringify($json.telephone || '') }},\n  \"caracteristiques\": {{ JSON.stringify($json.caracteristiques || '') }},\n  \"publie_par\": {{ JSON.stringify($json.publie_par || '') }},\n  \"meubles\": {{ JSON.stringify($json.meubles || 'Non') }},\n  \"chambre\": {{ JSON.stringify($json.chambre || '') }},\n  \"disponible\": {{ JSON.stringify($json.disponible || 'Oui') }},\n  \"groupe_whatsapp_origine\": {{ JSON.stringify($json._source_nom_groupe || $json._source_groupe || '') }},\n  \"date_publication\": {{ JSON.stringify($json._source_timestamp ? new Date(Number($json._source_timestamp) * 1000).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleDateString('fr-FR')) }},\n  \"lien_image\": {{ JSON.stringify($json._source_lien_image || '') }},\n  \"message_initial\": {{ JSON.stringify($json._source_message_initial || '') }},\n  \"publication_id\": {{ JSON.stringify($json._source_publication_id || '') }}\n}",
+      "options": {}
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+      944,
+      -128
+    ],
+    "id": "8c1a849e-1f65-41da-9880-3d7fe140e01a",
+    "name": "Sauvegarder Local"
+  },
+  {
+    "parameters": {},
+    "type": "n8n-nodes-base.noOp",
+    "typeVersion": 1,
+    "position": [
+      944,
+      64
+    ],
+    "id": "b62cf047-909c-41e0-b0b0-b5849b9ddf4c",
+    "name": "Donnees vides - Ignorer"
+  },
+  {
+    "parameters": {
+      "conditions": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "loose",
+          "version": 1
+        },
+        "conditions": [
+          {
+            "id": "condition-fromme",
+            "leftValue": "={{ $json.fromMe }}",
+            "rightValue": true,
+            "operator": {
+              "type": "boolean",
+              "operation": "equals"
+            }
+          }
+        ],
+        "combinator": "and"
+      },
+      "options": {
+        "looseTypeValidation": true
+      }
+    },
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2,
+    "position": [
+      -6272,
+      428
+    ],
+    "id": "426c13a7-038b-4c20-8f9d-342e16c0aa03",
+    "name": "Message Sortant?1"
+  },
+  {
+    "parameters": {},
+    "type": "n8n-nodes-base.noOp",
+    "typeVersion": 1,
+    "position": [
+      -6048,
+      332
+    ],
+    "id": "dabfaf05-5ee1-465e-8f37-ac746cc8e3a6",
+    "name": "Ignorer (sortant)1"
+  },
+  {
+    "parameters": {
+      "conditions": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "loose",
+          "version": 1
+        },
+        "conditions": [
+          {
+            "id": "condition-audio",
+            "leftValue": "={{ $json.message.audioMessage }}",
+            "rightValue": "",
+            "operator": {
+              "type": "string",
+              "operation": "exists",
+              "singleValue": true
+            }
+          }
+        ],
+        "combinator": "and"
+      },
+      "options": {
+        "looseTypeValidation": true
+      }
+    },
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2,
+    "position": [
+      -6048,
+      524
+    ],
+    "id": "b8b32b19-edac-4b7a-bf13-28f7049a50b5",
+    "name": "Audio ou Texte?1"
+  }
+]
