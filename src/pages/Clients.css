@@ -70,7 +70,7 @@
     /* Reduced padding (compact form) */
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 1.25rem;
     box-shadow: var(--shadow-sm);
     transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
 }
@@ -82,19 +82,20 @@
 }
 
 .kpi-icon {
-    width: 42px;
-    /* Reduced shape size */
-    height: 42px;
+    width: 48px;
+    height: 48px;
     border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.25rem;
+    font-size: 1.5rem;
+    flex-shrink: 0;
 }
 
 .kpi-content {
     display: flex;
     flex-direction: column;
+    gap: 0.25rem;
 }
 
 .kpi-label {
