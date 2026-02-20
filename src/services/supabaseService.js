@@ -48,6 +48,45 @@ class SupabaseService {
 
     // === HELPERS ===
 
+    _getErrorMessage(error) {
+        if (!error) return 'Une erreur inconnue s\'est produite';
+
+        const message = error.message || error.toString();
+
+        // Network/Connection errors
+        if (message.includes('Failed to fetch') || message.includes('NetworkError')) {
+            return 'Erreur de connexion. Vérifiez votre internet.';
+        }
+
+        // Timeout
+        if (message.includes('timeout')) {
+            return 'Temps d\'attente dépassé. Le serveur ne répond pas.';
+        }
+
+        // Auth errors
+        if (message.includes('401') || message.includes('Unauthorized')) {
+            return 'Authentification échouée. Veuillez vous reconnecter.';
+        }
+
+        // Permission errors
+        if (message.includes('403') || message.includes('Forbidden')) {
+            return 'Accès refusé. Vous n\'avez pas les permissions.';
+        }
+
+        // Not found
+        if (message.includes('404') || message.includes('Not found')) {
+            return 'Ressource non trouvée.';
+        }
+
+        // Server errors
+        if (message.includes('500') || message.includes('Server')) {
+            return 'Erreur serveur. Veuillez réessayer plus tard.';
+        }
+
+        // Default: use original message if it's meaningful
+        return message.length > 100 ? 'Une erreur est survenue. Veuillez réessayer.' : message;
+    }
+
     parsePrice(amount) {
         if (!amount) return 0;
         let str = String(amount).replace(/FCFA|CFA|F/gi, '').trim();
@@ -225,7 +264,8 @@ class SupabaseService {
             return { success: true, data: [...publications, ...locauxDemandes], source: 'supabase' };
         } catch (error) {
             console.error('Supabase Requests Error:', error);
-            return { success: false, error: error.message, data: [] };
+            const errorMessage = this._getErrorMessage(error);
+            return { success: false, error: errorMessage, data: [] };
         }
     }
 
@@ -331,7 +371,8 @@ class SupabaseService {
             return result;
         } catch (error) {
             console.error('Supabase Properties Error:', error);
-            return { success: false, error: error.message, data: [] };
+            const errorMessage = this._getErrorMessage(error);
+            return { success: false, error: errorMessage, data: [] };
         }
     }
 
@@ -442,7 +483,8 @@ class SupabaseService {
             return result;
         } catch (error) {
             console.error('Supabase Visits Error:', error);
-            return { success: false, error: error.message, data: [] };
+            const errorMessage = this._getErrorMessage(error);
+            return { success: false, error: errorMessage, data: [] };
         }
     }
 
@@ -520,7 +562,8 @@ class SupabaseService {
 
         } catch (error) {
             console.error('Supabase Stats Error:', error);
-            return { success: false, error: error.message };
+            const errorMessage = this._getErrorMessage(error);
+            return { success: false, error: errorMessage };
         }
     }
 
@@ -627,7 +670,9 @@ class SupabaseService {
             return { success: true, data: clients };
 
         } catch (error) {
-            return { success: false, error: error.message, data: [] };
+            console.error('Supabase Clients Error:', error);
+            const errorMessage = this._getErrorMessage(error);
+            return { success: false, error: errorMessage, data: [] };
         }
     }
 

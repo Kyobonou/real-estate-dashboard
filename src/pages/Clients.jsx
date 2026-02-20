@@ -462,10 +462,34 @@ const Clients = () => {
             const response = await apiService.getClients(force);
             if (response.success) {
                 setClients(response.data);
+                if (force && response.data.length > 0) {
+                    addToast({
+                        type: 'success',
+                        title: '✅ Données actualisées',
+                        message: `${response.data.length} client${response.data.length !== 1 ? 's' : ''} chargé${response.data.length !== 1 ? 's' : ''}`
+                    });
+                }
+            } else {
+                // Handle API error response
+                const errorMsg = response.error || 'Impossible de charger les clients';
+                console.error('Clients API Error:', errorMsg);
+                addToast({
+                    type: 'error',
+                    title: '⚠️ Erreur de chargement',
+                    message: errorMsg === 'NetworkError'
+                        ? 'Vérifiez votre connexion internet'
+                        : errorMsg.includes('timeout')
+                        ? 'Le serveur met trop de temps. Réessayez.'
+                        : errorMsg
+                });
             }
         } catch (error) {
             console.error('Error loading clients:', error);
-            addToast({ type: 'error', title: 'Erreur', message: 'Impossible de charger les clients' });
+            addToast({
+                type: 'error',
+                title: '❌ Erreur système',
+                message: 'Une erreur inattendue s\'est produite. Veuillez réessayer.'
+            });
         } finally {
             setLoading(false);
             if (force) setRefreshing(false);

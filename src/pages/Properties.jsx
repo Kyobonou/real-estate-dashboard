@@ -643,12 +643,33 @@ const Properties = () => {
                 setProperties(response.data);
                 geocodePropertiesAsync(response.data);
                 if (forceRefresh) {
-                    addToast({ type: 'success', title: 'Données actualisées', message: `${response.data.length} biens chargés` });
+                    addToast({
+                        type: 'success',
+                        title: '✅ Données actualisées',
+                        message: `${response.data.length} bien${response.data.length !== 1 ? 's' : ''} chargé${response.data.length !== 1 ? 's' : ''}`
+                    });
                 }
+            } else {
+                // Handle API error response
+                const errorMsg = response.error || 'Impossible de charger les propriétés';
+                console.error('Properties API Error:', errorMsg);
+                addToast({
+                    type: 'error',
+                    title: '⚠️ Erreur de chargement',
+                    message: errorMsg === 'NetworkError'
+                        ? 'Vérifiez votre connexion internet'
+                        : errorMsg.includes('timeout')
+                        ? 'Le serveur met trop de temps. Réessayez.'
+                        : errorMsg
+                });
             }
         } catch (error) {
             console.error('Error loading properties:', error);
-            addToast({ type: 'error', title: 'Erreur', message: 'Impossible de charger les propriétés' });
+            addToast({
+                type: 'error',
+                title: '❌ Erreur système',
+                message: 'Une erreur inattendue s\'est produite. Veuillez réessayer.'
+            });
         } finally {
             setLoading(false);
             setRefreshing(false);
