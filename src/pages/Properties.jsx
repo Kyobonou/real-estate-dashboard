@@ -4,7 +4,7 @@ import {
     MapPin, Tag, Grid, List, Search, Filter, X, Phone, Eye,
     Download, Share2, Home, Key, Loader, Bed, Building, Map,
     ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Images,
-    User, MessageSquare, Copy, Check
+    User, MessageSquare, Copy, Check, RefreshCw
 } from 'lucide-react';
 import * as XLSX from 'xlsx'; // Import bibliothèque Excel
 import apiService from '../services/api';
@@ -600,9 +600,9 @@ const Properties = () => {
         minPrice: '',
         maxPrice: '',
         status: 'all',
-        meuble: 'all',
-        photoTexte: false
+        meuble: 'all'
     });
+    const [refreshing, setRefreshing] = useState(false);
 
     useEffect(() => {
         loadProperties();
@@ -635,19 +635,29 @@ const Properties = () => {
         }
     };
 
-    const loadProperties = async () => {
+    const loadProperties = async (forceRefresh = false) => {
         try {
-            const response = await apiService.getProperties();
+            const response = await apiService.getProperties(forceRefresh);
             if (response.success) {
                 setProperties(response.data);
                 geocodePropertiesAsync(response.data);
+                if (forceRefresh) {
+                    addToast({ type: 'success', title: 'Données actualisées', message: `${response.data.length} biens chargés` });
+                }
             }
         } catch (error) {
             console.error('Error loading properties:', error);
+            addToast({ type: 'error', title: 'Erreur', message: 'Impossible de charger les propriétés' });
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
     };
+
+    const handleRefresh = useCallback(async () => {
+        setRefreshing(true);
+        await loadProperties(true);
+    }, []);
 
     // Fonction de tri
     const handleSort = (key) => {
@@ -724,10 +734,7 @@ const Properties = () => {
             if (filters.minPrice && property.rawPrice < parseFloat(filters.minPrice)) matchesPrice = false;
             if (filters.maxPrice && property.rawPrice > parseFloat(filters.maxPrice)) matchesPrice = false;
 
-            const matchesPhotoTexte = !filters.photoTexte ||
-                (property.photoCount > 0 && property.description && property.description.length > 0);
-
-            return matchesSearch && matchesType && matchesStatus && matchesMeuble && matchesPieces && matchesCommune && matchesQuartier && matchesPrice && matchesPhotoTexte;
+            return matchesSearch && matchesType && matchesStatus && matchesMeuble && matchesPieces && matchesCommune && matchesQuartier && matchesPrice;
         });
 
         // Appliquer le tri
@@ -856,9 +863,10 @@ const Properties = () => {
     }, [filteredProperties, addToast]);
 
     const resetFilters = useCallback(() => {
-        setFilters({ type: 'all', status: 'all', meuble: 'all', pieces: 'all', commune: 'all', quartier: 'all', photoTexte: false });
+        setFilters({ type: 'all', status: 'all', meuble: 'all', pieces: 'all', commune: 'all', quartier: 'all', minPrice: '', maxPrice: '' });
         setSearchTerm('');
-    }, []);
+        addToast({ type: 'info', title: 'Filtres réinitialisés', message: 'Tous les biens sont maintenant affichés' });
+    }, [addToast]);
 
     if (loading) {
         return <PropertiesSkeleton viewMode={viewMode} />;
@@ -903,19 +911,14 @@ const Properties = () => {
                     </div>
 
                     <button
-                        onClick={() => setFilters(f => ({ ...f, photoTexte: !f.photoTexte }))}
-                        style={{
-                            padding: '8px 14px', borderRadius: 10, border: 'none', cursor: 'pointer',
-                            fontWeight: 700, fontSize: '0.8rem', whiteSpace: 'nowrap',
-                            background: filters.photoTexte ? 'linear-gradient(90deg,#d97706,#f59e0b)' : 'var(--bg-secondary)',
-                            color: filters.photoTexte ? '#fff' : 'var(--text-secondary)',
-                            boxShadow: filters.photoTexte ? '0 2px 8px rgba(217,119,6,0.4)' : 'none',
-                            border: filters.photoTexte ? 'none' : '1px solid var(--border-color)',
-                            transition: 'all 0.2s'
-                        }}
-                        title="Afficher uniquement les biens avec photos ET message"
+                        onClick={handleRefresh}
+                        disabled={refreshing}
+                        className="btn btn-secondary"
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                        title="Rafraîchir les données depuis la base de données"
                     >
-                        📸 Photo + Texte
+                        <RefreshCw size={18} style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+                        {refreshing ? 'Chargement...' : 'Rafraîchir'}
                     </button>
 
                     <button
