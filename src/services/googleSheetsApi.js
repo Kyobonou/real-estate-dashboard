@@ -280,7 +280,7 @@ class GoogleSheetsService {
             datePublication: raw['Date de publication'] || '',
             // Champs calculés pour l'affichage
             status: isAvailable ? 'Disponible' : 'Occupé',
-            prixFormate: rawPrice > 0 ? this.formatPrice(rawPrice) : priceStr,
+            prixFormate: rawPrice > 0 ? this.formatPrice(rawPrice, raw['Message'] || raw['Description'] || caracStr) : priceStr,
         };
     }
 
@@ -334,10 +334,17 @@ class GoogleSheetsService {
         return isNaN(num) ? 0 : Math.floor(num);
     }
 
-    formatPrice(amount) {
+    formatPrice(amount, messageText = '') {
         if (!amount) return '0';
         const num = typeof amount === 'number' ? amount : this.parsePrice(amount);
-        return num.toLocaleString('fr-FR');
+        const formatted = num.toLocaleString('fr-FR');
+
+        // Check if "m²" is in the message text
+        if (messageText && messageText.toLowerCase().includes('m²')) {
+            return `${formatted} FCFA/m²`;
+        }
+
+        return formatted;
     }
 
     parseDate(dateStr) {
@@ -430,7 +437,7 @@ class GoogleSheetsService {
             imageUrl: imageUrl,
             // Champs calculés
             status: isAvailable ? 'Disponible' : 'Occupé',
-            prixFormate: rawPrice > 0 ? this.formatPrice(rawPrice) : priceStr,
+            prixFormate: rawPrice > 0 ? this.formatPrice(rawPrice, raw['Message'] || raw['Description'] || caracStr) : priceStr,
         };
     }
 

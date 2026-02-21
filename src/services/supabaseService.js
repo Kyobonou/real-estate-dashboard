@@ -118,13 +118,13 @@ class SupabaseService {
         return isNaN(num) ? 0 : Math.floor(num);
     }
 
-    formatPrice(amount, caracteristiques = '') {
+    formatPrice(amount, messageText = '') {
         if (!amount) return '0';
         const num = typeof amount === 'number' ? amount : this.parsePrice(amount);
         const formatted = num.toLocaleString('fr-FR');
 
-        // Check if "m²" is in the characteristics
-        if (caracteristiques && caracteristiques.toLowerCase().includes('m²')) {
+        // Check if "m²" is in the message text
+        if (messageText && messageText.toLowerCase().includes('m²')) {
             return `${formatted} FCFA/m²`;
         }
 
@@ -337,7 +337,7 @@ class SupabaseService {
                     datePublication: this.formatDateShort(p.date_publication),
                     shares: (() => { try { return p.shares ? (typeof p.shares === 'string' ? JSON.parse(p.shares) : p.shares) : []; } catch { return []; } })(),
                     status: isDispo ? 'Disponible' : 'Occupé',
-                    prixFormate: this.formatPrice(rawPrice, p.caracteristiques)
+                    prixFormate: this.formatPrice(rawPrice, p.message_initial || p.caracteristiques)
                 };
             });
 
@@ -442,7 +442,7 @@ class SupabaseService {
                     commune: data.commune || '',
                     quartier: data.quartier || '',
                     prix: data.prix || '',
-                    prixFormate: this.formatPrice(data.prix, data.caracteristiques),
+                    prixFormate: this.formatPrice(data.prix, data.message_initial || data.caracteristiques),
                     telephoneBien: data.telephone_bien || data.telephone || '',
                     telephoneExpediteur: data.telephone_expediteur || data.telephone || '',
                     expediteur: data.expediteur || data.publie_par || '',
