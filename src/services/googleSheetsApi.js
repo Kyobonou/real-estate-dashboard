@@ -280,7 +280,7 @@ class GoogleSheetsService {
             datePublication: raw['Date de publication'] || '',
             // Champs calculés pour l'affichage
             status: isAvailable ? 'Disponible' : 'Occupé',
-            prixFormate: rawPrice > 0 ? this.formatPrice(rawPrice) : priceStr,
+            prixFormate: rawPrice > 0 ? this.formatPrice(rawPrice, raw['Type de bien']) : priceStr,
         };
     }
 
@@ -334,10 +334,20 @@ class GoogleSheetsService {
         return isNaN(num) ? 0 : Math.floor(num);
     }
 
-    formatPrice(amount) {
+    formatPrice(amount, propertyType = null) {
         if (!amount) return '0';
         const num = typeof amount === 'number' ? amount : this.parsePrice(amount);
-        return num.toLocaleString('fr-FR');
+        const formatted = num.toLocaleString('fr-FR');
+
+        // Add "m²" suffix for terrain (land)
+        if (propertyType) {
+            const normalizedType = this.normalizePropertyType(propertyType);
+            if (normalizedType === 'Terrain') {
+                return `${formatted} FCFA/m²`;
+            }
+        }
+
+        return formatted;
     }
 
     parseDate(dateStr) {
@@ -430,7 +440,7 @@ class GoogleSheetsService {
             imageUrl: imageUrl,
             // Champs calculés
             status: isAvailable ? 'Disponible' : 'Occupé',
-            prixFormate: rawPrice > 0 ? this.formatPrice(rawPrice) : priceStr,
+            prixFormate: rawPrice > 0 ? this.formatPrice(rawPrice, raw['Type_de_bien'] || raw['Type de bien']) : priceStr,
         };
     }
 

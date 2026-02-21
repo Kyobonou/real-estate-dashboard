@@ -83,8 +83,8 @@ class ApiService {
     }
 
     // Utility
-    formatPrice(amount) {
-        return this.sheetsApi.formatPrice(amount);
+    formatPrice(amount, propertyType = null) {
+        return this.sheetsApi.formatPrice(amount, propertyType);
     }
 }
 

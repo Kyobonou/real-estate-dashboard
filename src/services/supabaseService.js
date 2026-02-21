@@ -117,10 +117,20 @@ class SupabaseService {
         return isNaN(num) ? 0 : Math.floor(num);
     }
 
-    formatPrice(amount) {
+    formatPrice(amount, propertyType = null) {
         if (!amount) return '0';
         const num = typeof amount === 'number' ? amount : this.parsePrice(amount);
-        return num.toLocaleString('fr-FR');
+        const formatted = num.toLocaleString('fr-FR');
+
+        // Add "m²" suffix for terrain (land)
+        if (propertyType) {
+            const normalizedType = this.normalizePropertyType(propertyType);
+            if (normalizedType === 'Terrain') {
+                return `${formatted} FCFA/m²`;
+            }
+        }
+
+        return formatted;
     }
 
     formatDateShort(raw) {
@@ -321,7 +331,7 @@ class SupabaseService {
                     datePublication: this.formatDateShort(p.date_publication),
                     shares: (() => { try { return p.shares ? (typeof p.shares === 'string' ? JSON.parse(p.shares) : p.shares) : []; } catch { return []; } })(),
                     status: isDispo ? 'Disponible' : 'Occupé',
-                    prixFormate: this.formatPrice(rawPrice)
+                    prixFormate: this.formatPrice(rawPrice, p.type_de_bien)
                 };
             });
 
@@ -423,7 +433,7 @@ class SupabaseService {
                     commune: data.commune || '',
                     quartier: data.quartier || '',
                     prix: data.prix || '',
-                    prixFormate: this.formatPrice(data.prix),
+                    prixFormate: this.formatPrice(data.prix, data.type_de_bien),
                     telephoneBien: data.telephone_bien || data.telephone || '',
                     telephoneExpediteur: data.telephone_expediteur || data.telephone || '',
                     expediteur: data.expediteur || data.publie_par || '',
