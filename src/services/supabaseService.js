@@ -123,9 +123,12 @@ class SupabaseService {
         const num = typeof amount === 'number' ? amount : this.parsePrice(amount);
         const formatted = num.toLocaleString('fr-FR');
 
-        // Check if "m²" is in the message text
-        if (messageText && messageText.toLowerCase().includes('m²')) {
-            return `${formatted} FCFA/m²`;
+        // Check if "m²" or "m2" is in the message text
+        if (messageText) {
+            const lowerMsg = messageText.toLowerCase();
+            if (lowerMsg.includes('m²') || lowerMsg.includes('m2')) {
+                return `${formatted} FCFA/m²`;
+            }
         }
 
         return formatted;
