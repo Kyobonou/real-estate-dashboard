@@ -319,8 +319,7 @@ const RequestsPage = () => {
                 text.includes(term) ||
                 (req.expediteur || '').toLowerCase().includes(term) ||
                 (req.telephone || '').includes(term) ||
-                (req.groupName || '').toLowerCase().includes(term) ||
-                (req.nom_groupe || '').toLowerCase().includes(term);
+                (req.groupName || req.nom_groupe || '').toLowerCase().includes(term);
 
             if (!matchesSearch) return false;
             if (subFilter === 'urgent') return text.includes('urgent') || text.includes('asap') || text.includes('urgence');

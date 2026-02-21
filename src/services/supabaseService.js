@@ -31,23 +31,6 @@ class SupabaseService {
         // In-memory cache with 90s TTL — avoids duplicate Supabase calls across pages
         this._cache = {};
         this._cacheTTL = 90000;
-
-        // Initialize WhatsApp group cache on background (non-blocking)
-        this._initializeGroups();
-    }
-
-    /**
-     * Initialize WhatsApp group cache from publications
-     * Runs asynchronously on startup
-     */
-    async _initializeGroups() {
-        try {
-            await whatsappGroupService.syncFromPublications();
-            console.log('WhatsApp group cache initialized');
-        } catch (err) {
-            console.warn('Error initializing WhatsApp group cache:', err.message);
-            // Non-blocking - app still works even if this fails
-        }
     }
 
     _getCached(key) {
@@ -135,17 +118,14 @@ class SupabaseService {
         return isNaN(num) ? 0 : Math.floor(num);
     }
 
-    formatPrice(amount, propertyType = null) {
+    formatPrice(amount, caracteristiques = '') {
         if (!amount) return '0';
         const num = typeof amount === 'number' ? amount : this.parsePrice(amount);
         const formatted = num.toLocaleString('fr-FR');
 
-        // Add "m²" suffix for terrain (land)
-        if (propertyType) {
-            const normalizedType = this.normalizePropertyType(propertyType);
-            if (normalizedType === 'Terrain') {
-                return `${formatted} FCFA/m²`;
-            }
+        // Check if "m²" is in the characteristics
+        if (caracteristiques && caracteristiques.toLowerCase().includes('m²')) {
+            return `${formatted} FCFA/m²`;
         }
 
         return formatted;
@@ -210,7 +190,10 @@ class SupabaseService {
 
             if (error) throw error;
 
-            return { success: true, data: data, source: 'supabase' };
+            // Enrich with WhatsApp group names
+            const enriched = await whatsappGroupService.enrichWithGroupNames(data || [], 'groupe');
+
+            return { success: true, data: enriched, source: 'supabase' };
         } catch (error) {
             console.error('Supabase Images Error:', error);
             return { success: false, error: error.message, data: [] };
@@ -289,20 +272,12 @@ class SupabaseService {
                     _ref_bien: p.ref_bien || '',
                 }));
 
-            let allData = [...publications, ...locauxDemandes];
+            const allRequests = [...publications, ...locauxDemandes];
 
-            // Enrich with WhatsApp group names (async, non-blocking)
-            try {
-                allData = await whatsappGroupService.enrichWithGroupNames(
-                    allData,
-                    'groupe'  // publications use 'groupe' field
-                );
-            } catch (err) {
-                console.warn('Error enriching group names for requests:', err.message);
-                // Continue without group names if enrichment fails
-            }
+            // Enrich with WhatsApp group names
+            const enriched = await whatsappGroupService.enrichWithGroupNames(allRequests, 'groupe');
 
-            return { success: true, data: allData, source: 'supabase' };
+            return { success: true, data: enriched, source: 'supabase' };
         } catch (error) {
             console.error('Supabase Requests Error:', error);
             const errorMessage = this._getErrorMessage(error);
@@ -362,7 +337,7 @@ class SupabaseService {
                     datePublication: this.formatDateShort(p.date_publication),
                     shares: (() => { try { return p.shares ? (typeof p.shares === 'string' ? JSON.parse(p.shares) : p.shares) : []; } catch { return []; } })(),
                     status: isDispo ? 'Disponible' : 'Occupé',
-                    prixFormate: this.formatPrice(rawPrice, p.type_de_bien)
+                    prixFormate: this.formatPrice(rawPrice, p.caracteristiques)
                 };
             });
 
@@ -405,20 +380,12 @@ class SupabaseService {
             }
 
             console.debug(`[Dédup] DB:${transformed.length} → deduplicated:${deduped.length}`);
-            let trueProperties = deduped;
+            const trueProperties = deduped;
 
-            // Enrich with WhatsApp group names (async, non-blocking)
-            try {
-                trueProperties = await whatsappGroupService.enrichWithGroupNames(
-                    trueProperties,
-                    'groupeWhatsApp'
-                );
-            } catch (err) {
-                console.warn('Error enriching group names:', err.message);
-                // Continue without group names if enrichment fails
-            }
+            // Enrich with WhatsApp group names
+            const enriched = await whatsappGroupService.enrichWithGroupNames(trueProperties, 'groupeWhatsApp');
 
-            const result = { success: true, data: trueProperties, source: 'supabase' };
+            const result = { success: true, data: enriched, source: 'supabase' };
             this._setCache('properties', result);
             return result;
         } catch (error) {
@@ -475,7 +442,7 @@ class SupabaseService {
                     commune: data.commune || '',
                     quartier: data.quartier || '',
                     prix: data.prix || '',
-                    prixFormate: this.formatPrice(data.prix, data.type_de_bien),
+                    prixFormate: this.formatPrice(data.prix, data.caracteristiques),
                     telephoneBien: data.telephone_bien || data.telephone || '',
                     telephoneExpediteur: data.telephone_expediteur || data.telephone || '',
                     expediteur: data.expediteur || data.publie_par || '',

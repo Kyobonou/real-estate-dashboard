@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -6,6 +6,7 @@ import { ToastProvider } from './components/Toast';
 import Layout from './components/Layout';
 import { NotificationProvider } from './contexts/NotificationContext';
 import ErrorBoundary from './components/ErrorBoundary';
+import { whatsappGroupService } from './services/whatsappGroupService';
 
 // Lazy loading des pages
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -146,6 +147,13 @@ const AppRoutes = () => {
 };
 
 function App() {
+    useEffect(() => {
+        // Initialize WhatsApp group service on app startup
+        whatsappGroupService.initialize().catch(err => {
+            console.warn('Failed to initialize WhatsApp group service:', err);
+        });
+    }, []);
+
     return (
         <AuthProvider>
             <ThemeProvider>

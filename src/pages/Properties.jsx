@@ -121,7 +121,7 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
 
         const agentName = property.expediteur || property.publiePar || '';
         const lieu = [property.commune, property.quartier].filter(Boolean).join(', ') || property.zone || '';
-        const groupeRef = property.groupName || property.groupeWhatsApp ? `\nGroupe source : ${property.groupName || property.groupeWhatsApp}` : '';
+        const groupeRef = (property.groupName || property.groupeWhatsApp) ? `\nGroupe source : ${property.groupName || property.groupeWhatsApp}` : '';
         const msgOrigin = property.description
             ? `\n\nVotre annonce :\n"${property.description.substring(0, 200)}${property.description.length > 200 ? '...' : ''}"`
             : '';
@@ -305,7 +305,7 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
                                     <span className="info-value" style={{ fontWeight: 600, letterSpacing: '0.3px' }}>{contactPhone || '—'}</span>
                                 </div>
                             </div>
-                            {property.groupName || property.groupeWhatsApp && (
+                            {(property.groupName || property.groupeWhatsApp) && (
                                 <div className="info-item" style={{ gridColumn: '1 / -1' }}>
                                     <MessageSquare size={18} style={{ color: '#25D366', flexShrink: 0 }} />
                                     <div>
@@ -529,7 +529,7 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
                             # {property.refBien}
                         </span>
                     )}
-                    {property.groupName || property.groupeWhatsApp && (
+                    {(property.groupName || property.groupeWhatsApp) && (
                         <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#15803d', background: 'rgba(37,211,102,0.12)', border: '1px solid rgba(37,211,102,0.35)', borderRadius: 5, padding: '2px 7px', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                             title={property.groupName || property.groupeWhatsApp}>
                             {property.groupName || property.groupeWhatsApp}

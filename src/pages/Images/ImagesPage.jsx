@@ -210,8 +210,8 @@ const AuthorSection = ({ groupKey, items, onViewDetail, defaultOpen }) => {
                 </div>
                 <div style={{ flex: 1 }}>
                     <p style={{ margin: 0, fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>{groupKey}</p>
-                    {firstProp?.groupeWhatsApp && (
-                        <p style={{ margin: 0, fontSize: '0.72rem', color: '#15803d', fontWeight: 600 }}>{firstProp.groupeWhatsApp}</p>
+                    {(firstProp?.groupName || firstProp?.groupeWhatsApp) && (
+                        <p style={{ margin: 0, fontSize: '0.72rem', color: '#15803d', fontWeight: 600 }}>{firstProp.groupName || firstProp.groupeWhatsApp}</p>
                     )}
                 </div>
                 <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', background: 'var(--bg-primary)', borderRadius: 20, padding: '2px 10px', border: '1px solid var(--border-color)' }}>
@@ -279,7 +279,7 @@ const ImagesPage = () => {
         const t = searchTerm.toLowerCase();
         return allItems.filter(item =>
             (item.property?.publiePar || '').toLowerCase().includes(t) ||
-            (item.property?.groupName || property?.groupeWhatsApp || '').toLowerCase().includes(t) ||
+            (item.property?.groupName || item.property?.groupeWhatsApp || '').toLowerCase().includes(t) ||
             (item.property?.refBien || '').toLowerCase().includes(t) ||
             (item.property?.typeBien || '').toLowerCase().includes(t) ||
             (item.property?.zone || '').toLowerCase().includes(t)
@@ -292,7 +292,7 @@ const ImagesPage = () => {
         filteredItems.forEach(item => {
             const key = groupBy === 'auteur'
                 ? (item.property?.publiePar || 'Inconnu')
-                : (item.property?.groupName || property?.groupeWhatsApp || 'Groupe inconnu');
+                : (item.property?.groupName || item.property?.groupeWhatsApp || 'Groupe inconnu');
             if (!groups[key]) groups[key] = [];
             groups[key].push(item);
         });
@@ -307,7 +307,7 @@ const ImagesPage = () => {
             'Zone': item.property?.zone || '',
             'Prix': item.property?.prixFormate || '',
             'Publié par': item.property?.publiePar || '',
-            'Groupe WhatsApp': item.property?.groupName || property?.groupeWhatsApp || '',
+            'Groupe WhatsApp': item.property?.groupName || item.property?.groupeWhatsApp || '',
             'Téléphone': item.property?.telephone || '',
             'Lien image': item.lien_image || '',
             'Date': item.horodatage || '',
