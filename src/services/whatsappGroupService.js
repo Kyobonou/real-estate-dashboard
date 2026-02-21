@@ -174,10 +174,10 @@ class WhatsappGroupService {
             groupNames[groupId] = await this.getGroupName(groupId);
         }
 
-        // Enrich items
+        // Enrich items with group names
         return items.map(item => ({
             ...item,
-            groupName: groupNames[item[groupIdField]] || `Groupe ${item[groupIdField]}`
+            name: groupNames[item[groupIdField]] || `Groupe ${item[groupIdField]}`
         }));
     }
 }
