@@ -95,7 +95,8 @@ class WhatsappGroupService {
                             last_updated: new Date().toISOString()
                         }, { onConflict: 'id' });
                 } catch (e) {
-                    // Silently fail for individual upserts
+                    // Table might not exist yet - cache in memory instead
+                    this.memoryCache[groupId] = { name: groupName, timestamp: Date.now() };
                 }
             }
 
@@ -128,22 +129,26 @@ class WhatsappGroupService {
                 return name;
             }
         } catch (e) {
-            // Silent fallback
+            // Table might not exist - continue to next strategy
         }
 
         // 3. Try Wasender API to fetch real group metadata
         try {
             const wasenderName = await this.fetchGroupMetadataFromWasender(groupId);
             if (wasenderName) {
-                // Store in database for future use
-                await supabase
-                    .from('whatsapp_groups')
-                    .upsert({
-                        id: groupId,
-                        name: wasenderName,
-                        source: 'wasender_api',
-                        last_updated: new Date().toISOString()
-                    }, { onConflict: 'id' });
+                // Try to store in database for future use
+                try {
+                    await supabase
+                        .from('whatsapp_groups')
+                        .upsert({
+                            id: groupId,
+                            name: wasenderName,
+                            source: 'wasender_api',
+                            last_updated: new Date().toISOString()
+                        }, { onConflict: 'id' });
+                } catch (e) {
+                    // Table might not exist, just cache in memory
+                }
 
                 this.memoryCache[groupId] = { name: wasenderName, timestamp: Date.now() };
                 return wasenderName;
@@ -152,7 +157,25 @@ class WhatsappGroupService {
             console.warn(`[WhatsApp Groups] Error fetching from Wasender: ${e.message}`);
         }
 
-        // 4. Fallback: return formatted ID
+        // 4. Try publications table directly for fallback
+        try {
+            const { data } = await supabase
+                .from('publications')
+                .select('nom_groupe')
+                .eq('groupe', groupId)
+                .limit(1)
+                .single();
+
+            if (data?.nom_groupe) {
+                const name = data.nom_groupe;
+                this.memoryCache[groupId] = { name, timestamp: Date.now() };
+                return name;
+            }
+        } catch (e) {
+            // Continue to next fallback
+        }
+
+        // 5. Final fallback: return formatted ID
         return `Groupe ${groupId}`;
     }
 
