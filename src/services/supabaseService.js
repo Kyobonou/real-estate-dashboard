@@ -125,11 +125,19 @@ class SupabaseService {
 
         // Check BOTH conditions:
         // 1. Message contains "m²" or "m2" or "M2"
-        // 2. Price format in message contains "prix ... / m²" (or m2 or M2)
+        // 2. Price format in message contains "prix ... / m²" with flexible syntax
         if (messageText) {
             const lowerMsg = messageText.toLowerCase();
             const hasMeterSquare = lowerMsg.includes('m²') || lowerMsg.includes('m2');
-            const hasPrice = /prix\s*:\s*.*\/\s*(m²|m2|M2)/i.test(messageText);
+
+            // Flexible regex patterns for price format:
+            // Matches: "prix:" or "prix." or "prix :" or "prix ." followed by anything ending with "/ m²"
+            // Examples: "prix : 40 000 FCFA / M2", "PRIX.: montantfcfa / m2", "Prix: 5000/m²"
+            const pricePatterns = [
+                /prix\s*[:\.]+\s*[\d\s,fcfa]*\/\s*(m²|m2|M2)/i,  // flexible with FCFA
+                /prix\s*[:\.]+\s*[\d.,\s]*\/\s*(m²|m2|M2)/i,      // flexible with numbers
+            ];
+            const hasPrice = pricePatterns.some(pattern => pattern.test(messageText));
 
             if (hasMeterSquare && hasPrice) {
                 return `${formatted} FCFA/m²`;
