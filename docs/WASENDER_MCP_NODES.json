@@ -1,0 +1,267 @@
+{
+  "mcp_wasender_nodes": [
+    {
+      "id": "mcp-decrypt-image",
+      "name": "MCP: Decrypter Image",
+      "replaces": "30a85905-eaf8-4baf-b5b3-166d4070c0e8",
+      "description": "Déchiffrer média image via Wasender MCP",
+      "node_config": {
+        "type": "n8n-nodes-base.mcp",
+        "typeVersion": 1,
+        "parameters": {
+          "mcpUrl": "={{ $env.WASENDER_MCP_ENDPOINT || 'https://wasenderapi.com/mcp' }}",
+          "headers": {
+            "Authorization": "=Bearer {{ $env.WASENDER_MCP_TOKEN }}"
+          },
+          "tool": "decrypt_media",
+          "arguments": {
+            "message_id": "={{ $json.messageId }}",
+            "session_id": "={{ $json.sessionId || $json.session }}"
+          }
+        },
+        "position": [1000, 200]
+      },
+      "expected_input": {
+        "messageId": "string",
+        "sessionId": "string"
+      },
+      "expected_output": {
+        "decryptedUrl": "string",
+        "mediaType": "image",
+        "success": "boolean"
+      }
+    },
+    {
+      "id": "mcp-decrypt-audio",
+      "name": "MCP: Decrypter Audio",
+      "replaces": "41a2baf6-1971-4306-95a9-b3c46738b384",
+      "description": "Déchiffrer média audio via Wasender MCP",
+      "node_config": {
+        "type": "n8n-nodes-base.mcp",
+        "typeVersion": 1,
+        "parameters": {
+          "mcpUrl": "={{ $env.WASENDER_MCP_ENDPOINT || 'https://wasenderapi.com/mcp' }}",
+          "headers": {
+            "Authorization": "=Bearer {{ $env.WASENDER_MCP_TOKEN }}"
+          },
+          "tool": "decrypt_media",
+          "arguments": {
+            "message_id": "={{ $json.messageId }}",
+            "session_id": "={{ $json.sessionId || $json.session }}"
+          }
+        },
+        "position": [1000, 350]
+      },
+      "expected_input": {
+        "messageId": "string",
+        "sessionId": "string"
+      },
+      "expected_output": {
+        "decryptedUrl": "string",
+        "mediaType": "audio",
+        "duration": "number (optional)"
+      }
+    },
+    {
+      "id": "mcp-send-response",
+      "name": "MCP: Envoyer Reponse WhatsApp",
+      "replaces": "32747c58-5651-41a8-a7ac-02525e22307c",
+      "description": "Envoyer réponse agent au client via Wasender MCP",
+      "node_config": {
+        "type": "n8n-nodes-base.mcp",
+        "typeVersion": 1,
+        "parameters": {
+          "mcpUrl": "={{ $env.WASENDER_MCP_ENDPOINT || 'https://wasenderapi.com/mcp' }}",
+          "headers": {
+            "Authorization": "=Bearer {{ $env.WASENDER_MCP_TOKEN }}"
+          },
+          "tool": "send_text_message",
+          "arguments": {
+            "session_id": "={{ $json.sessionId || $json.session || 'default' }}",
+            "phone": "={{ $json.phone || $json.contact_phone }}",
+            "text": "={{ $json.reply || $json.message }}"
+          }
+        },
+        "position": [1200, 500],
+        "onError": "continueRegularOutput"
+      },
+      "expected_input": {
+        "sessionId": "string",
+        "phone": "string (format: 225XXXXXXXXX)",
+        "reply": "string"
+      },
+      "expected_output": {
+        "messageId": "string",
+        "status": "sent|pending|failed",
+        "timestamp": "ISO8601"
+      }
+    },
+    {
+      "id": "mcp-notify-owner",
+      "name": "MCP: Notifier Proprietaire",
+      "replaces": "ec0d772d-de5d-4b7b-9428-7be541a50e22",
+      "description": "Notifier propriétaire visite programmée via Wasender MCP",
+      "node_config": {
+        "type": "n8n-nodes-base.mcp",
+        "typeVersion": 1,
+        "parameters": {
+          "mcpUrl": "={{ $env.WASENDER_MCP_ENDPOINT || 'https://wasenderapi.com/mcp' }}",
+          "headers": {
+            "Authorization": "=Bearer {{ $env.WASENDER_MCP_TOKEN }}"
+          },
+          "tool": "send_text_message",
+          "arguments": {
+            "session_id": "={{ $json.sessionId || 'default' }}",
+            "phone": "={{ $json.owner_phone || $json.telephone_bien }}",
+            "text": "=Nouvelle visite programmée:\\n👤 {{ $json.visitor_name || 'Visiteur' }}\\n📱 {{ $json.visitor_phone }}\\n📅 {{ $json.visit_date || 'À confirmer' }}"
+          }
+        },
+        "position": [1200, 650],
+        "onError": "continueRegularOutput"
+      },
+      "expected_input": {
+        "sessionId": "string",
+        "owner_phone": "string",
+        "visitor_name": "string",
+        "visitor_phone": "string",
+        "visit_date": "string"
+      },
+      "expected_output": {
+        "messageId": "string",
+        "status": "sent|pending|failed",
+        "timestamp": "ISO8601"
+      }
+    },
+    {
+      "id": "mcp-alert-agency",
+      "name": "MCP: Alerter Agence (Fallback)",
+      "replaces": "e08400f3-b3b1-43b5-9c8b-098b89dab530",
+      "description": "Alerte fallback si agent échoue via Wasender MCP",
+      "node_config": {
+        "type": "n8n-nodes-base.mcp",
+        "typeVersion": 1,
+        "parameters": {
+          "mcpUrl": "={{ $env.WASENDER_MCP_ENDPOINT || 'https://wasenderapi.com/mcp' }}",
+          "headers": {
+            "Authorization": "=Bearer {{ $env.WASENDER_MCP_TOKEN }}"
+          },
+          "tool": "send_text_message",
+          "arguments": {
+            "session_id": "={{ $json.sessionId || 'default' }}",
+            "phone": "={{ $env.AGENCY_ALERT_PHONE || '225xxxxxxxxxx' }}",
+            "text": "=🚨 ALERTE AGENT\\nClient: {{ $json.client_phone }}\\nErreur: {{ $json.error_message || 'Inconnu' }}\\nBien: {{ $json.property_ref || 'N/A' }}"
+          }
+        },
+        "position": [1200, 800],
+        "onError": "continueRegularOutput"
+      },
+      "expected_input": {
+        "sessionId": "string",
+        "client_phone": "string",
+        "error_message": "string",
+        "property_ref": "string (optional)"
+      },
+      "expected_output": {
+        "messageId": "string",
+        "status": "sent|pending|failed",
+        "timestamp": "ISO8601"
+      }
+    }
+  ],
+  "helper_nodes": [
+    {
+      "id": "mcp-check-session-status",
+      "name": "MCP: Vérifier Session",
+      "description": "Vérifier l'état d'une session Wasender avant d'envoyer",
+      "node_config": {
+        "type": "n8n-nodes-base.mcp",
+        "typeVersion": 1,
+        "parameters": {
+          "mcpUrl": "={{ $env.WASENDER_MCP_ENDPOINT || 'https://wasenderapi.com/mcp' }}",
+          "headers": {
+            "Authorization": "=Bearer {{ $env.WASENDER_MCP_TOKEN }}"
+          },
+          "tool": "get_session_status",
+          "arguments": {
+            "session_id": "={{ $json.sessionId || 'default' }}"
+          }
+        }
+      },
+      "expected_output": {
+        "status": "connected|disconnected|error",
+        "isActive": "boolean",
+        "lastHeartbeat": "ISO8601"
+      },
+      "note": "Recommandé avant chaque envoi de message"
+    },
+    {
+      "id": "mcp-add-contact",
+      "name": "MCP: Ajouter Contact",
+      "description": "Ajouter nouveau contact à Wasender",
+      "node_config": {
+        "type": "n8n-nodes-base.mcp",
+        "typeVersion": 1,
+        "parameters": {
+          "mcpUrl": "={{ $env.WASENDER_MCP_ENDPOINT || 'https://wasenderapi.com/mcp' }}",
+          "headers": {
+            "Authorization": "=Bearer {{ $env.WASENDER_MCP_TOKEN }}"
+          },
+          "tool": "add_contact",
+          "arguments": {
+            "session_id": "={{ $json.sessionId || 'default' }}",
+            "phone": "={{ $json.phone }}",
+            "name": "={{ $json.name }}"
+          }
+        }
+      },
+      "expected_output": {
+        "contactId": "string",
+        "status": "added|already_exists|error"
+      }
+    }
+  ],
+  "environment_variables": {
+    "WASENDER_MCP_TOKEN": {
+      "description": "Personal Access Token pour Wasender MCP",
+      "format": "Bearer token",
+      "source": "https://wasenderapi.com/settings/tokens"
+    },
+    "WASENDER_MCP_ENDPOINT": {
+      "description": "Endpoint MCP Wasender",
+      "default": "https://wasenderapi.com/mcp",
+      "note": "Généralement ne pas changer"
+    },
+    "AGENCY_ALERT_PHONE": {
+      "description": "Numéro téléphone alerte agence",
+      "format": "225XXXXXXXXX",
+      "example": "22599112345"
+    }
+  },
+  "migration_steps": [
+    {
+      "step": 1,
+      "title": "Backup workflow actuel",
+      "command": "cp 'Imm supabase.json' 'Imm supabase.json.backup'"
+    },
+    {
+      "step": 2,
+      "title": "Configurer variables d'environnement",
+      "env": ["WASENDER_MCP_TOKEN", "WASENDER_MCP_ENDPOINT"]
+    },
+    {
+      "step": 3,
+      "title": "Ajouter nœuds MCP un par un",
+      "nodes": ["mcp-decrypt-image", "mcp-decrypt-audio", "mcp-send-response", "mcp-notify-owner", "mcp-alert-agency"]
+    },
+    {
+      "step": 4,
+      "title": "Retirer anciens nœuds HTTP",
+      "nodes": ["30a85905-eaf8-4baf-b5b3-166d4070c0e8", "41a2baf6-1971-4306-95a9-b3c46738b384", "32747c58-5651-41a8-a7ac-02525e22307c", "ec0d772d-de5d-4b7b-9428-7be541a50e22", "e08400f3-b3b1-43b5-9c8b-098b89dab530"]
+    },
+    {
+      "step": 5,
+      "title": "Valider & tester workflow",
+      "action": "Exécuter workflow avec données de test"
+    }
+  ]
+}
