@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { whatsappGroupService } from './whatsappGroupService';
 
 // ── Mots-clés indiquant une demande de recherche (pas une offre immobilière) ──
 // Si le message_initial d'une entrée locaux contient l'un de ces mots-clés,
@@ -30,6 +31,23 @@ class SupabaseService {
         // In-memory cache with 90s TTL — avoids duplicate Supabase calls across pages
         this._cache = {};
         this._cacheTTL = 90000;
+
+        // Initialize WhatsApp group cache on background (non-blocking)
+        this._initializeGroups();
+    }
+
+    /**
+     * Initialize WhatsApp group cache from publications
+     * Runs asynchronously on startup
+     */
+    async _initializeGroups() {
+        try {
+            await whatsappGroupService.syncFromPublications();
+            console.log('WhatsApp group cache initialized');
+        } catch (err) {
+            console.warn('Error initializing WhatsApp group cache:', err.message);
+            // Non-blocking - app still works even if this fails
+        }
     }
 
     _getCached(key) {
@@ -271,7 +289,20 @@ class SupabaseService {
                     _ref_bien: p.ref_bien || '',
                 }));
 
-            return { success: true, data: [...publications, ...locauxDemandes], source: 'supabase' };
+            let allData = [...publications, ...locauxDemandes];
+
+            // Enrich with WhatsApp group names (async, non-blocking)
+            try {
+                allData = await whatsappGroupService.enrichWithGroupNames(
+                    allData,
+                    'groupe'  // publications use 'groupe' field
+                );
+            } catch (err) {
+                console.warn('Error enriching group names for requests:', err.message);
+                // Continue without group names if enrichment fails
+            }
+
+            return { success: true, data: allData, source: 'supabase' };
         } catch (error) {
             console.error('Supabase Requests Error:', error);
             const errorMessage = this._getErrorMessage(error);
@@ -374,7 +405,18 @@ class SupabaseService {
             }
 
             console.debug(`[Dédup] DB:${transformed.length} → deduplicated:${deduped.length}`);
-            const trueProperties = deduped;
+            let trueProperties = deduped;
+
+            // Enrich with WhatsApp group names (async, non-blocking)
+            try {
+                trueProperties = await whatsappGroupService.enrichWithGroupNames(
+                    trueProperties,
+                    'groupeWhatsApp'
+                );
+            } catch (err) {
+                console.warn('Error enriching group names:', err.message);
+                // Continue without group names if enrichment fails
+            }
 
             const result = { success: true, data: trueProperties, source: 'supabase' };
             this._setCache('properties', result);
