@@ -121,7 +121,7 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
 
         const agentName = property.expediteur || property.publiePar || '';
         const lieu = [property.commune, property.quartier].filter(Boolean).join(', ') || property.zone || '';
-        const groupeRef = (property.name || property.groupeWhatsApp) ? `\nGroupe source : ${property.name || property.groupeWhatsApp}` : '';
+        const groupeRef = (property.groupName || property.groupeWhatsApp) ? `\nGroupe source : ${property.groupName || property.groupeWhatsApp}` : '';
         const msgOrigin = property.description
             ? `\n\nVotre annonce :\n"${property.description.substring(0, 200)}${property.description.length > 200 ? '...' : ''}"`
             : '';
@@ -305,12 +305,12 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
                                     <span className="info-value" style={{ fontWeight: 600, letterSpacing: '0.3px' }}>{contactPhone || '—'}</span>
                                 </div>
                             </div>
-                            {(property.name || property.groupeWhatsApp) && (
+                            {(property.groupName || property.groupeWhatsApp) && (
                                 <div className="info-item" style={{ gridColumn: '1 / -1' }}>
                                     <MessageSquare size={18} style={{ color: '#25D366', flexShrink: 0 }} />
                                     <div>
                                         <span className="info-label">Groupe WhatsApp source</span>
-                                        <span className="info-value" style={{ fontSize: '0.82rem', wordBreak: 'break-all' }}>{property.name || property.groupeWhatsApp}</span>
+                                        <span className="info-value" style={{ fontSize: '0.82rem', wordBreak: 'break-all' }}>{property.groupName || property.groupeWhatsApp}</span>
                                     </div>
                                 </div>
                             )}

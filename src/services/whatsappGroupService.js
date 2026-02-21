@@ -177,7 +177,7 @@ class WhatsappGroupService {
         // Enrich items with group names
         return items.map(item => ({
             ...item,
-            name: groupNames[item[groupIdField]] || `Groupe ${item[groupIdField]}`
+            groupName: groupNames[item[groupIdField]] || `Groupe ${item[groupIdField]}`
         }));
     }
 }
