@@ -130,16 +130,16 @@ class SupabaseService {
             const lowerMsg = messageText.toLowerCase();
             const hasMeterSquare = lowerMsg.includes('m²') || lowerMsg.includes('m2');
 
-            // Robust regex for price format variants:
-            // Supports: "prix:", "au prix de", "prix de", etc followed by "/ m²"
-            // Accepts any characters between "prix" and "/" (amounts, FCFA, spaces, etc)
-            // Examples:
-            // - "PRIX : 30 000 FCFA/ M2" ✓
-            // - "au prix de 35.000 frs/ M2" ✓
-            // - "prix : 40 000 FCFA / M2" ✓
-            // - "Prix: 5000/m²" ✓
-            // - "PRIX: 9 000 000 FCFA PAR TERRAIN" ✗ (no / m²)
-            const hasPrice = /(?:au\s+)?prix\s*(?:de\s+)?[^\/]*\/\s*(m²|m2|M2)/i.test(messageText);
+            // Multiple regex patterns for price format variants:
+            // Pattern 1: "prix..." / "m²" - main pattern with prix keyword
+            // Pattern 2: "frs/" or "fcfa/" - direct amount with currency
+            // Pattern 3: "prix;" - semicolon variant without slash
+            const pricePatterns = [
+                /(?:au\s+)?prix\s*(?:de\s+)?[^\/]*\/\s*(m²|m2|M2)/i,  // "prix : 30000 / M2"
+                /(?:frs|fcfa)\s*\/\s*(m²|m2|M2)/i,                      // "35.000 frs/ M2"
+                /prix\s*[;:]\s*\d[\d\s,]*\s+(m²|m2|M2)/i                // "PRIX; 35000 m2" or "PRIX: 35000 m2"
+            ];
+            const hasPrice = pricePatterns.some(pattern => pattern.test(messageText));
 
             if (hasMeterSquare && hasPrice) {
                 return `${formatted} FCFA/m²`;
