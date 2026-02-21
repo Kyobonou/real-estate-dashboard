@@ -339,10 +339,15 @@ class GoogleSheetsService {
         const num = typeof amount === 'number' ? amount : this.parsePrice(amount);
         const formatted = num.toLocaleString('fr-FR');
 
-        // Check if "m²" or "m2" is in the message text
+        // Check BOTH conditions:
+        // 1. Message contains "m²" or "m2" or "M2"
+        // 2. Price format in message contains "prix ... / m²" (or m2 or M2)
         if (messageText) {
             const lowerMsg = messageText.toLowerCase();
-            if (lowerMsg.includes('m²') || lowerMsg.includes('m2')) {
+            const hasMeterSquare = lowerMsg.includes('m²') || lowerMsg.includes('m2');
+            const hasPrice = /prix\s*:\s*.*\/\s*(m²|m2|M2)/i.test(messageText);
+
+            if (hasMeterSquare && hasPrice) {
                 return `${formatted} FCFA/m²`;
             }
         }
