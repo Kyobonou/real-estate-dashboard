@@ -96,7 +96,7 @@ const ImageDetailModal = ({ item, isOpen, onClose }) => {
                                 <Users size={18} />
                                 <div>
                                     <span className="info-label">Groupe WhatsApp</span>
-                                    <span className="info-value">{property?.groupeWhatsApp || '—'}</span>
+                                    <span className="info-value">{property?.groupName || property?.groupeWhatsApp || '—'}</span>
                                 </div>
                             </div>
                             <div className="info-item">
@@ -279,7 +279,7 @@ const ImagesPage = () => {
         const t = searchTerm.toLowerCase();
         return allItems.filter(item =>
             (item.property?.publiePar || '').toLowerCase().includes(t) ||
-            (item.property?.groupeWhatsApp || '').toLowerCase().includes(t) ||
+            (item.property?.groupName || property?.groupeWhatsApp || '').toLowerCase().includes(t) ||
             (item.property?.refBien || '').toLowerCase().includes(t) ||
             (item.property?.typeBien || '').toLowerCase().includes(t) ||
             (item.property?.zone || '').toLowerCase().includes(t)
@@ -292,7 +292,7 @@ const ImagesPage = () => {
         filteredItems.forEach(item => {
             const key = groupBy === 'auteur'
                 ? (item.property?.publiePar || 'Inconnu')
-                : (item.property?.groupeWhatsApp || 'Groupe inconnu');
+                : (item.property?.groupName || property?.groupeWhatsApp || 'Groupe inconnu');
             if (!groups[key]) groups[key] = [];
             groups[key].push(item);
         });
@@ -307,7 +307,7 @@ const ImagesPage = () => {
             'Zone': item.property?.zone || '',
             'Prix': item.property?.prixFormate || '',
             'Publié par': item.property?.publiePar || '',
-            'Groupe WhatsApp': item.property?.groupeWhatsApp || '',
+            'Groupe WhatsApp': item.property?.groupName || property?.groupeWhatsApp || '',
             'Téléphone': item.property?.telephone || '',
             'Lien image': item.lien_image || '',
             'Date': item.horodatage || '',

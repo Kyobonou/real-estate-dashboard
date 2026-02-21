@@ -136,7 +136,8 @@ const RequestCard = ({ req, keywords, isPrivateMsg, viewMode }) => {
     const waPhone = extractPhone(req, isPrivateMsg);
     // Clean display of group label (strip WA JID noise)
     const rawGroupe = req.groupe || '';
-    const groupLabel = req.nom_groupe
+    const groupLabel = req.groupName
+        || req.nom_groupe
         || rawGroupe.replace(/@[gs]\.us$/, '').replace(/-[0-9]+$/, '').trim()
         || 'Groupe inconnu';
 
@@ -318,6 +319,7 @@ const RequestsPage = () => {
                 text.includes(term) ||
                 (req.expediteur || '').toLowerCase().includes(term) ||
                 (req.telephone || '').includes(term) ||
+                (req.groupName || '').toLowerCase().includes(term) ||
                 (req.nom_groupe || '').toLowerCase().includes(term);
 
             if (!matchesSearch) return false;
