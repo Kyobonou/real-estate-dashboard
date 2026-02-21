@@ -346,14 +346,16 @@ class GoogleSheetsService {
             const lowerMsg = messageText.toLowerCase();
             const hasMeterSquare = lowerMsg.includes('m²') || lowerMsg.includes('m2');
 
-            // Robust regex for price format with "prix : ... / m²"
-            // Accepts any characters between ":" and "/" (flexible for amounts, FCFA, spaces, etc)
+            // Robust regex for price format variants:
+            // Supports: "prix:", "au prix de", "prix de", etc followed by "/ m²"
+            // Accepts any characters between "prix" and "/" (amounts, FCFA, spaces, etc)
             // Examples:
-            // - "PRIX : 30 000 FCFA/ M2"
-            // - "prix : 40 000 FCFA / M2"
-            // - "PRIX: 9 000 000 FCFA PAR TERRAIN" (no match - no / m²)
-            // - "Prix: 5000/m²"
-            const hasPrice = /prix\s*[:\.]\s*[^\/]*\/\s*(m²|m2|M2)/i.test(messageText);
+            // - "PRIX : 30 000 FCFA/ M2" ✓
+            // - "au prix de 35.000 frs/ M2" ✓
+            // - "prix : 40 000 FCFA / M2" ✓
+            // - "Prix: 5000/m²" ✓
+            // - "PRIX: 9 000 000 FCFA PAR TERRAIN" ✗ (no / m²)
+            const hasPrice = /(?:au\s+)?prix\s*(?:de\s+)?[^\/]*\/\s*(m²|m2|M2)/i.test(messageText);
 
             if (hasMeterSquare && hasPrice) {
                 return `${formatted} FCFA/m²`;
