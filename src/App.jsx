@@ -18,6 +18,7 @@ const RequestsPage = lazy(() => import('./pages/Requests/RequestsPage'));
 const Clients = lazy(() => import('./pages/Clients'));
 const Settings = lazy(() => import('./pages/Settings'));
 const ImageGallery = lazy(() => import('./pages/ImageGallery'));
+const ExpiringProperties = lazy(() => import('./pages/ExpiringProperties'));
 const AdGenerator = lazy(() => import('./pages/AdGenerator'));
 const Pipeline = lazy(() => import('./pages/Pipeline'));
 
@@ -87,6 +88,14 @@ const AppRoutes = () => {
                         <Suspense fallback={<PageLoader />}>
                             <ErrorBoundary>
                                 <ImageGallery />
+                            </ErrorBoundary>
+                        </Suspense>
+                    } />
+
+                    <Route path="expiring" element={
+                        <Suspense fallback={<PageLoader />}>
+                            <ErrorBoundary>
+                                <ExpiringProperties />
                             </ErrorBoundary>
                         </Suspense>
                     } />

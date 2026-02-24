@@ -12,11 +12,34 @@ import './Properties.css';
 
 const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
     const { addToast } = useToast();
-    const [imgFailed, setImgFailed] = useState(false);
+    const [currentImageIndex, setCurrentImageIndex] = useState(0);
+    const [imgFailed, setImgFailed] = useState({});
 
-    useEffect(() => { setImgFailed(false); }, [property?.id]);
+    useEffect(() => {
+        setCurrentImageIndex(0);
+        setImgFailed({});
+    }, [property?.id]);
 
-    const hasValidImage = property?.imageUrl && !imgFailed;
+    const images = property?.imageUrls && property.imageUrls.length > 0
+        ? property.imageUrls
+        : (property?.imageUrl ? [property.imageUrl] : []);
+
+    const currentImage = images[currentImageIndex];
+    const hasValidImage = currentImage && !imgFailed[currentImageIndex];
+
+    const goToNextImage = (e) => {
+        e.stopPropagation();
+        setCurrentImageIndex((prev) => (prev + 1) % images.length);
+    };
+
+    const goToPrevImage = (e) => {
+        e.stopPropagation();
+        setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
+    };
+
+    const handleImageError = () => {
+        setImgFailed(prev => ({ ...prev, [currentImageIndex]: true }));
+    };
 
     const handleContact = () => {
         if (property.telephoneBien) {
@@ -55,15 +78,58 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
                 <div className="property-details-header">
                     <div className="property-image-large" style={{
                         background: hasValidImage
-                            ? `url(${property.imageUrl}) center/cover no-repeat`
+                            ? `url(${currentImage}) center/cover no-repeat`
                             : `linear-gradient(135deg, ${property.id % 2 === 0 ? '#667eea' : '#f093fb'} 0%, ${property.id % 2 === 0 ? '#764ba2' : '#f5576c'} 100%)`
                     }}>
                         {hasValidImage && (
-                            <img src={property.imageUrl} alt="" style={{ display: 'none' }} onError={() => setImgFailed(true)} />
+                            <img src={currentImage} alt="" style={{ display: 'none' }} onError={handleImageError} />
                         )}
                         {!hasValidImage && (
                             <div className="property-overlay">
                                 <h2>{property.typeBien}</h2>
+                            </div>
+                        )}
+
+                        {images.length > 1 && (
+                            <>
+                                <button
+                                    className="image-nav image-nav-prev"
+                                    onClick={goToPrevImage}
+                                    title="Image précédente"
+                                >
+                                    ‹
+                                </button>
+                                <button
+                                    className="image-nav image-nav-next"
+                                    onClick={goToNextImage}
+                                    title="Image suivante"
+                                >
+                                    ›
+                                </button>
+                                <div className="image-counter">
+                                    {currentImageIndex + 1} / {images.length}
+                                </div>
+                            </>
+                        )}
+
+                        {images.length > 1 && (
+                            <div className="image-thumbnails">
+                                {images.slice(0, 5).map((img, idx) => (
+                                    <button
+                                        key={idx}
+                                        className={`thumbnail ${idx === currentImageIndex ? 'active' : ''}`}
+                                        onClick={() => setCurrentImageIndex(idx)}
+                                        style={{
+                                            backgroundImage: `url(${img})`,
+                                            backgroundSize: 'cover',
+                                            backgroundPosition: 'center'
+                                        }}
+                                        title={`Image ${idx + 1}`}
+                                    />
+                                ))}
+                                {images.length > 5 && (
+                                    <div className="thumbnail more">+{images.length - 5}</div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -78,6 +144,11 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
                                 {property.status}
                             </span>
                             {property.typeOffre && <span className="offer-badge">{property.typeOffre}</span>}
+                            {property.groupeWhatsAppOrigine && (
+                                <span className="source-badge" title="Provenance WhatsApp">
+                                    📱 {property.groupeWhatsAppOrigine}
+                                </span>
+                            )}
                         </div>
                     </div>
                 </div>

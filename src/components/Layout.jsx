@@ -19,7 +19,8 @@ import {
     Users,
     Wand2,
     Trello,
-    MessageCircle
+    MessageCircle,
+    AlertCircle
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -66,6 +67,7 @@ const Layout = () => {
         { path: '/pipeline', icon: Trello, label: 'Pipeline', roles: ['admin', 'agent'] },
         { path: '/properties', icon: Building, label: 'Biens', roles: ['admin', 'agent', 'viewer'] },
         { path: '/gallery', icon: Building, label: 'Catalogue', roles: ['admin', 'agent', 'viewer'] },
+        { path: '/expiring', icon: AlertCircle, label: 'À Renouveler', roles: ['admin', 'agent'] },
         { path: '/visits', icon: Calendar, label: 'Visites', roles: ['admin', 'agent'] },
         { path: '/requests', icon: MessageCircle, label: 'Demandes', roles: ['admin', 'agent'] },
         { path: '/clients', icon: Users, label: 'Clients', roles: ['admin', 'agent'] },
