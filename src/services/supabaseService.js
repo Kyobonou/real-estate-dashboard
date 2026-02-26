@@ -355,7 +355,11 @@ class SupabaseService {
                     datePublication: this.formatDateShort(p.date_publication),
                     shares: (() => { try { return p.shares ? (typeof p.shares === 'string' ? JSON.parse(p.shares) : p.shares) : []; } catch { return []; } })(),
                     status: isDispo ? 'Disponible' : 'Occupé',
-                    prixFormate: this.formatPrice(rawPrice, p.message_initial || p.caracteristiques)
+                    prixFormate: this.formatPrice(rawPrice, p.message_initial || p.caracteristiques),
+                    dateExpiration: p.date_expiration || null,
+                    renewalStatus: p.status || 'active',
+                    relanceCount: p.relance_count || 0,
+                    lastRelanceDate: p.last_relance_date || null
                 };
             });
 
