@@ -1,0 +1,2146 @@
+{
+  "name": "Imm supabase",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wassender-immobilier",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -19792,
+        -816
+      ],
+      "id": "08b42c96-4f9d-4e85-9240-20f5b2e50b7d",
+      "name": "Webhook Wassender",
+      "webhookId": "wassender-immobilier-webhook"
+    },
+    {
+      "id": "auth-validator-webhook",
+      "name": "Valider Token Webhook",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -19700,
+        -500
+      ],
+      "parameters": {
+        "jsCode": "\n// Valider le Bearer token du webhook Wassender\nconst authHeader = $input.first().headers?.authorization || '';\nconst expectedToken = $env.WASSENDER_WEBHOOK_TOKEN || 'default-dev-token-change-in-prod';\n\nif (!authHeader.startsWith('Bearer ')) {\n  return { error: 'Missing or invalid Authorization header' };\n}\n\nconst token = authHeader.replace('Bearer ', '').trim();\n\nif (token !== expectedToken) {\n  console.log('⚠️ Webhook token invalide. Attendu:', expectedToken.substring(0,10) + '...', 'Reçu:', token.substring(0,10) + '...');\n  return { error: 'Invalid token' };\n}\n\nconsole.log('✅ Webhook token validé');\nreturn $input.first();\n"
+      }
+    },
+    {
+      "id": "sanitize-input",
+      "name": "Sanitiser Input Webhook",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -19500,
+        -500
+      ],
+      "parameters": {
+        "jsCode": "\n// Sanitiser les inputs pour éviter injection prompt/SQL\nconst data = $input.first().json;\n\nconst sanitize = (str) => {\n  if (!str) return str;\n  if (typeof str !== 'string') return str;\n  \n  // Supprimer caractères de contrôle\n  str = str.replace(/[\u0000-\u001f]/g, '');\n  \n  // Limiter la longueur\n  if (str.length > 2000) str = str.substring(0, 2000);\n  \n  return str;\n};\n\nconst sanitized = {\n  ...data,\n  messageBody: sanitize(data.messageBody),\n  pushName: sanitize(data.pushName),\n  groupName: sanitize(data.groupName),\n  cleanedSenderPn: sanitize(data.cleanedSenderPn),\n  remoteJid: sanitize(data.remoteJid)\n};\n\nconsole.log('✅ Input sanitisé');\nreturn [{ json: sanitized }];\n"
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== NORMALISER LA STRUCTURE DU WEBHOOK =====\n// Gestion robuste des LIDs WhatsApp (Linked IDs vs vrais numéros)\n\nconst body = $input.first().json.body || $input.first().json;\nconst event = body.event || '';\nconst data = body.data || body;\n\nif (event && !event.includes('message')) return [];\n\nlet msg = null;\nif (Array.isArray(data.messages)) msg = data.messages[0];\nelse if (data.messages && typeof data.messages === 'object') msg = data.messages;\nelse if (data.message) msg = data.message;\nelse msg = data;\n\nif (!msg) return [];\n\nconst key = msg.key || {};\nconst message = msg.message || {};\nconst remoteJid = key.remoteJid || msg.remoteJid || '';\nconst fromMe = key.fromMe === true || key.fromMe === 'true';\nconst pushName = msg.pushName || msg.senderName || '';\nconst messageTimestamp = msg.messageTimestamp || msg.timestamp || Math.floor(Date.now() / 1000);\nconst messageId = key.id || msg.id || '';\nconst participant = key.participant || msg.participant || '';\n\nif (!remoteJid) return [];\nif (remoteJid === 'status@broadcast') return [];\nif (message.reactionMessage || message.protocolMessage || message.senderKeyDistributionMessage) return [];\n\nlet messageBody = msg.messageBody || msg.body || '';\nif (!messageBody) messageBody = message.conversation || '';\nif (!messageBody) messageBody = message.extendedTextMessage?.text || '';\nif (!messageBody) messageBody = message.imageMessage?.caption || '';\nif (!messageBody) messageBody = message.videoMessage?.caption || '';\n\nconst isGroup = remoteJid.includes('@g.us');\n\nlet groupName = '';\nif (isGroup) {\n  groupName = msg.groupName || msg.groupSubject || '';\n  if (!groupName) groupName = data.groupName || data.groupSubject || '';\n  if (!groupName) groupName = body.groupName || body.groupSubject || '';\n  if (!groupName && msg.groupMetadata) groupName = msg.groupMetadata.subject || msg.groupMetadata.name || '';\n  if (!groupName && data.groupMetadata) groupName = data.groupMetadata.subject || data.groupMetadata.name || '';\n  if (!groupName && message.extendedTextMessage?.contextInfo?.groupSubject) groupName = message.extendedTextMessage.contextInfo.groupSubject;\n  if (!groupName) {\n    const search = (obj, depth = 0) => {\n      if (!obj || typeof obj !== 'object' || depth > 4) return '';\n      for (const k of ['groupName', 'groupSubject', 'subject']) { if (obj[k] && typeof obj[k] === 'string') return obj[k]; }\n      for (const k of Object.keys(obj)) { if (typeof obj[k] === 'object') { const f = search(obj[k], depth + 1); if (f) return f; } }\n      return '';\n    };\n    groupName = search(body);\n  }\n  if (!groupName) groupName = remoteJid.replace('@g.us', '');\n}\n\n// === DÉTECTION RENFORCÉE DES LIDs ===\n// Un LID (Linked ID) a ces caractéristiques:\n// 1. Très long (>14 chiffres généralement)\n// 2. Commence souvent par 1 ou 9 suivi de beaucoup de chiffres\n// 3. Pas un vrai numéro format international\n// Un vrai numéro: 2250789263373 (Côte d'Ivoire: +225 + 7 à 9 chiffres)\n\nfunction isValidPhoneNumber(num) {\n  if (!num) return false;\n  const cleaned = num.replace(/[^0-9]/g, '');\n\n  // LID: Trop long (> 13 chiffres) = rejeté\n  if (cleaned.length < 10 || cleaned.length > 13) return false;\n\n  // Format Côte d'Ivoire: +225 XXXXX XXXX (10-12 chiffres)\n  // Nombre typique: 2250789263373 (225 + 9 chiffres = 12 total)\n  \n  return true;\n}\n\nfunction extractCleanNumber(str) {\n  if (!str) return '';\n  return str.replace(/@s\\.whatsapp\\.net/g, '').replace(/@lid/g, '').replace(/@g\\.us/g, '').replace(/@[a-z.]+/g, '').trim();\n}\n\nlet cleanedSenderPn = '';\nconst numberSources = [];\n\nif (isGroup) {\n  numberSources.push(\n    key.participantPn,\n    key.cleanedParticipantPn,\n    msg.participantPn,\n    msg.cleanedParticipantPn,\n    participant\n  );\n} else {\n  numberSources.push(remoteJid);\n}\n\nnumberSources.push(\n  key.cleanedSenderPn,\n  msg.cleanedSenderPn,\n  key.senderPn,\n  msg.senderPn,\n  msg.from,\n  data.from,\n  body.from\n);\n\nfunction findPhoneInObj(obj, depth = 0) {\n  if (!obj || typeof obj !== 'object' || depth > 3) return '';\n  for (const k of ['senderPn', 'cleanedSenderPn', 'participantPn', 'cleanedParticipantPn', 'from', 'sender']) {\n    if (obj[k] && typeof obj[k] === 'string') {\n      const cleaned = extractCleanNumber(obj[k]);\n      if (isValidPhoneNumber(cleaned)) return cleaned;\n    }\n  }\n  for (const k of Object.keys(obj)) {\n    if (typeof obj[k] === 'object') {\n      const found = findPhoneInObj(obj[k], depth + 1);\n      if (found) return found;\n    }\n  }\n  return '';\n}\n\nfor (const src of numberSources) {\n  if (src) {\n    const cleaned = extractCleanNumber(String(src));\n    if (isValidPhoneNumber(cleaned)) {\n      cleanedSenderPn = cleaned;\n      break;\n    }\n  }\n}\n\nif (!cleanedSenderPn) {\n  cleanedSenderPn = findPhoneInObj(msg) || findPhoneInObj(data) || findPhoneInObj(body);\n}\n\nconst isLid = !isValidPhoneNumber(cleanedSenderPn);\n\nconst hasAudio = !!message.audioMessage;\nconst hasImage = !!message.imageMessage;\nconst hasText = messageBody.trim().length > 0;\nif (!hasAudio && !hasText && !hasImage) return [];\n\n// Si c'est un prospect (pas un groupe) et qu'on n'a pas de vrai numéro, on skip\nif (!isGroup && isLid && !cleanedSenderPn) {\n  console.log('⚠️ LID détecté, message ignoré:', remoteJid);\n  return [];\n}\n\nreturn [{ json: { remoteJid, fromMe, pushName, messageTimestamp, messageBody, messageId, participant, cleanedSenderPn, isGroup, groupName, isLid, key, message, rawMsg: msg, hasAudio, hasImage, hasText } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -19568,
+        -816
+      ],
+      "id": "cda5a41a-8fb1-42e1-876e-39cea2394338",
+      "name": "Normaliser Webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-group",
+              "leftValue": "={{ $json.isGroup }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "looseTypeValidation": true
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -19344,
+        -816
+      ],
+      "id": "a1f83336-b545-41dd-8525-7228bb5f0cc9",
+      "name": "Est un Groupe?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-fromme",
+              "leftValue": "={{ $json.fromMe }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "looseTypeValidation": true
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -19120,
+        -1008
+      ],
+      "id": "2d8deb1b-6e93-412f-8ea5-760660fc5f3d",
+      "name": "Message Sortant? (Groupe)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "condition-fromme",
+              "leftValue": "={{ $json.fromMe }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "looseTypeValidation": true
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -19120,
+        -512
+      ],
+      "id": "7e7d10a5-c1f3-4772-b161-2c386d02c7de",
+      "name": "Message Sortant? (Prospect)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const normalized = $('Normaliser Webhook').first().json;\nconst message = normalized.message || {};\nconst hasImage = normalized.hasImage || !!message.imageMessage;\nconst hasAudio = normalized.hasAudio || !!message.audioMessage;\nconst messageBody = (normalized.messageBody || '').trim();\nconst hasMessageBody = messageBody.length > 0;\nif (!hasImage && !hasMessageBody) return [];\nif (hasAudio && !hasMessageBody && !hasImage) return [];\nlet horodatage = '';\ntry { const tsNum = typeof normalized.messageTimestamp === 'string' ? parseInt(normalized.messageTimestamp) : (normalized.messageTimestamp || 0); horodatage = new Date(tsNum * 1000).toLocaleString('fr-FR', { timeZone: 'Africa/Abidjan' }); } catch { horodatage = new Date().toLocaleString('fr-FR', { timeZone: 'Africa/Abidjan' }); }\nconst texte = message.imageMessage?.caption || (hasMessageBody ? messageBody : '') || message.conversation || message.extendedTextMessage?.text || '';\nconst type = hasImage ? (texte.length > 0 ? 'image+texte' : 'image') : 'texte';\nlet imageInfo = null;\nif (hasImage && message.imageMessage) { const im = message.imageMessage; imageInfo = { url: im.url || '', mimetype: im.mimetype || 'image/jpeg', mediaKey: im.mediaKey || '', directPath: im.directPath || '', fileEncSha256: im.fileEncSha256 || '', fileSha256: im.fileSha256 || '', fileLength: im.fileLength || '' }; }\nconst groupeNom = normalized.isGroup ? (normalized.groupName || normalized.remoteJid.replace('@g.us', '')) : '';\nconst groupeJid = normalized.isGroup ? normalized.remoteJid : '';\nreturn [{ json: { Horodatage: horodatage, Groupe_Nom: groupeNom, Groupe_JID: groupeJid, Expediteur: normalized.pushName || '', Telephone: normalized.cleanedSenderPn || '', Message_ID: normalized.messageId || '', Type: type, Message: texte, has_image: hasImage, has_text: texte.length > 0, imageInfo: imageInfo, Timestamp: normalized.messageTimestamp } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -18896,
+        -1008
+      ],
+      "id": "3b50082d-5583-4a2c-9b65-bca6108b9311",
+      "name": "Preparer Publication Groupe"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-has-image",
+              "leftValue": "={{ $json.has_image }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "looseTypeValidation": true
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -18672,
+        -1008
+      ],
+      "id": "ecacfeb2-faa7-4662-b185-fc8ccff51dd4",
+      "name": "Contient une Image?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.wasenderapi.com/api/decrypt-media",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.wasender_api }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ \"data\": { \"messages\": { \"key\": { \"id\": $json.Message_ID }, \"message\": { \"imageMessage\": { \"url\": $json.imageInfo ? $json.imageInfo.url : '', \"mimetype\": $json.imageInfo ? $json.imageInfo.mimetype : 'image/jpeg', \"mediaKey\": $json.imageInfo ? $json.imageInfo.mediaKey : '', \"directPath\": $json.imageInfo ? $json.imageInfo.directPath : '', \"fileEncSha256\": $json.imageInfo ? $json.imageInfo.fileEncSha256 : '', \"fileSha256\": $json.imageInfo ? $json.imageInfo.fileSha256 : '', \"fileLength\": $json.imageInfo ? $json.imageInfo.fileLength : '' } } } } }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -18448,
+        -1104
+      ],
+      "id": "c652d3b9-6953-42bb-861f-5813ab8f5934",
+      "name": "Decrypter Image",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json;\nlet publicUrl = result.publicUrl || result.data?.publicUrl || result.url || result.data?.url || '';\nconst ok = publicUrl.startsWith('http');\nreturn [{ json: { publicUrl: ok ? publicUrl : '', decrypt_ok: ok } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -18224,
+        -1104
+      ],
+      "id": "e0666484-9f62-4b55-8da3-b1774e6e3825",
+      "name": "Verifier Decryptage Image"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-decrypt-ok",
+              "leftValue": "={{ $json.decrypt_ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "looseTypeValidation": true
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -18000,
+        -1104
+      ],
+      "id": "ed400dbf-0509-477c-8805-e0a96d2a3b29",
+      "name": "Decryptage OK?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.imgbb.com/1/upload",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "=9f8a1a2b1ec266006878b8e5e20f713e"
+            },
+            {
+              "name": "image",
+              "value": "={{ $('Verifier Decryptage Image').first().json.publicUrl }}"
+            },
+            {
+              "name": "expiration",
+              "value": "15552000"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -17648,
+        -1200
+      ],
+      "id": "e2cbbc97-030c-4be7-a2d5-104287e35dd0",
+      "name": "Upload Image ImgBB",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const imgResult = $input.first().json;\nconst extracted = $('Preparer Publication Groupe').first().json;\nlet lienImage = imgResult?.data?.url || imgResult?.data?.display_url || $('Verifier Decryptage Image').first().json?.publicUrl || '[Upload échoué]';\nreturn [{ json: { Horodatage: extracted.Horodatage, Groupe_Nom: extracted.Groupe_Nom, Groupe_JID: extracted.Groupe_JID, Expediteur: extracted.Expediteur, Telephone: extracted.Telephone, Message_ID: extracted.Message_ID, Type: extracted.Type, Message: extracted.Message, Lien_Image: lienImage, has_text: extracted.has_text, Timestamp: extracted.Timestamp } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -17232,
+        -1200
+      ],
+      "id": "41d544b4-0d9d-43ef-be0e-38123791c9ef",
+      "name": "Construire Donnees Avec Image"
+    },
+    {
+      "parameters": {
+        "jsCode": "const extracted = $('Preparer Publication Groupe').first().json;\nreturn [{ json: { Horodatage: extracted.Horodatage, Groupe_Nom: extracted.Groupe_Nom, Groupe_JID: extracted.Groupe_JID, Expediteur: extracted.Expediteur, Telephone: extracted.Telephone, Message_ID: extracted.Message_ID, Type: extracted.Type, Message: extracted.Message, Lien_Image: '[Décryptage échoué]', has_text: extracted.has_text, Timestamp: extracted.Timestamp } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -17232,
+        -1008
+      ],
+      "id": "d1a07ffb-4414-42be-a15e-81974150140f",
+      "name": "Fallback Image Echouee"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/images",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ \"horodatage\": $json.Horodatage || '', \"groupe\": $json.Groupe_Nom || '', \"groupe_jid\": $json.Groupe_JID || '', \"telephone\": $json.Telephone || '', \"expediteur\": $json.Expediteur || '', \"type\": $json.Type || '', \"lien_image\": $json.Lien_Image || '', \"message_id\": $json.Message_ID || '' }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -16944,
+        -1104
+      ],
+      "id": "c030854a-a801-448b-a704-65cef66f0d33",
+      "name": "Sauvegarder Image Supabase",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-has-caption",
+              "leftValue": "={{ $('Preparer Publication Groupe').first().json.has_text }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "looseTypeValidation": true
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -16720,
+        -1104
+      ],
+      "id": "bfe3b115-7507-438c-8dde-5b132083b59e",
+      "name": "Image avec Texte?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const extracted = $('Preparer Publication Groupe').first().json;\nlet lienImage = '';\ntry { lienImage = $('Construire Donnees Avec Image').first().json?.Lien_Image || ''; } catch(e) {}\nif (!lienImage) { try { lienImage = $('Fallback Image Echouee').first().json?.Lien_Image || ''; } catch(e) {} }\nreturn [{ json: { Horodatage: extracted.Horodatage, Groupe_Nom: extracted.Groupe_Nom, Groupe_JID: extracted.Groupe_JID, Expediteur: extracted.Expediteur, Telephone: extracted.Telephone, Type: extracted.Type, Message: extracted.Message, Lien_Image: lienImage, Message_ID: extracted.Message_ID, Timestamp: extracted.Timestamp } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16496,
+        -1104
+      ],
+      "id": "a59175bb-1113-4ded-844b-5606f620ff48",
+      "name": "Preparer Publication Image+Texte"
+    },
+    {
+      "parameters": {
+        "jsCode": "const extracted = $('Preparer Publication Groupe').first().json;\nreturn [{ json: { Horodatage: extracted.Horodatage, Groupe_Nom: extracted.Groupe_Nom, Groupe_JID: extracted.Groupe_JID, Expediteur: extracted.Expediteur, Telephone: extracted.Telephone, Type: extracted.Type, Message: extracted.Message, Lien_Image: '', Message_ID: extracted.Message_ID, Timestamp: extracted.Timestamp } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16496,
+        -832
+      ],
+      "id": "7281799b-71a5-4e01-9f4f-eaf517a9af4f",
+      "name": "Preparer Publication Texte Seul"
+    },
+    {
+      "parameters": {
+        "jsCode": "const extracted = $('Preparer Publication Groupe').first().json;\nlet lienImage = '';\ntry { lienImage = $('Construire Donnees Avec Image').first().json?.Lien_Image || ''; } catch(e) {}\nif (!lienImage) { try { lienImage = $('Fallback Image Echouee').first().json?.Lien_Image || ''; } catch(e) {} }\nreturn [{ json: { Horodatage: extracted.Horodatage, Groupe_Nom: extracted.Groupe_Nom, Groupe_JID: extracted.Groupe_JID, Expediteur: extracted.Expediteur, Telephone: extracted.Telephone, Type: 'image', Message: '[Image sans texte]', Lien_Image: lienImage, Message_ID: extracted.Message_ID, Timestamp: extracted.Timestamp } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16496,
+        -1296
+      ],
+      "id": "4e37e3a5-6998-4d2d-aa94-a0bb9d56d3de",
+      "name": "Preparer Publication Image Seule"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/publications",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ \"horodatage\": $json.Horodatage || '', \"groupe\": $json.Groupe_Nom || '', \"groupe_jid\": $json.Groupe_JID || '', \"expediteur\": $json.Expediteur || '', \"telephone\": $json.Telephone || '', \"type\": $json.Type || '', \"message\": $json.Message || '', \"lien_image\": $json.Lien_Image || '', \"message_id\": $json.Message_ID || '' }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -16272,
+        -1008
+      ],
+      "id": "34cb6347-a14f-4e4f-b4c1-e52a4777401f",
+      "name": "Enregistrer Publication Supabase",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawResponse = $input.first().json;\nlet pubData = {};\nif (Array.isArray(rawResponse)) { pubData = rawResponse[0] || {}; } else if (rawResponse && typeof rawResponse === 'object') { pubData = rawResponse; }\nconst sourceFromPrep = (() => { try { return $('Preparer Publication Image+Texte').first().json; } catch(e) {} try { return $('Preparer Publication Texte Seul').first().json; } catch(e) {} try { return $('Preparer Publication Image Seule').first().json; } catch(e) {} return {}; })();\nreturn [{ json: { publication_id: pubData.id || '', groupe: pubData.groupe || sourceFromPrep.Groupe_Nom || '', groupe_jid: pubData.groupe_jid || sourceFromPrep.Groupe_JID || '', expediteur: pubData.expediteur || sourceFromPrep.Expediteur || '', telephone: pubData.telephone || sourceFromPrep.Telephone || '', message: pubData.message || sourceFromPrep.Message || '', lien_image: pubData.lien_image || sourceFromPrep.Lien_Image || '', horodatage: pubData.horodatage || sourceFromPrep.Horodatage || '', message_id: pubData.message_id || sourceFromPrep.Message_ID || '' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16096,
+        -1008
+      ],
+      "id": "710ead26-f21c-4b7e-871a-ed8afff3e5b9",
+      "name": "Extraire Donnees Publication"
+    },
+    {
+      "id": "prefilter-real-estate",
+      "name": "Pré-filtrer Annonce Immobilière",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -14800,
+        300
+      ],
+      "parameters": {
+        "jsCode": "\n// Pré-filtrer: Est-ce vraiment une annonce immobilière?\n// Évite les appels OpenAI coûteux sur du spam/messages hors-sujet\n\nconst msg = $input.first().json.message || '';\n\nif (!msg || msg.length < 10) {\n  console.log('⏭️ Message trop court, ignoré');\n  return [];\n}\n\n// Keywords immobiliers en Côte d'Ivoire\nconst realEstateKeywords = [\n  // Types de bien\n  'appartement', 'studio', 'chambre', 'maison', 'villa', 'duplex', 'triplex',\n  'terrain', 'bureau', 'magasin', 'boutique', 'entrepot', 'local', 'residence',\n  'parking', 'garage', 'immeuble',\n  // Villes/communes\n  'cocody', 'yopougon', 'marcory', 'koumassi', 'treichville', 'plateau', 'adjame',\n  'abobo', 'attecoube', 'port-bouet', 'bingerville', 'songon', 'anyama', 'bassam',\n  'assinie', 'abidjan', 'riviera', 'angre', 'calavi', 'bapro',\n  // Caractéristiques\n  'meuble', 'climatise', 'neuf', 'renove', 'securise', 'parking', 'piscine',\n  'jardin', 'balcon', 'terrasse', 'cuisine', 'salle',\n  // Prix/Transaction\n  'prix', 'fcfa', 'louer', 'vendre', 'location', 'vente', 'bail', 'disponible',\n  'annonce', 'offre', 'demande'\n];\n\nconst msgLower = msg.toLowerCase();\nconst keywordCount = realEstateKeywords.filter(kw => msgLower.includes(kw)).length;\n\n// Scoring: au moins 2 keywords pour considérer comme annonce\nconst realEstateScore = keywordCount / realEstateKeywords.length * 100;\nconst isRealEstate = keywordCount >= 2;\n\nif (!isRealEstate) {\n  console.log('📝 Pas une annonce immobilière (score ' + Math.round(realEstateScore) + '/100)');\n  console.log('   Message:', msg.substring(0, 50) + '...');\n  return [];\n}\n\nconsole.log('✅ Annonce immobilière détectée (score ' + Math.round(realEstateScore) + '/100)');\n\n// Passer au nœud suivant\nreturn $input.first().json;\n"
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un expert en extraction de données immobilières pour la Côte d'Ivoire.\nExtrais les informations structurées à partir de publications WhatsApp de groupes immobiliers.\n\n# COMMUNES D'ABIDJAN\nCocody, Yopougon, Marcory, Koumassi, Treichville, Plateau, Adjamé, Abobo, Attécoubé, Port-Bouët, Bingerville, Songon, Anyama.\n\n# RÈGLES STRICTES\n- Ne JAMAIS inventer de données. Champ vide \"\" si information absente.\n- disponible : \"Oui\" par défaut, \"Non\" seulement si explicitement indiqué.\n- Déduis le type_offre depuis le contexte (louer = Location, vendre/acheter = Vente).\n- Réponds UNIQUEMENT avec le JSON, sans texte avant ni après.\n\n# FORMAT JSON ATTENDU\n{\n  \"type_de_bien\": \"\",\n  \"type_offre\": \"Location|Vente\",\n  \"zone_geographique\": \"\",\n  \"commune\": \"\",\n  \"quartier\": \"\",\n  \"prix\": \"\",\n  \"telephone\": \"\",\n  \"caracteristiques\": \"\",\n  \"publie_par\": \"\",\n  \"meubles\": \"Oui|Non\",\n  \"chambre\": \"\",\n  \"disponible\": \"Oui|Non\"\n}"
+            },
+            {
+              "content": "=Publication de {{ $json.expediteur }} dans le groupe {{ $json.groupe }}\n\nContact publieur : {{ $json.telephone }}\n\nMessage : {{ $json.message }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 400,
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          },
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        -15920,
+        -1008
+      ],
+      "id": "93c6b0f4-dd4d-4010-949a-85db6a856316",
+      "name": "IA Extraction Annonce",
+      "credentials": {
+        "openAiApi": {
+          "id": "toKKNKCxt5GPmAor",
+          "name": "API Agent Immo"
+        }
+      },
+      "notes": "SÉCURITÉ: Message de groupe peut être malveillant. Pré-filtre réduit le risque. Prompt à jour avec instructions strictes."
+    },
+    {
+      "parameters": {
+        "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux?disponible=eq.Oui&commune=eq.{{ encodeURIComponent($('Normaliser Webhook').first().json.groupName) }}&select=id,ref_bien,type_de_bien,commune,quartier,prix,caracteristiques,telephone_bien&order=date_publication.desc&limit=50",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -15632,
+        -1184
+      ],
+      "id": "c76ea65a-a345-4bbf-b9b3-58fa8276fab0",
+      "name": "Charger Annonces Recentes",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Générer ref_bien avec UUID pour éviter collisions\n// Format: TypeCode-CommuneCode-RandomUUID\n\nconst cleanText = (s) => s?.toLowerCase?.().replace(/[^a-z0-9]/g, '') || '';\n\nconst typeMapping = {\n  'appartement': 'A', 'studio': 'S', 'chambre': 'C', 'maison': 'M', 'villa': 'V',\n  'duplex': 'D', 'terrain': 'T', 'bureau': 'B', 'magasin': 'G', 'local': 'L'\n};\n\nconst type = $json.type_de_bien ? ($json.type_de_bien.toLowerCase().substring(0, 3)) : 'XXX';\nconst typeCode = typeMapping[type] || type.substring(0, 1).toUpperCase();\n\nconst commune = $json.commune ? $json.commune.substring(0, 3).toUpperCase() : 'XXX';\n\n// OPTION 1: UUID v4 aléatoire (recommandé)\nconst uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {\n  var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);\n  return v.toString(16);\n});\nconst shortUuid = uuid.substring(0, 8).toUpperCase();\n\nconst ref_bien = `${typeCode}-${commune}-${shortUuid}`;\n\nconsole.log('✅ ref_bien généré: ' + ref_bien);\nconsole.log('   Type: ' + typeCode + ', Commune: ' + commune + ', UUID: ' + shortUuid);\n\n// Vérifier les doublons (dernière 50 annonces seulement)\nlet annonces = [];\ntry {\n  annonces = $('Charger Annonces Recentes').first().json || [];\n} catch(e) {\n  console.log('⚠️  Charger Annonces échoué, pas de vérif doublons');\n}\n\n// Vérifier le contenu_hash pour détecter les vrais doublons\nconst contentHash = require('crypto')\n  .createHash('md5')\n  .update(JSON.stringify({\n    type: $json.type_de_bien,\n    prix: $json.prix,\n    commune: $json.commune,\n    quartier: $json.quartier,\n    caracteristiques: $json.caracteristiques\n  }))\n  .digest('hex');\n\nconst isDuplicate = annonces.some(a => a.content_hash === contentHash);\n\nif (isDuplicate) {\n  console.log('🔄 Doublon détecté (contenu identique)');\n  return [];\n}\n\nreturn [{\n  json: {\n    ...($json),\n    ref_bien: ref_bien,\n    content_hash: contentHash\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -15472,
+        -1008
+      ],
+      "id": "c86759b0-af3f-4f81-8ff4-3a40207b34ce",
+      "name": "Detecteur Doublons"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "check-doublon",
+              "leftValue": "={{ $json._is_duplicate }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "looseTypeValidation": true
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -15248,
+        -1008
+      ],
+      "id": "2f931e55-cad1-4f56-ac5a-3876676c89b0",
+      "name": "Est un Doublon?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ \"ref_bien\": $json.ref_bien || '', \"type_de_bien\": $json.type_de_bien || '', \"type_offre\": $json.type_offre || '', \"zone_geographique\": $json.zone_geographique || '', \"commune\": $json.commune || '', \"quartier\": $json.quartier || '', \"prix\": $json.prix || '', \"telephone\": $json.telephone || '', \"telephone_bien\": $json.telephone || '', \"telephone_expediteur\": $json._source_telephone || '', \"expediteur\": $json._source_expediteur || '', \"caracteristiques\": $json.caracteristiques || '', \"publie_par\": $json.publie_par || '', \"meubles\": $json.meubles || 'Non', \"chambre\": $json.chambre || '', \"disponible\": $json.disponible || 'Oui', \"groupe_whatsapp_origine\": $json._source_groupe_nom || '', \"groupe_whatsapp_jid\": $json._source_groupe_jid || '', \"date_publication\": new Date().toISOString(), \"lien_image\": $json._source_lien_image || '', \"message_initial\": $json._source_message || '', \"publication_id\": $json._source_publication_id || '' }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -15024,
+        -1008
+      ],
+      "id": "5f1d247a-65e3-41c1-9c0d-92d1a896a401",
+      "name": "Sauvegarder Nouvelle Annonce",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "condition-audio",
+              "leftValue": "={{ $json.hasAudio }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "looseTypeValidation": true
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -18896,
+        -512
+      ],
+      "id": "eb664393-2983-481f-94e5-d49c4f3efa20",
+      "name": "Audio ou Texte?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.wasenderapi.com/api/decrypt-media",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.wasender_api }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ \"data\": { \"messages\": { \"key\": { \"id\": $('Normaliser Webhook').first().json.messageId }, \"message\": { \"audioMessage\": $('Normaliser Webhook').first().json.message.audioMessage || {} } } } }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -18672,
+        -608
+      ],
+      "id": "ce975726-9550-4fa9-9689-8830aaa139b8",
+      "name": "Decrypter Audio",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.publicUrl }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -18448,
+        -608
+      ],
+      "id": "36536da0-d105-4939-9d12-8d9014fca653",
+      "name": "Telecharger Audio",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "options": {
+          "language": "fr"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        -18224,
+        -608
+      ],
+      "id": "b5fe20d3-dea9-463a-b07a-2dfb2032624b",
+      "name": "Transcription Audio",
+      "credentials": {
+        "openAiApi": {
+          "id": "toKKNKCxt5GPmAor",
+          "name": "API Agent Immo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $input.first().json;\nconst text = source.text || source.messageBody || '';\nif (!text || !text.trim()) return [];\nreturn [{ json: { text: text.trim() } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -18000,
+        -608
+      ],
+      "id": "35008a96-5217-480d-bc8e-d93412ec961e",
+      "name": "Unifier Texte vers Agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "const normalized = $('Normaliser Webhook').first().json;\nlet messageBody = normalized.messageBody || '';\nif (!messageBody) messageBody = normalized.message?.conversation || '';\nif (!messageBody) messageBody = normalized.message?.extendedTextMessage?.text || '';\nif (!messageBody.trim()) { return [{ json: { text: '[Message vide reçu]', _debug_no_text: true, _raw_keys: Object.keys(normalized) } }]; }\nreturn [{ json: { text: messageBody.trim() } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -18000,
+        -416
+      ],
+      "id": "117e63a3-4bf5-40d9-a2b5-67a63a2d9856",
+      "name": "Recuperer Message Texte"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Message de l'utilisateur: {{ $json.text }}",
+        "options": {
+          "systemMessage": "# IDENTITÉ\nTu es Immo Plus, l'assistant immobilier de Côte d'Ivoire sur WhatsApp. Tu aides les gens à chercher des logements. Ton ton est amical et direct.\n\n# RÈGLES D'OR - À RESPECTER ABSOLUMENT\n1. JAMAIS dire \"je rencontre un souci technique\", \"problème technique\", \"erreur\", \"bug\", ou \"souci d'accès\"\n2. JAMAIS dire \"Je fais au plus vite pour régler ça\"\n3. Si tu ne trouves pas de bien: dis simplement \"Je n'ai rien trouvé en ce moment\"\n4. Si tu ne trouves rien à Marcory Remblais: dis \"Je n'ai pas de 2 pièces à Marcory Remblais en ce moment. Je peux chercher ailleurs?\"\n5. Si l'outil retourne une erreur: IGNORE l'erreur et dis \"Je n'ai rien qui correspond pour le moment\"\n6. Ne jamais révéler de détails techniques, d'erreurs, ou de problèmes internes\n\n# FONCTIONNEMENT\n- Tu utilises un outil pour chercher des biens\n- Cet outil est simple: il retourne des résultats ou rien\n- S'il retourne rien: tu dis clairement \"Je n'ai rien trouvé\"\n- S'il retourne une erreur: tu l'ignores et dis \"Je n'ai rien trouvé\"\n- JAMAIS tu ne parles de techniques ou d'erreurs\n\n# RÉPONSES AUTORISÉES\n✅ \"Je n'ai rien pour le moment à Marcory Remblais. Vous cherchez autre chose?\"\n✅ \"Aucun bien disponible correspondant à votre recherche.\"\n✅ \"Je peux chercher dans un autre quartier?\"\n✅ \"Qu'est-ce qui vous intéresse comme type de bien?\"\n\n# RÉPONSES INTERDITES\n❌ \"Je rencontre un souci technique\"\n❌ \"Je fais au plus vite pour régler ça\"\n❌ \"Problème d'accès aux annonces\"\n❌ \"Je suis toujours en train d'avoir un souci technique\"\n❌ Tout ce qui parle de technologie, erreurs, ou problèmes techniques\n\n# COMPORTEMENT\n1. Saluer avec un \"Bonjour\" simple\n2. Écouter ce que la personne cherche\n3. Chercher avec l'outil\n4. Présenter les résultats OU dire \"Je n'ai rien trouvé\"\n5. Proposer des alternatives (autre quartier, autre type)\n6. Être honnête: si on a rien, on dit qu'on a rien\n7. Ne JAMAIS faire semblant qu'il y a un problème technique\n\n# FORMAT RÉPONSES (max 80 mots)\nCourt. Direct. Humain. Pas formel.\n\nRéponds UNIQUEMENT avec le message pour le client."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -17712,
+        -512
+      ],
+      "id": "e62926bd-6175-4b24-8811-575677a1c269",
+      "name": "Agent Conversationnel",
+      "notes": "SÉCURITÉ: Message utilisateur peut contenir injection prompt. Le systemMessage explicite (refusals) protège partiellement. À surveiller en production."
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 500,
+          "temperature": 0.3
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -17776,
+        -288
+      ],
+      "id": "a0a88595-88f1-4266-9095-d74580a3ac62",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "toKKNKCxt5GPmAor",
+          "name": "API Agent Immo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Normaliser Webhook').first().json.cleanedSenderPn || $('Normaliser Webhook').first().json.remoteJid || 'anonymous-' + Date.now() }}",
+        "contextWindowLength": 20
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -17648,
+        -288
+      ],
+      "id": "33b8a4d7-deac-4ce0-84a8-69bda8d56fd3",
+      "name": "Memory Conversationnelle (20 msgs)"
+    },
+    {
+      "parameters": {
+        "name": "recherche_biens_immobiliers",
+        "description": "Recherche des biens immobiliers disponibles. Accepte: communes (Cocody, Yopougon...), types (villa, appartement...), quartiers (Angré, Riviera...), caractéristiques (meublé, climatisé...) ou phrases combinées (ex: \"villa à Cocody meublée\"). Parse automatiquement et retourne biens correspondants avec ref_bien, type, commune, prix.",
+        "jsCode": "// Outil de recherche - Messages honnêtes uniquement\n// Jamais d'erreur technique, juste \"Je n'ai rien\" ou résultats\n\nconst searchInput = $fromAI('search_term', 'Ex: villa, Cocody, meublé', 'string');\n\nif (!searchInput || !searchInput.trim()) {\n  return '{\"resultats\": [], \"nombre\": 0, \"message\": \"Pas de terme.\"}';\n}\n\nconst input = searchInput.trim();\n\nfunction parseSearchPhrase(phrase) {\n  const communes = ['cocody', 'yopougon', 'marcory', 'koumassi', 'treichville', 'plateau', 'adjame', 'abobo', 'attecoube', 'port-bouet', 'bingerville', 'songon', 'anyama', 'bassam', 'assinie'];\n  const types = ['appartement', 'studio', 'chambre', 'maison', 'villa', 'duplex', 'triplex', 'terrain', 'bureau', 'magasin', 'boutique', 'entrepot', 'immeuble', 'local', 'residence', 'parking', 'garage'];\n  const quartiers = ['angre', 'riviera', 'plateau', 'cocody centre', 'la sobrerie', 'deux plateaux', 'bapro', 'calavi'];\n  const caracteristiques = ['meuble', 'meublé', 'climatise', 'climatisé', 'neuf', 'renovate', 'renové', 'securise', 'sécurisé'];\n\n  const words = phrase.toLowerCase().split(/[\\s,;]+/).filter(w => w.length > 0);\n  const found = { communes: [], types: [], quartiers: [], caracteristiques: [], other: [] };\n\n  for (const word of words) {\n    if (communes.some(c => word.includes(c) || c.includes(word))) {\n      const comm = communes.find(c => word.includes(c) || c.includes(word));\n      if (!found.communes.includes(comm)) found.communes.push(comm);\n    } else if (types.some(t => word.includes(t) || t.includes(word))) {\n      const type = types.find(t => word.includes(t) || t.includes(word));\n      if (!found.types.includes(type)) found.types.push(type);\n    } else if (quartiers.some(q => word.includes(q) || q.includes(word))) {\n      const qu = quartiers.find(q => word.includes(q) || q.includes(word));\n      if (!found.quartiers.includes(qu)) found.quartiers.push(qu);\n    } else if (caracteristiques.some(c => word.includes(c) || c.includes(word))) {\n      const car = caracteristiques.find(c => word.includes(c) || c.includes(word));\n      if (!found.caracteristiques.includes(car)) found.caracteristiques.push(car);\n    } else if (word.length > 2) {\n      found.other.push(word);\n    }\n  }\n\n  return found;\n}\n\nconst parsed = parseSearchPhrase(input);\n\nconst filters = [];\n\nfor (const commune of parsed.communes) {\n  const encoded = encodeURIComponent('*' + commune + '*');\n  filters.push('commune.ilike.' + encoded);\n}\n\nfor (const type of parsed.types) {\n  const encoded = encodeURIComponent('*' + type + '*');\n  filters.push('type_de_bien.ilike.' + encoded);\n}\n\nfor (const quartier of parsed.quartiers) {\n  const encoded = encodeURIComponent('*' + quartier + '*');\n  filters.push('quartier.ilike.' + encoded);\n}\n\nfor (const car of parsed.caracteristiques) {\n  const encoded = encodeURIComponent('*' + car + '*');\n  filters.push('caracteristiques.ilike.' + encoded);\n}\n\nfor (const word of parsed.other) {\n  const encoded = encodeURIComponent('*' + word + '*');\n  filters.push('caracteristiques.ilike.' + encoded);\n  filters.push('ref_bien.ilike.' + encoded);\n}\n\nif (filters.length === 0) {\n  const encoded = encodeURIComponent('*' + input + '*');\n  filters.push(\n    'type_de_bien.ilike.' + encoded,\n    'commune.ilike.' + encoded,\n    'quartier.ilike.' + encoded,\n    'caracteristiques.ilike.' + encoded,\n    'ref_bien.ilike.' + encoded,\n    'zone_geographique.ilike.' + encoded\n  );\n}\n\nconst selectFields = 'ref_bien,type_de_bien,type_offre,commune,quartier,prix,caracteristiques,meubles,chambre,zone_geographique,lien_image';\nconst filterString = filters.join(',');\nconst path = '/rest/v1/locaux?disponible=eq.Oui&or=(' + filterString + ')&select=' + selectFields + '&limit=10';\n\nconst apiKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk';\n\nreturn new Promise((resolve) => {\n  const https = require('https');\n\n  const options = {\n    hostname: 'udyfhzyvalansmhkynnc.supabase.co',\n    path: path,\n    method: 'GET',\n    headers: {\n      'apikey': apiKey,\n      'Authorization': 'Bearer ' + apiKey,\n      'Content-Type': 'application/json'\n    },\n    timeout: 10000\n  };\n\n  const req = https.request(options, (res) => {\n    let body = '';\n    res.on('data', (chunk) => { body += chunk; });\n    res.on('end', () => {\n      try {\n        const data = JSON.parse(body);\n\n        if (!Array.isArray(data) || data.length === 0) {\n          resolve(JSON.stringify({\n            resultats: [],\n            nombre: 0,\n            message: 'Je n\\'ai rien trouvé qui correspond.'\n          }));\n          return;\n        }\n\n        const resultats = data.map(bien => ({\n          ref_bien: bien.ref_bien || '',\n          type_de_bien: bien.type_de_bien || '',\n          commune: bien.commune || '',\n          quartier: bien.quartier || '',\n          prix: bien.prix || '',\n          caracteristiques: bien.caracteristiques || '',\n          meubles: bien.meubles || '',\n          chambre: bien.chambre || ''\n        }));\n\n        resolve(JSON.stringify({\n          resultats: resultats,\n          nombre: resultats.length,\n          message: 'Voilà ce que j\\'ai trouvé'\n        }));\n      } catch (e) {\n        resolve(JSON.stringify({\n          resultats: [],\n          nombre: 0,\n          message: 'Je n\\'ai rien trouvé pour le moment.'\n        }));\n      }\n    });\n  });\n\n  req.on('error', () => {\n    resolve(JSON.stringify({\n      resultats: [],\n      nombre: 0,\n      message: 'Je n\\'ai rien qui correspond en ce moment.'\n    }));\n  });\n\n  req.on('timeout', () => {\n    req.destroy();\n    resolve(JSON.stringify({\n      resultats: [],\n      nombre: 0,\n      message: 'Je n\\'ai rien pour l\\'instant.'\n    }));\n  });\n\n  req.end();\n});"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1,
+      "position": [
+        -17520,
+        -288
+      ],
+      "id": "98709f24-768c-4052-9758-d5bcf824278b",
+      "name": "Outil Recherche Annonces"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un extracteur de métadonnées pour un CRM immobilier.\nAnalyse la conversation et extrais les informations en JSON strict.\n\nRègles :\n- interesse : true si le client montre un intérêt concret pour un bien précis\n- transfert_urgent : true si le client demande explicitement à parler à un humain\n- montrer_media : true si le client demande des photos ou vidéos\n- visite_programme : true UNIQUEMENT si l'assistant confirme une visite avec nom ET date\n- nom : nom du client\n- date_rv : date/heure du RDV mentionné\n- local_interesse : description courte du bien\n- ref_bien : référence du bien mentionné (format XXX-YYY-ZZZZ) si disponible\n\nRéponds UNIQUEMENT avec le JSON."
+            },
+            {
+              "content": "=Message utilisateur : {{ $json.text }}\n\nRéponse assistant : {{ $('Agent Conversationnel').first().json.output }}\n\nJSON attendu :\n{\n  \"interesse\": false,\n  \"transfert_urgent\": false,\n  \"montrer_media\": false,\n  \"visite_programme\": false,\n  \"nom\": \"\",\n  \"date_rv\": \"\",\n  \"local_interesse\": \"\",\n  \"ref_bien\": \"\"\n}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 200,
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          },
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        -17296,
+        -512
+      ],
+      "id": "44f701b8-848a-420c-b825-676809d9d0fa",
+      "name": "Extracteur Metadonnees",
+      "credentials": {
+        "openAiApi": {
+          "id": "toKKNKCxt5GPmAor",
+          "name": "API Agent Immo"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let agentReply = '';\ntry { agentReply = $('Agent Conversationnel').first().json.output || ''; } catch(e) { agentReply = 'Bonjour ! Je suis disponible pour vous aider dans votre recherche immobilière. Que recherchez-vous ?'; }\nlet analysis = {};\ntry { const raw = $('Extracteur Metadonnees').first().json; let output = raw.output; if (typeof output === 'string') { const match = output.match(/\\{[\\s\\S]*\\}/); analysis = match ? JSON.parse(match[0]) : JSON.parse(output); } else if (Array.isArray(output)) { const text = output[0]?.content?.[0]?.text || output[0]?.text || '{}'; analysis = typeof text === 'string' ? JSON.parse(text) : text; } else if (output && typeof output === 'object') { analysis = output; } } catch(e) { analysis = {}; }\nconst toBool = (v) => v === true || v === 'true';\nconst toStr = (v) => String(v || '').trim();\nreturn [{ json: { reply: agentReply, interesse: toBool(analysis.interesse), transfert_urgent: toBool(analysis.transfert_urgent), montrer_media: toBool(analysis.montrer_media), visite_programme: toBool(analysis.visite_programme), nom: toStr(analysis.nom), date_rv: toStr(analysis.date_rv), local_interesse: toStr(analysis.local_interesse), ref_bien: toStr(analysis.ref_bien) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16944,
+        -512
+      ],
+      "id": "daaa0d68-9059-4701-a9c7-69d297c1919a",
+      "name": "Parser Analyse"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.wasenderapi.com/api/send-message",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.wasender_api }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ \"to\": $('Normaliser Webhook').first().json.remoteJid.replace('@s.whatsapp.net', '').replace('@lid', ''), \"text\": $('Parser Analyse').first().json.reply }) }}",
+        "options": {
+          "timeout": 15000
+        },
+        "body": "{{ JSON.stringify({\n  \"phone\": $('Normaliser Webhook').first().json.remoteJid.replace(/@s\\\\.whatsapp\\\\.net/, '').replace(/@g\\\\.us/, '').replace(/@[a-z.]+/, ''),\n  \"message\": $('Parser Analyse').first().json.reply\n}) }}",
+        "headers": {
+          "Authorization": "Bearer {{ $credentials.wasender_api }}",
+          "Content-Type": "application/json"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -16720,
+        -640
+      ],
+      "id": "5dbb6aaa-684d-4902-b407-3af0a33693cd",
+      "name": "Envoyer Reponse WhatsApp",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "a0e3d7c4",
+              "leftValue": "={{ $('Parser Analyse').first().json.visite_programme }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "looseTypeValidation": true
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -16720,
+        -416
+      ],
+      "id": "37626359-3814-4843-9f13-e7b894c6ad22",
+      "name": "Visite Programmee?"
+    },
+    {
+      "parameters": {
+        "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/visite_programmee?numero=eq.{{ $json.cleanedSenderPn }}&local_interesse=eq.{{ $json.ref_bien }}&select=id",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -16496,
+        -416
+      ],
+      "id": "4dc0a183-2d79-4b04-89fa-82e78a9edf3f",
+      "name": "Verifier Visite Existante",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nlet visites = [];\nfor (const item of items) { const data = item.json; if (Array.isArray(data)) { visites = visites.concat(data); } else if (data && typeof data === 'object' && data.id) { visites.push(data); } }\nconst isNew = visites.length === 0;\nreturn [{ json: { is_new_visite: isNew, existing_count: visites.length } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16272,
+        -416
+      ],
+      "id": "a32fc403-56de-4487-9694-987fd38b0602",
+      "name": "Verifier Si Nouvelle Visite"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "check-new",
+              "leftValue": "={{ $json.is_new_visite }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "looseTypeValidation": true
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -16048,
+        -416
+      ],
+      "id": "9aac401a-9e92-4394-b8e9-0ecb3f3188ef",
+      "name": "Premiere Visite?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/visite_programmee",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ \"nom_prenom\": $('Parser Analyse').first().json.nom, \"numero\": $('Normaliser Webhook').first().json.cleanedSenderPn, \"date_rv\": $('Parser Analyse').first().json.date_rv, \"local_interesse\": $('Parser Analyse').first().json.local_interesse, \"ref_bien\": $('Parser Analyse').first().json.ref_bien, \"visite_prog\": \"Oui\", \"created_at\": new Date().toISOString() }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -15824,
+        -416
+      ],
+      "id": "ba752242-bf75-4e7c-9cd0-1ce675eebcb4",
+      "name": "Enregistrer Visite",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux?disponible=eq.Oui&ref_bien=ilike.*{{ $json.ref_bien }}*&select=id,ref_bien,telephone_bien,commune,quartier,prix&limit=5",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -15600,
+        -416
+      ],
+      "id": "eb35a6d0-4499-46b2-b7b7-5647ab3c010d",
+      "name": "Chercher Bien",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const localInteresse = $('Parser Analyse').first().json.local_interesse || '';\nconst refBien = $('Parser Analyse').first().json.ref_bien || '';\nif (!localInteresse.trim() && !refBien.trim()) { return [{ json: { telephone: '', ref_bien: '', _search_error: 'local_interesse et ref_bien vides' } }]; }\nfunction normalize(str) { if (!str) return ''; return String(str).toLowerCase().trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[\\s\\-_.,;:\\/\\\\]+/g, ' ').replace(/\\s+/g, ' ').trim(); }\nlet allBiens = [];\ntry { const allItems = $('Chercher Bien').all(); allBiens = allItems.map(item => item.json); if (allBiens.length === 1 && Array.isArray(allBiens[0])) { allBiens = allBiens[0]; } } catch(e) { return [{ json: { telephone: '', ref_bien: '', _search_error: 'Erreur lecture: ' + e.message } }]; }\nif (refBien.trim()) { const refNorm = refBien.trim().toUpperCase(); const exactMatch = allBiens.find(row => row.ref_bien && row.ref_bien.toUpperCase() === refNorm); if (exactMatch) { const tel = exactMatch.telephone_bien || exactMatch.telephone || exactMatch.telephone_expediteur || ''; return [{ json: { ...exactMatch, telephone: tel, _match_score: 100, _match_method: 'ref_bien' } }]; } }\nconst searchTerms = normalize(localInteresse).split(' ').filter(w => w.length > 2);\nif (searchTerms.length === 0) { return [{ json: { telephone: '', ref_bien: '', _search_error: 'Termes insuffisants' } }]; }\nlet bestMatch = null; let bestScore = 0;\nfor (const row of allBiens) { if (!row?.type_de_bien) continue; const rowText = normalize([row.type_de_bien, row.zone_geographique, row.commune, row.quartier, row.prix, row.caracteristiques].filter(Boolean).join(' ')); let score = 0; for (const term of searchTerms) { if (rowText.includes(term)) score++; } const matchPercent = (score / searchTerms.length) * 100; if (matchPercent >= 40 && matchPercent > bestScore) { bestScore = matchPercent; bestMatch = row; } }\nif (bestMatch) { const tel = bestMatch.telephone_bien || bestMatch.telephone || bestMatch.telephone_expediteur || ''; return [{ json: { ...bestMatch, telephone: tel, _match_score: bestScore, _match_method: 'keywords' } }]; } else { return [{ json: { telephone: '', ref_bien: '', _search_error: 'Aucun bien trouvé pour: ' + localInteresse } }]; }"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -15376,
+        -416
+      ],
+      "id": "5b239450-5e2e-49cc-963d-a2429b6498d0",
+      "name": "Recherche Intelligente Proprietaire"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "check-tel",
+              "leftValue": "={{ $json.telephone }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "looseTypeValidation": true
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -15152,
+        -416
+      ],
+      "id": "2547ad24-7a56-43d6-9a39-f7090cdf4b11",
+      "name": "Proprietaire Trouve?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.wasenderapi.com/api/send-message",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.wasender_api }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ \"to\": $('Recherche Intelligente Proprietaire').first().json.telephone, \"text\": '🏠 *Nouvelle demande de visite*\\n\\n📋 Réf: ' + ($('Recherche Intelligente Proprietaire').first().json.ref_bien || 'N/A') + '\\n👤 Prospect : ' + $('Parser Analyse').first().json.nom + '\\n📱 Numéro : ' + $('Normaliser Webhook').first().json.cleanedSenderPn + '\\n🏘️ Bien : ' + $('Parser Analyse').first().json.local_interesse + '\\n📅 Date souhaitée : ' + $('Parser Analyse').first().json.date_rv + '\\n\\nMerci de contacter le prospect rapidement. 🙏' }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -14928,
+        -512
+      ],
+      "id": "624ba6b7-7dab-4ebb-ba41-2d8dcd9ea6e7",
+      "name": "Notifier Proprietaire",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.wasenderapi.com/api/send-message",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.wasender_api }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ \"to\": \"2250789263373\", \"text\": '⚠️ *VISITE À TRAITER MANUELLEMENT*\\n\\n📋 Réf: ' + ($('Parser Analyse').first().json.ref_bien || 'N/A') + '\\n👤 Prospect : ' + $('Parser Analyse').first().json.nom + '\\n📱 Numéro : ' + $('Normaliser Webhook').first().json.cleanedSenderPn + '\\n🏘️ Bien : ' + $('Parser Analyse').first().json.local_interesse + '\\n📅 Date souhaitée : ' + $('Parser Analyse').first().json.date_rv + '\\n\\n❌ Numéro propriétaire introuvable automatiquement.' }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -14928,
+        -320
+      ],
+      "id": "eab6e143-68ef-49f1-ad36-0c195091be94",
+      "name": "Alerter Agence (Fallback)",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Vérifier que le message n'est pas envoyé par le bot lui-même\nif ($input.first().json.fromMe === true) {\n  console.log('⚠️ Message du bot lui-même, ignoré');\n  return [];\n}\n\n// Vérifier: pas de messageId = ne pas traiter (webhook mal formé)\nconst msgId = $input.first().json.messageId || '';\nif (!msgId) {\n  console.log('⚠️ Pas de messageId, webhook mal formé');\n  return [];\n}\n\n// TODO: Implémenter cache/TTL pour éviter les vraies boucles\n// (le bot envoie un message, Wassender renvoie un webhook avec ce message)\n// Cache à implémenter: { messageId: timestamp }\n// Si messageId vu dans les 5 dernières minutes: DROP\n\nreturn $input.first().json;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -18896,
+        -400
+      ],
+      "id": "3d985a9e-64c5-47a1-98b8-89381b2344c8",
+      "name": "Anti-Boucle Prospect"
+    },
+    {
+      "parameters": {
+        "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux?id=eq.{{ $json.id }}",
+        "method": "PATCH",
+        "headers": {
+          "apikey": "{{ $credentials.supabase_anon }}",
+          "Authorization": "Bearer {{ $credentials.supabase_anon }}",
+          "Content-Type": "application/json"
+        },
+        "sendBody": true,
+        "body": "={{ JSON.stringify({ date_expiration: $json.dateExpiration }) }}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -14600,
+        -1008
+      ],
+      "id": "38fc30dc-4ec7-4338-a2f1-04b6bfdc0856",
+      "name": "Mettre à jour Date Expiration"
+    },
+    {
+      "parameters": {
+        "interval": [
+          {
+            "triggerAtHour": 9,
+            "triggerAtMinute": 0
+          }
+        ]
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        -19792,
+        -400
+      ],
+      "id": "6ca06701-cb00-385a-a5e3-7c5836ad719a",
+      "name": "Schedule Relance 24h"
+    },
+    {
+      "parameters": {
+        "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux?select=id,ref_bien,date_expiration,expediteur,telephone_expediteur",
+        "method": "GET",
+        "headers": {
+          "apikey": "{{ $credentials.supabase_anon }}",
+          "Authorization": "Bearer {{ $credentials.supabase_anon }}"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -19600,
+        -400
+      ],
+      "id": "4ab3a7f0-5edb-de15-1fec-89f4e01d5d52",
+      "name": "Charger Locaux pour Relance"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "id",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -19400,
+        -400
+      ],
+      "id": "9bb9ba9c-635e-9290-59f0-d44116da3c23",
+      "name": "Boucler Locaux Relance"
+    },
+    {
+      "parameters": {
+        "url": "https://www.wasenderapi.com/api/send-message",
+        "method": "POST",
+        "sendBody": true,
+        "body": "{{ JSON.stringify({\n  \"phone\": $json.telephone_expediteur || $json.cleanedSenderPn,\n  \"message\": \"Bonjour \" + ($json.expediteur || \"client\") + \",\n\n📋 BON DE VISITE\n\" +\n    \"Bien: \" + ($json.ref_bien || \"Bien immobilier\") + \"\n\" +\n    \"Type: \" + ($json.type_de_bien || \"Non spécifié\") + \"\n\" +\n    \"Localisation: \" + ($json.quartier || \"\") + \", \" + ($json.commune || \"\") + \"\n\" +\n    \"Prix: \" + ($json.prix || \"À discuter\") + \" FCFA\n\n\" +\n    \"Comment s'est déroulée votre visite? Merci de nous transmettre votre avis ✅\"\n}) }}",
+        "headers": {
+          "Authorization": "Bearer {{ $credentials.wasender_api }}",
+          "Content-Type": "application/json"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -19200,
+        -400
+      ],
+      "id": "916d0446-df0d-e9ab-5962-664997b88927",
+      "name": "Envoyer Message Satisfaction 24h"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Wassender": {
+      "main": [
+        [
+          {
+            "node": "auth-validator-webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normaliser Webhook": {
+      "main": [
+        [
+          {
+            "node": "Est un Groupe?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Est un Groupe?": {
+      "main": [
+        [
+          {
+            "node": "Message Sortant? (Groupe)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Message Sortant? (Prospect)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message Sortant? (Groupe)": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Preparer Publication Groupe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message Sortant? (Prospect)": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Anti-Boucle Prospect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparer Publication Groupe": {
+      "main": [
+        [
+          {
+            "node": "Contient une Image?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contient une Image?": {
+      "main": [
+        [
+          {
+            "node": "Decrypter Image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparer Publication Texte Seul",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decrypter Image": {
+      "main": [
+        [
+          {
+            "node": "Verifier Decryptage Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verifier Decryptage Image": {
+      "main": [
+        [
+          {
+            "node": "Decryptage OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decryptage OK?": {
+      "main": [
+        [
+          {
+            "node": "Upload Image ImgBB",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback Image Echouee",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Image ImgBB": {
+      "main": [
+        [
+          {
+            "node": "Construire Donnees Avec Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construire Donnees Avec Image": {
+      "main": [
+        [
+          {
+            "node": "Sauvegarder Image Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback Image Echouee": {
+      "main": [
+        [
+          {
+            "node": "Sauvegarder Image Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sauvegarder Image Supabase": {
+      "main": [
+        [
+          {
+            "node": "Image avec Texte?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Image avec Texte?": {
+      "main": [
+        [
+          {
+            "node": "Preparer Publication Image+Texte",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparer Publication Image Seule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparer Publication Image+Texte": {
+      "main": [
+        [
+          {
+            "node": "Enregistrer Publication Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparer Publication Texte Seul": {
+      "main": [
+        [
+          {
+            "node": "Enregistrer Publication Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparer Publication Image Seule": {
+      "main": [
+        [
+          {
+            "node": "Enregistrer Publication Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enregistrer Publication Supabase": {
+      "main": [
+        [
+          {
+            "node": "Extraire Donnees Publication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraire Donnees Publication": {
+      "main": [
+        [
+          {
+            "node": "prefilter-real-estate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IA Extraction Annonce": {
+      "main": [
+        [
+          {
+            "node": "Charger Annonces Recentes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Charger Annonces Recentes": {
+      "main": [
+        [
+          {
+            "node": "Detecteur Doublons",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detecteur Doublons": {
+      "main": [
+        [
+          {
+            "node": "Est un Doublon?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Est un Doublon?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Sauvegarder Nouvelle Annonce",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audio ou Texte?": {
+      "main": [
+        [
+          {
+            "node": "Decrypter Audio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Recuperer Message Texte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decrypter Audio": {
+      "main": [
+        [
+          {
+            "node": "Telecharger Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telecharger Audio": {
+      "main": [
+        [
+          {
+            "node": "Transcription Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcription Audio": {
+      "main": [
+        [
+          {
+            "node": "Unifier Texte vers Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unifier Texte vers Agent": {
+      "main": [
+        [
+          {
+            "node": "Agent Conversationnel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recuperer Message Texte": {
+      "main": [
+        [
+          {
+            "node": "Agent Conversationnel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent Conversationnel": {
+      "main": [
+        [
+          {
+            "node": "Extracteur Metadonnees",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agent Conversationnel",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory Conversationnelle (20 msgs)": {
+      "ai_memory": [
+        [
+          {
+            "node": "Agent Conversationnel",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outil Recherche Annonces": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agent Conversationnel",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extracteur Metadonnees": {
+      "main": [
+        [
+          {
+            "node": "Parser Analyse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser Analyse": {
+      "main": [
+        [
+          {
+            "node": "Envoyer Reponse WhatsApp",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Visite Programmee?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Visite Programmee?": {
+      "main": [
+        [
+          {
+            "node": "Verifier Visite Existante",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verifier Visite Existante": {
+      "main": [
+        [
+          {
+            "node": "Verifier Si Nouvelle Visite",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verifier Si Nouvelle Visite": {
+      "main": [
+        [
+          {
+            "node": "Premiere Visite?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Premiere Visite?": {
+      "main": [
+        [
+          {
+            "node": "Enregistrer Visite",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enregistrer Visite": {
+      "main": [
+        [
+          {
+            "node": "Chercher Bien",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chercher Bien": {
+      "main": [
+        [
+          {
+            "node": "Recherche Intelligente Proprietaire",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recherche Intelligente Proprietaire": {
+      "main": [
+        [
+          {
+            "node": "Proprietaire Trouve?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proprietaire Trouve?": {
+      "main": [
+        [
+          {
+            "node": "Notifier Proprietaire",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alerter Agence (Fallback)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anti-Boucle Prospect": {
+      "main": [
+        [
+          {
+            "node": "Audio ou Texte?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5f1d247a-65e3-41c1-9c0d-92d1a896a401": {
+      "main": [
+        {
+          "node": "Calculer Date Expiration",
+          "type": "main",
+          "index": 0
+        }
+      ]
+    },
+    "37e87469-402f-e1b9-5cca-755f651bc82d": {
+      "main": [
+        {
+          "node": "Mettre à jour Date Expiration",
+          "type": "main",
+          "index": 0
+        }
+      ]
+    },
+    "38fc30dc-4ec7-4338-a2f1-04b6bfdc0856": {
+      "main": [
+        {
+          "node": "Générer PDF Bon de Visite",
+          "type": "main",
+          "index": 0
+        }
+      ]
+    },
+    "f96b9fa5-5605-5e2a-67b6-39ce378c5ead": {
+      "main": [
+        {
+          "node": "Upload PDF ImgBB",
+          "type": "main",
+          "index": 0
+        }
+      ]
+    },
+    "2476aa7d-ff55-cd95-a578-1d03af33dfb3": {
+      "main": [
+        {
+          "node": "Sauvegarder URL PDF",
+          "type": "main",
+          "index": 0
+        }
+      ]
+    },
+    "4ab3a7f0-5edb-de15-1fec-89f4e01d5d52": {
+      "main": [
+        {
+          "node": "Boucler Locaux Relance",
+          "type": "main",
+          "index": 0
+        }
+      ]
+    },
+    "9bb9ba9c-635e-9290-59f0-d44116da3c23": {
+      "main": [
+        {
+          "node": "Envoyer Message Satisfaction 24h",
+          "type": "main",
+          "index": 0
+        }
+      ]
+    },
+    "6ca06701-cb00-385a-a5e3-7c5836ad719a": {
+      "main": [
+        [
+          {
+            "node": "Charger Locaux pour Relance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sauvegarder Nouvelle Annonce": {
+      "main": [
+        [
+          {
+            "node": "6ca06701-cb00-385a-a5e3-7c5836ad719a",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mettre à jour Date Expiration": {
+      "main": [
+        []
+      ]
+    },
+    "Schedule Relance 24h": {
+      "main": [
+        [
+          {
+            "node": "4ab3a7f0-5edb-de15-1fec-89f4e01d5d52",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Charger Locaux pour Relance": {
+      "main": [
+        [
+          {
+            "node": "9bb9ba9c-635e-9290-59f0-d44116da3c23",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Boucler Locaux Relance": {
+      "main": [
+        [
+          {
+            "node": "916d0446-df0d-e9ab-5962-664997b88927",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valider Token Webhook": {
+      "main": [
+        [
+          {
+            "node": "sanitize-input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pré-filtrer Annonce Immobilière": {
+      "main": [
+        [
+          {
+            "node": "93c6b0f4-dd4d-4010-949a-85db6a856316",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sanitiser Input Webhook": {
+      "main": [
+        [
+          {
+            "node": "cda5a41a-8fb1-42e1-876e-39cea2394338",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "ad27d9dd-ffe7-4a06-829d-b24371189b96",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "41ec8ec34f007f3b379d3c52d0bc9324b3454ccf8b1ae5104cd2ebf3ead5252f"
+  },
+  "id": "LTZJrc7tYwv6Qm6a5wtZ0",
+  "tags": []
+}

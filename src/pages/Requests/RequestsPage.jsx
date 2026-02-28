@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     LayoutGrid, List, Search, Users, Clock, Phone,
-    MessageCircle, Filter, AlertTriangle, MessageSquare, RefreshCw
+    MessageCircle, AlertTriangle, RefreshCw
 } from 'lucide-react';
 import apiService from '../../services/api';
+import { formatPhoneCI } from '../../utils/phoneUtils';
+import { useToast } from '../../components/Toast';
 import './RequestsPage.css';
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
@@ -31,12 +33,6 @@ const OFFER_SIGNALS = [
     'belle villa disponible', 'superbe apparte', 'venez voir'
 ];
 
-function isPrivate(groupe) {
-    if (!groupe) return false;
-    // WA private chats: @c.us or raw phone numbers (no @g.us)
-    return groupe.includes('@c.us') || (!groupe.includes('@g.us') && /^\d/.test(groupe));
-}
-
 function isGroup(groupe) {
     return !groupe || groupe.includes('@g.us');
 }
@@ -48,33 +44,12 @@ function isAgentDemand(message) {
     return hasDemand && !hasOffer && text.length > 20;
 }
 
-function formatPhone(raw) {
-    if (!raw) return '';
-    // Strip WA suffixes: @s.whatsapp.net, @c.us, @g.us, @lid, etc.
-    let p = raw.split('@')[0];
-    // Strip everything non-numeric (spaces, dashes, dots, parens, +, colons)
-    p = p.replace(/[^0-9]/g, '');
-    if (!p) return '';
-    // 8 digits = old Ivorian format → add 225
-    if (p.length === 8) return '225' + p;
-    // 9 digits starting with 7, 5, 1, 4 = without leading 0 → add 225
-    if (p.length === 9 && /^[0-9]/.test(p)) return '225' + p;
-    // 10 digits: either starts with 0 (local) or new format
-    if (p.length === 10) {
-        if (p.startsWith('0')) return '225' + p.substring(1);
-        return '225' + p;
-    }
-    // Already has 225 country code (13 digits for CI) → use as-is
-    return p;
-}
 
 function extractPhone(req, isPrivateMsg) {
-    // 1. Try the explicit telephone field first
-    let phone = formatPhone(req.telephone);
+    let phone = formatPhoneCI(req.telephone);
     if (phone) return phone;
-    // 2. For private chats, the groupe field IS the sender's WA chat ID
     if (isPrivateMsg && req.groupe) {
-        phone = formatPhone(req.groupe);
+        phone = formatPhoneCI(req.groupe);
         if (phone && !phone.endsWith('us') && !phone.endsWith('net')) return phone;
     }
     return '';
@@ -133,6 +108,7 @@ const RequestsSkeleton = () => (
 // ─── REQUEST CARD ────────────────────────────────────────────────────────────
 
 const RequestCard = ({ req, keywords, isPrivateMsg, viewMode }) => {
+    const { addToast } = useToast();
     const waPhone = extractPhone(req, isPrivateMsg);
     // Clean display of group label (strip WA JID noise)
     const rawGroupe = req.groupe || '';
@@ -157,8 +133,7 @@ const RequestCard = ({ req, keywords, isPrivateMsg, viewMode }) => {
         if (waPhone) {
             window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(text)}`, '_blank');
         } else {
-            // Fallback: open WA without a phone (user can paste number manually)
-            window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+            addToast({ type: 'error', title: 'Erreur', message: 'Numéro de téléphone non disponible' });
         }
     };
 
@@ -240,22 +215,13 @@ const RequestCard = ({ req, keywords, isPrivateMsg, viewMode }) => {
 
 // ─── EMPTY STATE ─────────────────────────────────────────────────────────────
 
-const EmptyState = ({ isPrivate }) => (
+const EmptyState = () => (
     <div className="empty-state">
         <div style={{ background: '#f8fafc', width: 80, height: 80, borderRadius: '50%', margin: '0 auto 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <MessageCircle size={40} style={{ color: '#cbd5e1' }} />
         </div>
-        {isPrivate ? (
-            <>
-                <h3>Aucun message privé</h3>
-                <p>Les personnes qui vous contactent directement (via vos publicités) apparaîtront ici.</p>
-            </>
-        ) : (
-            <>
-                <h3>Aucune demande détectée</h3>
-                <p>Les agents cherchant des biens pour leurs clients apparaîtront ici.</p>
-            </>
-        )}
+        <h3>Aucune demande détectée</h3>
+        <p>Les agents cherchant des biens pour leurs clients apparaîtront ici.</p>
     </div>
 );
 
@@ -263,7 +229,6 @@ const EmptyState = ({ isPrivate }) => (
 
 const RequestsPage = () => {
     const [viewMode, setViewMode] = useState('grid');
-    const [tab, setTab] = useState('agents'); // 'agents' | 'private'
     const [subFilter, setSubFilter] = useState('all'); // all | urgent | budget
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
@@ -290,30 +255,21 @@ const RequestsPage = () => {
 
     useEffect(() => { fetchRequests(); }, []);
 
-    // ── Partitioning ──
-    const { agentRequests, privateMessages } = useMemo(() => {
+    // ── Partitioning: only group agent demands ──
+    const agentRequests = useMemo(() => {
         const agents = [];
-        const privates = [];
         for (const msg of rawData) {
             const groupe = msg.groupe || '';
-            if (isPrivate(groupe)) {
-                privates.push(msg);
-            } else if (isGroup(groupe) && isAgentDemand(msg.message)) {
+            if (isGroup(groupe) && isAgentDemand(msg.message)) {
                 agents.push(msg);
             }
         }
-        return {
-            agentRequests: dedupe(agents),
-            privateMessages: dedupe(privates),
-        };
+        return dedupe(agents);
     }, [rawData]);
-
-    // ── Filtering ──
-    const currentItems = tab === 'agents' ? agentRequests : privateMessages;
 
     const filteredItems = useMemo(() => {
         const term = searchTerm.toLowerCase();
-        return currentItems.filter(req => {
+        return agentRequests.filter(req => {
             const text = (req.message || '').toLowerCase();
             const matchesSearch = !term ||
                 text.includes(term) ||
@@ -326,9 +282,7 @@ const RequestsPage = () => {
             if (subFilter === 'budget') return text.includes('budget') || text.includes('prix') || text.includes('loyer') || text.includes('maxi');
             return true;
         });
-    }, [currentItems, searchTerm, subFilter]);
-
-    const demandKws = tab === 'agents' ? AGENT_DEMAND_KEYWORDS : [];
+    }, [agentRequests, searchTerm, subFilter]);
 
     return (
         <div className="requests-page-container">
@@ -340,7 +294,7 @@ const RequestsPage = () => {
                         Demandes
                     </motion.h2>
                     <p className="page-subtitle">
-                        {agentRequests.length} demandes agents · {privateMessages.length} messages privés
+                        {agentRequests.length} demande{agentRequests.length !== 1 ? 's' : ''} détectée{agentRequests.length !== 1 ? 's' : ''}
                     </p>
                 </div>
                 <div className="header-actions">
@@ -355,37 +309,9 @@ const RequestsPage = () => {
                 </div>
             </header>
 
-            {/* ── Tabs ── */}
-            <div className="requests-tabs">
-                <button
-                    className={`req-tab ${tab === 'agents' ? 'active' : ''}`}
-                    onClick={() => { setTab('agents'); setSubFilter('all'); setSearchTerm(''); }}
-                >
-                    <Users size={16} />
-                    Agents en groupes
-                    {agentRequests.length > 0 && <span className="tab-count">{agentRequests.length}</span>}
-                </button>
-                <button
-                    className={`req-tab ${tab === 'private' ? 'active' : ''}`}
-                    onClick={() => { setTab('private'); setSubFilter('all'); setSearchTerm(''); }}
-                >
-                    <MessageSquare size={16} />
-                    Contacts Privés
-                    {privateMessages.length > 0 && <span className="tab-count tab-count-private">{privateMessages.length}</span>}
-                </button>
-            </div>
-
-            {/* ── Tab description ── */}
-            {tab === 'agents' && (
-                <p className="tab-description">
-                    Agents immobiliers cherchant un bien pour leurs clients dans les groupes WhatsApp.
-                </p>
-            )}
-            {tab === 'private' && (
-                <p className="tab-description">
-                    Personnes qui vous écrivent directement (via sponsoring ou publicité) pour trouver un bien.
-                </p>
-            )}
+            <p className="tab-description">
+                Agents immobiliers cherchant un bien pour leurs clients dans les groupes WhatsApp.
+            </p>
 
             {/* ── Toolbar ── */}
             <div className="requests-toolbar">
@@ -393,7 +319,7 @@ const RequestsPage = () => {
                     <Search className="search-icon" size={20} />
                     <input
                         type="text"
-                        placeholder={tab === 'agents' ? 'Rechercher un agent, message, groupe...' : 'Rechercher un contact, message...'}
+                        placeholder="Rechercher un agent, message, groupe..."
                         className="search-input"
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
@@ -422,7 +348,7 @@ const RequestsPage = () => {
                     <button className="btn btn-secondary" onClick={fetchRequests} style={{ marginTop: '1rem' }}>Réessayer</button>
                 </div>
             ) : filteredItems.length === 0 ? (
-                <EmptyState isPrivate={tab === 'private'} />
+                <EmptyState />
             ) : (
                 <div className={viewMode === 'grid' ? 'requests-grid' : 'requests-list-container'}>
                     <AnimatePresence>
@@ -430,8 +356,8 @@ const RequestsPage = () => {
                             <RequestCard
                                 key={req.id || req.message_id || idx}
                                 req={req}
-                                keywords={demandKws}
-                                isPrivateMsg={tab === 'private'}
+                                keywords={AGENT_DEMAND_KEYWORDS}
+                                isPrivateMsg={false}
                                 viewMode={viewMode}
                             />
                         ))}

@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
-    MapPin, Phone, Eye, AlertCircle, Calendar, RefreshCw, Clock, RotateCcw, Archive
+    MapPin, Phone, AlertCircle, Calendar, RefreshCw, RotateCcw, Archive, CheckCircle, MessageSquare
 } from 'lucide-react';
 import apiService from '../services/api';
 import { useToast } from '../components/Toast';
 import Skeleton from '../components/Skeleton';
+import { whatsappLink, formatPhoneCI } from '../utils/phoneUtils';
 import './Properties.css';
 
 const ExpiringProperties = () => {
@@ -13,60 +14,40 @@ const ExpiringProperties = () => {
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState({});
     const { addToast } = useToast();
-    const [selectedProperty, setSelectedProperty] = useState(null);
-    const [modalOpen, setModalOpen] = useState(false);
+    const [filter, setFilter] = useState('all'); // 'all' | 'critical' | 'warning'
 
     useEffect(() => {
         loadProperties();
     }, []);
 
     const loadProperties = async (force = false) => {
+        setLoading(true);
         try {
-            const response = await apiService.getImagesProperties(force);
+            // Utilise la méthode dédiée qui filtre directement depuis Supabase
+            const response = await apiService.getExpiringProperties(30);
             if (response.success) {
                 setProperties(response.data);
                 if (force) {
-                    addToast({ type: 'success', title: 'Actualisé', message: 'La liste a été mise à jour' });
+                    addToast({ type: 'success', title: 'Actualisé', message: 'Liste mise à jour' });
                 }
+            } else {
+                addToast({ type: 'error', title: 'Erreur', message: response.error || 'Chargement impossible' });
             }
         } catch (error) {
             console.error('Erreur chargement:', error);
-            addToast({ type: 'error', title: 'Erreur', message: 'Impossible de charger les propriétés' });
+            addToast({ type: 'error', title: 'Erreur', message: 'Connexion impossible' });
         } finally {
             setLoading(false);
         }
     };
 
-    const handleRefresh = () => {
-        setLoading(true);
-        loadProperties(true);
-    };
-
-    // Calculer les jours restants jusqu'à expiration
+    // Calculer les jours restants
     const getDaysUntilExpiration = (expirationDate) => {
         if (!expirationDate) return 999;
         try {
-            const parseDate = (d) => {
-                if (!d) return null;
-                if (typeof d === 'string') {
-                    if (d.includes('/')) {
-                        const cleanStr = d.replace(/le\s+/gi, '').trim();
-                        const [datePart, timePart] = cleanStr.split(' ');
-                        const [day, month, year] = datePart.split('/');
-                        if (timePart) {
-                            const [hour, minute] = timePart.split(':');
-                            return new Date(year, month - 1, day, hour, minute || 0);
-                        }
-                        return new Date(year, month - 1, day);
-                    }
-                    return new Date(d);
-                }
-                return d instanceof Date ? d : new Date(d);
-            };
-            const expDate = parseDate(expirationDate);
-            if (!expDate) return 999;
-            const now = new Date();
-            const diffMs = expDate - now;
+            const expDate = new Date(expirationDate);
+            if (isNaN(expDate.getTime())) return 999;
+            const diffMs = expDate - Date.now();
             return Math.floor(diffMs / (1000 * 60 * 60 * 24));
         } catch {
             return 999;
@@ -74,211 +55,282 @@ const ExpiringProperties = () => {
     };
 
     const handleRenew = async (property) => {
-        setActionLoading(prev => ({ ...prev, [property.id]: true }));
+        const key = property.id;
+        setActionLoading(prev => ({ ...prev, [key]: true }));
         try {
-            // TODO: Appel API pour renouveler (ajouter 30 jours à date_expiration, status='renewed')
-            // Pour maintenant, on simule avec un toast
-            addToast({
-                type: 'success',
-                title: 'Renouvelé',
-                message: `Bien ${property.refBien} renouvelé pour 30 jours`
-            });
-            // Reload après action
-            setTimeout(() => loadProperties(true), 500);
+            const response = await apiService.renewProperty(property.id, 30);
+            if (response.success) {
+                addToast({
+                    type: 'success',
+                    title: 'Renouvelé',
+                    message: `Bien ${property.refBien} renouvelé pour 30 jours`
+                });
+                // Mettre à jour localement sans recharger tout
+                setProperties(prev => prev.map(p =>
+                    p.id === property.id
+                        ? { ...p, dateExpiration: response.newExpiration, renewalStatus: 'active' }
+                        : p
+                ));
+            } else {
+                addToast({ type: 'error', title: 'Erreur', message: response.error || 'Renouvellement impossible' });
+            }
         } catch (error) {
-            addToast({ type: 'error', title: 'Erreur', message: 'Impossible de renouveler' });
+            addToast({ type: 'error', title: 'Erreur', message: 'Connexion impossible' });
         } finally {
-            setActionLoading(prev => ({ ...prev, [property.id]: false }));
+            setActionLoading(prev => ({ ...prev, [key]: false }));
         }
     };
 
     const handleArchive = async (property) => {
-        setActionLoading(prev => ({ ...prev, [property.id + '-archive']: true }));
+        const key = property.id + '-archive';
+        setActionLoading(prev => ({ ...prev, [key]: true }));
         try {
-            // TODO: Appel API pour archiver (status='archived')
-            addToast({
-                type: 'info',
-                title: 'Archivé',
-                message: `Bien ${property.refBien} archivé`
-            });
-            setTimeout(() => loadProperties(true), 500);
+            const response = await apiService.archiveProperty(property.id);
+            if (response.success) {
+                addToast({
+                    type: 'info',
+                    title: 'Archivé',
+                    message: `Bien ${property.refBien} archivé`
+                });
+                // Retirer de la liste localement
+                setProperties(prev => prev.filter(p => p.id !== property.id));
+            } else {
+                addToast({ type: 'error', title: 'Erreur', message: response.error || 'Archivage impossible' });
+            }
         } catch (error) {
-            addToast({ type: 'error', title: 'Erreur', message: 'Impossible d\'archiver' });
+            addToast({ type: 'error', title: 'Erreur', message: 'Connexion impossible' });
         } finally {
-            setActionLoading(prev => ({ ...prev, [property.id + '-archive']: false }));
+            setActionLoading(prev => ({ ...prev, [key]: false }));
         }
     };
 
-    const expiringProperties = useMemo(() => {
-        return properties
-            .filter(p => p.renewalStatus === 'active') // Ne montrer que les actifs
-            .map(p => ({
-                ...p,
-                daysUntilExpiration: getDaysUntilExpiration(p.dateExpiration),
-            }))
-            .filter(p => p.daysUntilExpiration <= 7) // À expirer dans 7 jours max
-            .sort((a, b) => a.daysUntilExpiration - b.daysUntilExpiration);
+    const enrichedProperties = useMemo(() => {
+        return properties.map(p => ({
+            ...p,
+            daysUntilExpiration: getDaysUntilExpiration(p.dateExpiration),
+        })).sort((a, b) => a.daysUntilExpiration - b.daysUntilExpiration);
     }, [properties]);
 
-    const getExpirationBadgeClass = (daysUntilExpiration) => {
-        if (daysUntilExpiration <= 0) return 'expired'; // Expiré
-        if (daysUntilExpiration <= 2) return 'critical'; // À expirer très bientôt (J-2)
-        if (daysUntilExpiration <= 5) return 'warning'; // À expirer bientôt (J-5)
+    const filtered = useMemo(() => {
+        if (filter === 'critical') return enrichedProperties.filter(p => p.daysUntilExpiration <= 2);
+        if (filter === 'warning') return enrichedProperties.filter(p => p.daysUntilExpiration > 2 && p.daysUntilExpiration <= 7);
+        return enrichedProperties;
+    }, [enrichedProperties, filter]);
+
+    const counts = useMemo(() => ({
+        total: enrichedProperties.length,
+        expired: enrichedProperties.filter(p => p.daysUntilExpiration <= 0).length,
+        critical: enrichedProperties.filter(p => p.daysUntilExpiration > 0 && p.daysUntilExpiration <= 2).length,
+        warning: enrichedProperties.filter(p => p.daysUntilExpiration > 2 && p.daysUntilExpiration <= 7).length,
+        normal: enrichedProperties.filter(p => p.daysUntilExpiration > 7).length,
+    }), [enrichedProperties]);
+
+    const getStatusClass = (days) => {
+        if (days <= 0) return 'expired';
+        if (days <= 2) return 'critical';
+        if (days <= 7) return 'warning';
         return 'active';
     };
 
-    const getExpirationText = (daysUntilExpiration) => {
-        if (daysUntilExpiration <= 0) return 'EXPIRÉ';
-        if (daysUntilExpiration === 1) return 'EXPIRE DEMAIN';
-        return `J-${daysUntilExpiration}`;
+    const getStatusText = (days) => {
+        if (days <= 0) return 'EXPIRÉ';
+        if (days === 1) return 'EXPIRE DEMAIN';
+        if (days <= 0) return 'EXPIRÉ';
+        return `J-${days}`;
     };
 
     if (loading) {
         return (
-            <div className="gallery-loading">
-                <div className="spinner"></div>
-                <p>Chargement des propriétés...</p>
+            <div className="properties-v2">
+                <div className="properties-header">
+                    <div className="header-left">
+                        <h2><AlertCircle size={28} style={{ marginRight: '0.75rem' }} />Annonces à Renouveler</h2>
+                    </div>
+                </div>
+                <div style={{ display: 'grid', gap: '1rem' }}>
+                    {[1, 2, 3].map(i => <Skeleton key={i} height={140} />)}
+                </div>
             </div>
         );
     }
 
     return (
         <div className="properties-v2">
+            {/* Header */}
             <div className="properties-header">
                 <div className="header-left">
                     <h2>
                         <AlertCircle size={28} style={{ marginRight: '0.75rem', color: 'var(--warning, #f59e0b)' }} />
                         Annonces à Renouveler
                     </h2>
-                    <span className="properties-count">
-                        {expiringProperties.length} bien(s) à renouveler
-                    </span>
+                    <span className="properties-count">{counts.total} bien(s)</span>
                 </div>
                 <div className="header-actions">
-                    <button
-                        className="btn btn-secondary"
-                        onClick={handleRefresh}
-                        disabled={loading}
-                        title="Actualiser les données"
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                    >
+                    <button className="btn btn-secondary" onClick={() => loadProperties(true)} title="Actualiser">
                         <RefreshCw size={18} className={loading ? 'spin' : ''} />
                         <span className="hide-mobile">Actualiser</span>
                     </button>
                 </div>
             </div>
 
-            {expiringProperties.length === 0 ? (
-                <div style={{
-                    textAlign: 'center',
-                    padding: '3rem 2rem',
-                    background: 'var(--bg-secondary)',
-                    borderRadius: 'var(--radius-md)',
-                    margin: '2rem 0'
-                }}>
-                    <Clock size={48} style={{ marginBottom: '1rem', opacity: 0.5 }} />
+            {/* Stats rapides */}
+            <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                {[
+                    { key: 'all', label: 'Tous', count: counts.total, color: 'var(--text-secondary)' },
+                    { key: 'critical', label: 'Critiques (J≤2)', count: counts.critical + counts.expired, color: '#ef4444' },
+                    { key: 'warning', label: 'Attention (J≤7)', count: counts.warning, color: '#f59e0b' },
+                ].map(({ key, label, count, color }) => (
+                    <button
+                        key={key}
+                        onClick={() => setFilter(key)}
+                        style={{
+                            padding: '0.4rem 1rem',
+                            borderRadius: '999px',
+                            border: `2px solid ${filter === key ? color : 'var(--border-subtle)'}`,
+                            background: filter === key ? color + '20' : 'transparent',
+                            color: filter === key ? color : 'var(--text-secondary)',
+                            cursor: 'pointer',
+                            fontWeight: filter === key ? 600 : 400,
+                            fontSize: '0.875rem',
+                            transition: 'all 0.2s',
+                        }}
+                    >
+                        {label} ({count})
+                    </button>
+                ))}
+            </div>
+
+            {/* Liste vide */}
+            {filtered.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '3rem 2rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)' }}>
+                    <CheckCircle size={48} style={{ marginBottom: '1rem', color: '#22c55e', opacity: 0.7 }} />
                     <p style={{ fontSize: '1.1rem', color: 'var(--text-secondary)' }}>
-                        Aucune annonce à renouveler pour le moment.
+                        {filter === 'all' ? 'Aucune annonce à renouveler dans les 30 prochains jours.' : 'Aucune annonce dans cette catégorie.'}
                     </p>
                 </div>
             ) : (
                 <div className="expiring-properties-list">
-                    {expiringProperties.map((property, index) => (
-                        <motion.div
-                            key={property.id}
-                            className={`expiring-property-card ${getExpirationBadgeClass(property.daysUntilExpiration)}`}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.05 }}
-                        >
-                            <div className="expiration-header">
-                                <div className={`expiration-badge ${getExpirationBadgeClass(property.daysUntilExpiration)}`}>
-                                    {getExpirationText(property.daysUntilExpiration)}
-                                </div>
-                                <span className="days-old">
-                                    Expire dans {property.daysUntilExpiration} jour(s)
-                                </span>
-                            </div>
+                    {filtered.map((property, index) => {
+                        const statusClass = getStatusClass(property.daysUntilExpiration);
+                        const phone = formatPhoneCI(property.telephoneExpediteur || property.telephoneBien);
+                        const isRenewing = actionLoading[property.id];
+                        const isArchiving = actionLoading[property.id + '-archive'];
 
-                            <div className="expiring-property-main">
-                                <div className="expiring-property-info">
-                                    <div className="expiring-property-header">
-                                        <h3>{property.typeBien}</h3>
-                                        <span className="price">{property.prixFormate}</span>
+                        return (
+                            <motion.div
+                                key={property.id}
+                                className={`expiring-property-card ${statusClass}`}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                transition={{ delay: Math.min(index * 0.04, 0.3) }}
+                                layout
+                            >
+                                <div className="expiration-header">
+                                    <div className={`expiration-badge ${statusClass}`}>
+                                        {getStatusText(property.daysUntilExpiration)}
                                     </div>
-
-                                    <div className="location-info">
-                                        <MapPin size={16} />
-                                        <span>
-                                            {property.zone}
-                                            {property.commune ? ` - ${property.commune}` : ''}
+                                    <span className="days-old" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                                        <Calendar size={13} style={{ marginRight: 4 }} />
+                                        {property.daysUntilExpiration <= 0
+                                            ? 'Expiré'
+                                            : `Expire dans ${property.daysUntilExpiration} jour${property.daysUntilExpiration > 1 ? 's' : ''}`
+                                        }
+                                    </span>
+                                    {property.refBien && (
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: 'auto', fontFamily: 'monospace' }}>
+                                            {property.refBien}
                                         </span>
-                                    </div>
-
-                                    <p className="description">
-                                        {property.caracteristiques ? property.caracteristiques.substring(0, 100) + '...' : 'Pas de description'}
-                                    </p>
-
-                                    <div className="expiring-property-meta">
-                                        {property.chambres > 0 && (
-                                            <span className="meta-tag">
-                                                {property.chambres} chambres
-                                            </span>
-                                        )}
-                                        {property.meuble && (
-                                            <span className="meta-tag meuble">Meublé</span>
-                                        )}
-                                        {property.groupeWhatsAppOrigine && (
-                                            <span className="meta-tag groupe" title="Groupe d'origine">
-                                                📱 {property.groupeWhatsAppOrigine}
-                                            </span>
-                                        )}
-                                    </div>
+                                    )}
                                 </div>
 
-                                <div className="expiring-property-actions">
-                                    <button
-                                        className="btn btn-success btn-sm"
-                                        title="Renouveler pour 30 jours"
-                                        onClick={() => handleRenew(property)}
-                                        disabled={actionLoading[property.id]}
-                                    >
-                                        <RotateCcw size={16} /> Renouveler
-                                    </button>
-                                    <button
-                                        className="btn btn-danger btn-sm"
-                                        title="Archiver cette annonce"
-                                        onClick={() => handleArchive(property)}
-                                        disabled={actionLoading[property.id + '-archive']}
-                                    >
-                                        <Archive size={16} /> Archiver
-                                    </button>
+                                <div className="expiring-property-main">
+                                    <div className="expiring-property-info">
+                                        <div className="expiring-property-header">
+                                            <h3>{property.typeBien || 'Bien'}</h3>
+                                            <span className="price">{property.prixFormate} FCFA</span>
+                                        </div>
+
+                                        <div className="location-info">
+                                            <MapPin size={14} />
+                                            <span>
+                                                {[property.commune, property.quartier].filter(Boolean).join(' · ') || property.zone || '—'}
+                                            </span>
+                                        </div>
+
+                                        {(property.groupName || property.groupeWhatsApp) && (
+                                            <div className="location-info" style={{ color: '#25D366' }}>
+                                                <MessageSquare size={14} />
+                                                <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>
+                                                    {property.groupName || property.groupeWhatsApp}
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        {property.caracteristiques && (
+                                            <p className="description" style={{ margin: '0.4rem 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                                {property.caracteristiques.substring(0, 120)}{property.caracteristiques.length > 120 ? '…' : ''}
+                                            </p>
+                                        )}
+
+                                        <div className="expiring-property-meta">
+                                            {property.chambres > 0 && (
+                                                <span className="meta-tag">{property.chambres} ch.</span>
+                                            )}
+                                            {property.meuble && <span className="meta-tag meuble">Meublé</span>}
+                                            {property.expediteur && (
+                                                <span className="meta-tag" title="Partagé par">
+                                                    👤 {property.expediteur}
+                                                </span>
+                                            )}
+                                            {property.relanceCount > 0 && (
+                                                <span className="meta-tag" style={{ color: 'var(--warning)' }}>
+                                                    {property.relanceCount} relance(s)
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="expiring-property-actions">
+                                        {phone && (
+                                            <a
+                                                href={whatsappLink(phone, `Bonjour, votre annonce ${property.refBien} expire bientôt. Souhaitez-vous la renouveler ?`)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="btn btn-secondary btn-sm"
+                                                title="Contacter via WhatsApp"
+                                                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                                            >
+                                                <Phone size={14} /> Contact
+                                            </a>
+                                        )}
+                                        <button
+                                            className="btn btn-success btn-sm"
+                                            onClick={() => handleRenew(property)}
+                                            disabled={isRenewing || isArchiving}
+                                            title="Renouveler pour 30 jours"
+                                            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                                        >
+                                            <RotateCcw size={14} className={isRenewing ? 'spin' : ''} />
+                                            {isRenewing ? '...' : 'Renouveler'}
+                                        </button>
+                                        <button
+                                            className="btn btn-danger btn-sm"
+                                            onClick={() => handleArchive(property)}
+                                            disabled={isRenewing || isArchiving}
+                                            title="Archiver cette annonce"
+                                            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                                        >
+                                            <Archive size={14} className={isArchiving ? 'spin' : ''} />
+                                            {isArchiving ? '...' : 'Archiver'}
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        </motion.div>
-                    ))}
+                            </motion.div>
+                        );
+                    })}
                 </div>
             )}
-
-            {/* Feedback Section */}
-            <div style={{ marginTop: '3rem' }}>
-                <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem', color: 'var(--text-primary)' }}>
-                    📊 Retours Récents
-                </h3>
-                <div style={{
-                    background: 'var(--bg-panel)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 'var(--radius-lg)',
-                    padding: '1.5rem',
-                    textAlign: 'center',
-                    color: 'var(--text-secondary)'
-                }}>
-                    <p>Les retours de satisfaction seront affichés ici une fois les relances envoyées.</p>
-                    <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
-                        ℹ️ Section en développement pour Phase 3
-                    </p>
-                </div>
-            </div>
         </div>
     );
 };

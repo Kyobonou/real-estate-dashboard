@@ -1,0 +1,3502 @@
+{
+  "updatedAt": "2026-02-28T05:25:56.677Z",
+  "createdAt": "2026-02-16T00:11:06.087Z",
+  "id": "LTZJrc7tYwv6Qm6a5wtZ0",
+  "name": "Bogbe's multi service",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wassender-immobilier",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -27216,
+        -2972
+      ],
+      "id": "fd9f05ca-c1de-45d0-94f8-f9c008939a04",
+      "name": "Webhook WhatsApp",
+      "webhookId": "wassender-immobilier-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  const BOTS = ['2250142694380', '2250789263373'];\n  const body = $input.first().json.body || $input.first().json;\n  const data = body.data || body;\n\n  let msg = null;\n  if (Array.isArray(data.messages)) msg = data.messages[0];\n  else if (data.messages && typeof data.messages === 'object') msg = data.messages;\n  else if (data.message) msg = data.message;\n  else msg = data;\n  if (!msg) return [];\n\n  const key = msg.key || {};\n  const message = msg.message || {};\n  const remoteJid = key.remoteJid || msg.remoteJid || '';\n  const fromMe = key.fromMe === true || key.fromMe === 'true';\n  const messageId = key.id || msg.id || '';\n\n  if (fromMe) return [];\n  if (!remoteJid || remoteJid === 'status@broadcast') return [];\n  if (message.reactionMessage || message.protocolMessage) return [];\n\n  let messageBody = msg.messageBody || msg.body\n    || message.conversation\n    || message.extendedTextMessage?.text\n    || message.imageMessage?.caption\n    || '';\n  messageBody = (messageBody || '').replace(/[\\x00-\\x1f]/g, '').substring(0, 2000).trim();\n\n  const hasAudio = !!message.audioMessage;\n  const hasImage = !!message.imageMessage;\n  const hasText = messageBody.length > 0;\n  if (!hasText && !hasAudio && !hasImage) return [];\n\n  const isGroup = remoteJid.includes('@g.us');\n  const isLid = remoteJid.includes('@lid');\n  const isNormal = remoteJid.includes('@s.whatsapp.net');\n\n  function extractNum(str) {\n    if (!str) return '';\n    return String(str).replace(/@[\\w.]+/g, '').replace(/[^0-9]/g, '');\n  }\n  function isValidPhone(n) { return !!(n && n.length >= 8 && n.length <= 15); }\n  function findPhoneInObj(obj, depth) {\n    if (!obj || typeof obj !== 'object' || depth > 5) return '';\n    const keys = ['cleanedSenderPn','senderPn','participantPn','cleanedParticipantPn','from','sender','phoneNumber','phone'];\n    for (const k of keys) {\n      if (obj[k]) { const n = extractNum(String(obj[k])); if (isValidPhone(n) && !BOTS.some(b => n.includes(b))) return n; }\n    }\n    for (const k of Object.keys(obj)) {\n      if (typeof obj[k] === 'object' && obj[k] !== null) { const f = findPhoneInObj(obj[k], depth + 1); if (f) return f; }\n    }\n    return '';\n  }\n\n  let cleanNumber = '';\n  const directSources = [msg.cleanedSenderPn, msg.senderPn, msg.phoneNumber, key.cleanedSenderPn, key.senderPn, data.cleanedSenderPn, data.senderPn, body.cleanedSenderPn, body.senderPn];\n  for (const src of directSources) {\n    if (src) { const n = extractNum(String(src)); if (isValidPhone(n)) { cleanNumber = n; break; } }\n  }\n  if (!cleanNumber && isGroup) { const p = extractNum(key.participant || msg.participant || ''); if (isValidPhone(p)) cleanNumber = p; }\n  if (!cleanNumber && isNormal) { const n = extractNum(remoteJid); if (isValidPhone(n)) cleanNumber = n; }\n  if (!cleanNumber) cleanNumber = findPhoneInObj(msg, 0) || findPhoneInObj(data, 0) || findPhoneInObj(body, 0);\n\n  if (BOTS.some(b => (cleanNumber && cleanNumber.includes(b)) || remoteJid.includes(b))) return [];\n\n  if (messageId) {\n    const sd = $getWorkflowStaticData('node');\n    if (!sd.seen) sd.seen = {};\n    const now = Date.now();\n    Object.keys(sd.seen).forEach(id => { if (now - sd.seen[id] > 600000) delete sd.seen[id]; });\n    if (sd.seen[messageId]) return [];\n    sd.seen[messageId] = now;\n  }\n\n  const sd2 = $getWorkflowStaticData('global');\n  if (!sd2.flood) sd2.flood = {};\n  const nowF = Date.now();\n  const userKey = cleanNumber || remoteJid;\n  if (sd2.flood[userKey] && (nowF - sd2.flood[userKey]) < 3000) return [];\n  sd2.flood[userKey] = nowF;\n\n  let replyTo = '';\n  if (isNormal) replyTo = extractNum(remoteJid);\n  else if (isGroup) replyTo = remoteJid;\n  else if (isLid) replyTo = cleanNumber;\n  else replyTo = cleanNumber || extractNum(remoteJid);\n\n  const replyToIsValid = isGroup ? true : /^[0-9]{8,15}$/.test(replyTo);\n  const groupName = isGroup ? (msg.groupMetadata?.subject || data.groupName || data.groupSubject || remoteJid.replace('@g.us', '')) : '';\n  const horodatage = new Date((msg.messageTimestamp || Math.floor(Date.now() / 1000)) * 1000).toLocaleString('fr-FR', { timeZone: 'Africa/Abidjan' });\n\n  return [{ json: { replyTo, replyToIsValid, remoteJid, cleanNumber, isLid, isNormal, isGroup, groupName, pushName: (msg.pushName || '').replace(/[\\x00-\\x1f]/g, '').substring(0, 100), messageBody, messageId, hasAudio, hasImage, hasText, audioMessage: message.audioMessage || null, imageMessage: message.imageMessage || null, timestamp: msg.messageTimestamp || Math.floor(Date.now() / 1000), horodatage } }];\n} catch(e) { console.log('Erreur normalisation:', e.message); return []; }"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -26992,
+        -2972
+      ],
+      "id": "1a32d949-5f53-414d-9396-3087fe9c3350",
+      "name": "Normaliser Filtrer Anti-Boucle"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "g1",
+                    "leftValue": "={{ $json.isGroup }}",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Groupe"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "g2",
+                    "leftValue": "={{ $json.isGroup }}",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Prospect"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -26768,
+        -2972
+      ],
+      "id": "6575a06b-da8b-4d21-bd04-a5f2f5e16829",
+      "name": "Groupe ou Prospect?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nif (!d.hasText && !d.hasImage) return [];\nconst msg = d.messageBody || '';\nconst msgLow = msg.toLowerCase();\nconst keywords = ['appartement','studio','chambre','maison','villa','duplex','triplex','terrain','bureau','magasin','boutique','entrepot','local','residence','parking','garage','immeuble','parcelle','lotissement','cocody','yopougon','marcory','koumassi','treichville','plateau','adjame','abobo','port-bouet','bingerville','riviera','angre','bassam','assinie','meuble','climatise','piscine','louer','vendre','location','vente','bail','fcfa','m2','m²','hectare','million','disponible'];\nconst score = keywords.filter(k => msgLow.includes(k)).length;\nconst hasSurface = /\\d+\\s*m[²2]/i.test(msg);\nconst hasPrice = /\\d+\\s*(million|milion|mille|fcfa|k)/i.test(msg);\nif (score < 2 && !(hasSurface && hasPrice) && d.hasText && !d.hasImage) return [];\nreturn [{ json: { message: msg, expediteur: d.pushName || '', telephone: d.cleanNumber || '', groupe: d.groupName || '', groupe_jid: d.remoteJid || '', horodatage: d.horodatage, messageId: d.messageId, has_image: d.hasImage, imageMessage: d.imageMessage } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -26544,
+        -3216
+      ],
+      "id": "2bffe9c2-c7c0-4f64-9109-5bbd710a35d0",
+      "name": "Preparer Filtrer Groupe"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un expert immobilier Côte d'Ivoire. Extrais les données structurées de cette annonce WhatsApp.\n\nCommunes valides: Cocody, Yopougon, Marcory, Koumassi, Treichville, Plateau, Adjamé, Abobo, Attécoubé, Port-Bouët, Bingerville, Songon, Anyama, Grand-Bassam, Jacqueville.\n\nREGLES STRICTES:\n- Champ vide si information absente. Ne JAMAIS inventer.\n- disponible: Oui par défaut\n- type_offre: déduis depuis contexte (louer=Location, vendre=Vente)\n- prix: extraire le prix EXACT tel qu'écrit dans l'annonce (ex: '150 000 FCFA/mois', '25 millions', '5 000 FCFA/m²')\n- Si le prix est ABSENT ou incompréhensible: laisser vide\n- type_de_bien: être précis (Appartement, Studio, Villa, Maison, Terrain, Bureau, Duplex, Triplex, Magasin, Entrepôt, Immeuble, Parking)\n- Si type_de_bien est introuvable: laisser vide\n- telephone: extraire uniquement si présent dans le message\n- VALIDATION: si tu ne peux pas identifier au minimum (type_de_bien ET commune) OU (prix ET type_offre), retourne un JSON vide {}\n\nFormat attendu:\n{\"type_de_bien\":\"\",\"type_offre\":\"Location|Vente\",\"zone_geographique\":\"\",\"commune\":\"\",\"quartier\":\"\",\"prix\":\"\",\"surface\":\"\",\"chambre\":\"\",\"meubles\":\"Oui|Non\",\"caracteristiques\":\"\",\"telephone\":\"\",\"publie_par\":\"\",\"disponible\":\"Oui|Non\"}"
+            },
+            {
+              "content": "=Annonce de {{ $json.expediteur }} | Groupe: {{ $json.groupe }}\nContact: {{ $json.telephone }}\nMessage: {{ $json.message }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 400,
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          },
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        -26320,
+        -3216
+      ],
+      "id": "0204bec6-31cc-431b-8b85-3b773b6a828a",
+      "name": "IA Extraction Annonce",
+      "credentials": {
+        "openAiApi": {
+          "id": "ZyCbkBkEuQkEhStv",
+          "name": "News Clé"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  const raw = $input.first().json;\n  const source = $('Preparer Filtrer Groupe').first().json;\n\n  let extracted = {};\n  try {\n    const t = raw.output?.[0]?.content?.[0]?.text;\n    extracted = typeof t === 'object' ? t : JSON.parse(typeof t === 'string' ? t : JSON.stringify(raw));\n  } catch(e) { extracted = raw || {}; }\n\n  // VALIDATION STRICTE: rejeter les annonces incomplètes\n  const hasTypeBien = extracted.type_de_bien && extracted.type_de_bien.trim().length > 0;\n  const hasCommune = extracted.commune && extracted.commune.trim().length > 0;\n  const hasPrix = extracted.prix && extracted.prix.trim().length > 0;\n  const hasTypeOffre = extracted.type_offre && extracted.type_offre.trim().length > 0;\n\n  // Rejeter si données insuffisantes\n  if (!hasTypeBien || !hasCommune) {\n    console.log('REJETÉ: type_de_bien ou commune manquant. Données:', JSON.stringify(extracted).substring(0, 200));\n    return [];\n  }\n  if (!hasPrix && !hasTypeOffre) {\n    console.log('REJETÉ: prix et type_offre manquants');\n    return [];\n  }\n\n  // Valider le prix (rejeter les prix aberrants)\n  if (hasPrix) {\n    const prixRaw = extracted.prix.toLowerCase();\n    // Extraire valeur numérique\n    const numMatch = prixRaw.match(/(\\d[\\d\\s.,]*)/);\n    if (numMatch) {\n      const numStr = numMatch[1].replace(/[\\s,]/g, '').replace('.', '');\n      const num = parseInt(numStr);\n      // Prix en FCFA: minimum 50 000 FCFA, maximum 5 milliards\n      // Prix /m²: peut être plus bas mais pas moins de 1 000 FCFA/m²\n      const isPerM2 = prixRaw.includes('/m') || prixRaw.includes('m²') || prixRaw.includes('m2') || prixRaw.includes('metre');\n      const isMillion = prixRaw.includes('million') || prixRaw.includes('milion');\n      let prixReel = num;\n      if (isMillion) prixReel = num * 1000000;\n      if (isPerM2) {\n        if (prixReel < 1000) { console.log('REJETÉ: prix/m² aberrant:', prixReel); return []; }\n      } else {\n        if (prixReel < 50000 && !isMillion) { console.log('REJETÉ: prix trop bas:', prixReel, '| prix brut:', extracted.prix); return []; }\n      }\n    }\n  }\n\n  // Rejeter types de bien génériques ou invalides\n  const typeValides = ['appartement','studio','chambre','maison','villa','duplex','triplex','terrain','bureau','magasin','boutique','entrepot','local','immeuble','parking','garage','penthouse','parcelle','lot'];\n  const typeLow = extracted.type_de_bien.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n  const typeValide = typeValides.some(t => typeLow.includes(t));\n  if (!typeValide) {\n    console.log('REJETÉ: type_de_bien invalide:', extracted.type_de_bien);\n    return [];\n  }\n\n  // Générer REF structurée\n  const typeMap = {'appartement':'APT','studio':'STU','chambre':'CHB','maison':'MAS','villa':'VIL','duplex':'DPX','triplex':'TRX','terrain':'TER','parcelle':'PAR','lot':'LOT','bureau':'BUR','magasin':'MAG','boutique':'BTQ','local':'LOC','entrepot':'ENT','immeuble':'IMM','garage':'GAR','parking':'PRK','penthouse':'PNT'};\n  const typeCode = Object.entries(typeMap).find(([k]) => typeLow.includes(k))?.[1] || null;\n  if (!typeCode) { console.log('REJETÉ: impossible de coder le type:', extracted.type_de_bien); return []; }\n\n  const commCode = extracted.commune.substring(0, 3).toUpperCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n  const offreCode = (extracted.type_offre || '').toLowerCase().includes('vente') ? 'V' : 'L';\n  const rand = Math.random().toString(36).substring(2, 10).toUpperCase();\n  const ref_bien = typeCode + '-' + commCode + '-' + offreCode + '-' + rand;\n\n  // Hash pour déduplication\n  const hashInput = [\n    typeLow,\n    (extracted.prix || '').toLowerCase().replace(/\\s/g, ''),\n    (extracted.commune || '').toLowerCase(),\n    (extracted.quartier || '').toLowerCase(),\n    (extracted.chambre || '').toString(),\n    (extracted.surface || '').toString(),\n    (extracted.caracteristiques || '').substring(0, 150).toLowerCase().replace(/\\s/g, '')\n  ].join('|');\n\n  let hash = 5381;\n  for (let i = 0; i < hashInput.length; i++) hash = ((hash << 5) + hash + hashInput.charCodeAt(i)) & 0xFFFFFFFF;\n  const content_hash = (hash >>> 0).toString(16).padStart(8, '0');\n\n  const dateExp = new Date();\n  dateExp.setDate(dateExp.getDate() + 30);\n\n  console.log('ANNONCE VALIDEE:', ref_bien, '| Type:', extracted.type_de_bien, '| Commune:', extracted.commune, '| Prix:', extracted.prix);\n\n  return [{ json: {\n    ref_bien, content_hash,\n    type_de_bien: extracted.type_de_bien,\n    type_offre: extracted.type_offre || '',\n    zone_geographique: extracted.zone_geographique || '',\n    commune: extracted.commune,\n    quartier: extracted.quartier || '',\n    prix: extracted.prix || '',\n    surface: extracted.surface || '',\n    chambre: extracted.chambre || '',\n    meubles: extracted.meubles || 'Non',\n    caracteristiques: extracted.caracteristiques || '',\n    telephone_bien: extracted.telephone || source.telephone || '',\n    telephone_expediteur: source.telephone || '',\n    expediteur: source.expediteur || '',\n    publie_par: extracted.publie_par || source.expediteur || '',\n    disponible: extracted.disponible === 'Non' ? 'Non' : 'Oui',\n    status: 'active',\n    groupe_whatsapp_origine: source.groupe || '',\n    groupe_whatsapp_jid: source.groupe_jid || '',\n    message_initial: source.message || '',\n    publication_id: source.messageId || '',\n    date_publication: new Date().toISOString(),\n    date_expiration: dateExp.toISOString(),\n    relance_count: 0,\n    lien_image: ''\n  }}];\n} catch(e) { console.log('Erreur parser:', e.message); return []; }"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -25968,
+        -3216
+      ],
+      "id": "43aeb60a-7d52-4937-9f0b-31c20fe3eb1d",
+      "name": "Parser IA REF Hash"
+    },
+    {
+      "parameters": {
+        "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux?content_hash=eq.{{ $json.content_hash }}&select=id,ref_bien,relance_count,date_expiration,status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -25744,
+        -3216
+      ],
+      "id": "b6e64dbc-58c5-4b80-9ab2-ee2d298f90b8",
+      "name": "Verifier Doublon Supabase",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const check = $input.first().json;\nconst annonce = $('Parser IA REF Hash').first().json;\nlet existing = Array.isArray(check) ? check : (check && check.id ? [check] : []);\nconst dateExp = new Date(); dateExp.setDate(dateExp.getDate() + 30);\nif (existing.length === 0) return [{ json: { ...annonce, action: 'INSERT', existing_id: null } }];\nconst ex = existing[0];\nconst isExpired = ex.status === 'archived' || ex.status === 'expired';\nreturn [{ json: { ...annonce, action: isExpired ? 'REACTIVATE' : 'RENEW', existing_id: ex.id, existing_ref: ex.ref_bien, relance_count: isExpired ? 0 : (ex.relance_count || 0) + 1, date_expiration: dateExp.toISOString() } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -25520,
+        -3216
+      ],
+      "id": "d2e782d9-c227-42a5-8810-c27e7a1f0918",
+      "name": "Decider Action"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "a1",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "INSERT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Nouveau"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "a2",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "INSERT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEquals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Renouveler"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -25296,
+        -3216
+      ],
+      "id": "4a11d63a-a4d8-434c-b9af-ad3b61abfe94",
+      "name": "INSERT ou RENEW?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ref_bien:$json.ref_bien, content_hash:$json.content_hash, type_de_bien:$json.type_de_bien, type_offre:$json.type_offre, zone_geographique:$json.zone_geographique, commune:$json.commune, quartier:$json.quartier, prix:$json.prix, surface:$json.surface, chambre:$json.chambre, meubles:$json.meubles, caracteristiques:$json.caracteristiques, telephone_bien:$json.telephone_bien, telephone_expediteur:$json.telephone_expediteur, expediteur:$json.expediteur, publie_par:$json.publie_par, disponible:$json.disponible, status:'active', groupe_whatsapp_origine:$json.groupe_whatsapp_origine, groupe_whatsapp_jid:$json.groupe_whatsapp_jid, message_initial:$json.message_initial, publication_id:$json.publication_id, date_publication:$json.date_publication, date_expiration:$json.date_expiration, relance_count:0, lien_image:$json.lien_image }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -25072,
+        -3120
+      ],
+      "id": "469e0c1d-170b-4c87-89e4-5804b1e7e6f7",
+      "name": "Inserer Nouvelle Annonce",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux?id=eq.{{ $json.existing_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ date_expiration:$json.date_expiration, status:'active', disponible:'Oui', relance_count:$json.relance_count, date_derniere_relance:new Date().toISOString() }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -25072,
+        -3312
+      ],
+      "id": "6ba60161-fd88-46aa-a126-b0f46cce6d99",
+      "name": "Renouveler ou Reactiver",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/publications",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ horodatage:$('Preparer Filtrer Groupe').first().json.horodatage, groupe:$('Preparer Filtrer Groupe').first().json.groupe, groupe_jid:$('Preparer Filtrer Groupe').first().json.groupe_jid, expediteur:$('Preparer Filtrer Groupe').first().json.expediteur, telephone:$('Preparer Filtrer Groupe').first().json.telephone, message:$('Preparer Filtrer Groupe').first().json.message, message_id:$('Preparer Filtrer Groupe').first().json.messageId, ref_bien_associe:$('Parser IA REF Hash').first().json.ref_bien, type:$('Preparer Filtrer Groupe').first().json.has_image?'image+texte':'texte' }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -24728,
+        -3216
+      ],
+      "id": "a0b765cd-222b-4f80-81b2-c7cbd6e84f90",
+      "name": "Sauvegarder Publication",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "au1",
+                    "leftValue": "={{ $json.hasAudio }}",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Audio"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "au2",
+                    "leftValue": "={{ $json.hasAudio }}",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Texte"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -26544,
+        -2780
+      ],
+      "id": "313dc47a-b6fb-4b11-a917-b9501acdd2ee",
+      "name": "Message Audio?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.wasenderapi.com/api/decrypt-media",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer d5c9e3e991ef6c1032622dea850799388f52e917f8e2dae3351459c1f447f5cd"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ data: { messages: { key: { id: $json.messageId }, message: { audioMessage: $json.audioMessage } } } }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -26256,
+        -2928
+      ],
+      "id": "b6a9f881-a008-4c36-a96f-63cb3485f40b",
+      "name": "Decrypter Audio",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.publicUrl || $json.data?.publicUrl || '' }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -25968,
+        -2928
+      ],
+      "id": "6418e186-bd26-451e-b4fa-fc3a0da4f956",
+      "name": "Telecharger Audio",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "options": {
+          "language": "fr"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        -25744,
+        -2928
+      ],
+      "id": "93fddc7d-ca4f-4249-9299-a17fa1bf6070",
+      "name": "Transcription Audio",
+      "credentials": {
+        "openAiApi": {
+          "id": "ZyCbkBkEuQkEhStv",
+          "name": "News Clé"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "let text = '';\ntry { text = $('Transcription Audio').first().json.text || ''; } catch(e) {}\nif (!text) { try { text = $('Normaliser Filtrer Anti-Boucle').first().json.messageBody || ''; } catch(e) {} }\nif (!text.trim()) return [{ json: { text: 'bonjour' } }];\nreturn [{ json: { text: text.trim() } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -25520,
+        -2780
+      ],
+      "id": "01b6ba65-a047-43a8-8bed-5dc5fd635bee",
+      "name": "Unifier Texte"
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = ($input.first().json.text || '').trim().toLowerCase();\nconst cleanNumber = $('Normaliser Filtrer Anti-Boucle').first().json.cleanNumber || '';\nconst isOui = ['oui','yes','ok','confirme','renouveler','renouvelle','1'].includes(text);\nconst isNon = ['non','no','archiver','supprimer','retirer','terminer','2'].includes(text);\nif (isOui || isNon) return [{ json: { isRelanceReply: true, action: isOui ? 'RENEW' : 'ARCHIVE', cleanNumber, text } }];\nreturn [{ json: { isRelanceReply: false, text, cleanNumber } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -25296,
+        -2780
+      ],
+      "id": "5918ae66-9aa4-4f0a-8f22-b039d147b3dd",
+      "name": "Reponse Relance?"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "r1",
+                    "leftValue": "={{ $json.isRelanceReply }}",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "OuiNon"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "r2",
+                    "leftValue": "={{ $json.isRelanceReply }}",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Agent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -25072,
+        -2780
+      ],
+      "id": "d753f0aa-5758-4b9d-b17b-4279cc5732fe",
+      "name": "Routeur Relance ou Agent?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst n = d.cleanNumber || '';\nif (d.action === 'RENEW') return [{ json: { supabase_filter:'telephone_expediteur=eq.'+n+'&status=eq.active', patch_data:{ date_expiration:new Date(Date.now()+30*24*60*60*1000).toISOString(), status:'active', relance_count:0, date_derniere_relance:new Date().toISOString() }, reply_msg:'Parfait ! Votre annonce est renouvelee pour 30 jours.' } }];\nreturn [{ json: { supabase_filter:'telephone_expediteur=eq.'+n+'&status=eq.active', patch_data:{ status:'archived', disponible:'Non', date_archivage:new Date().toISOString() }, reply_msg:'Votre annonce a ete archivee. Merci !' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -24728,
+        -2928
+      ],
+      "id": "caadcb63-c156-412a-bf8c-fd1aef098d5b",
+      "name": "Preparer Action Relance"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux?{{ $json.supabase_filter }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.patch_data) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -24384,
+        -2928
+      ],
+      "id": "1e70b9f1-fc79-4d45-a5f5-fa6a82a5b5af",
+      "name": "Executer Action Relance",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.wasenderapi.com/api/send-message",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer d5c9e3e991ef6c1032622dea850799388f52e917f8e2dae3351459c1f447f5cd"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $('Normaliser Filtrer Anti-Boucle').first().json.replyTo, text: $('Preparer Action Relance').first().json.reply_msg }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -24160,
+        -2928
+      ],
+      "id": "3a4b5dbc-fd2d-4f8a-b9af-f03ffe41fc5b",
+      "name": "Confirmer Relance",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ '[ACTION REQUISE: appelle d\\'abord recherche_biens avec une query adaptée avant de répondre] ' + $json.text }}",
+        "options": {
+          "systemMessage": "Tu t'appelles Eden, conseillère immobilière chez Bogbe's Multi-Service en Côte d'Ivoire.\nTu réponds sur WhatsApp. Ton objectif : décrocher une visite.\n\n===== INSTRUCTION PRINCIPALE =====\nTu as un outil qui s'appelle recherche_biens. Tu DOIS appeler cet outil AVANT de répondre sur les biens.\nNe jamais affirmer qu'un bien existe ou n'existe pas sans avoir d'abord appelé recherche_biens.\n\nComment construire la query :\n- \"3 pièces à Cocody\" -> query: \"3 pieces cocody\"\n- \"villa à Yopougon\" -> query: \"villa yopougon\"\n- \"vous avez quoi\" / \"bonjour\" -> query: \"recent\"\n- \"budget 250 millions\" -> query: \"budget 250000000\"\n- \"louer un studio\" -> query: \"studio location\"\n\nTOUJOURS appeler l'outil en premier avec ce que le client a dit. Ne pas demander d'autres infos avant.\n\n===== PRÉSENTER LES BIENS =====\nAprès avoir appelé l'outil, présente les biens de façon naturelle et conversationnelle.\n\nFormat pour chaque bien (sans REF, sans emojis) :\n[Type] [N] pièces à [Commune], [Quartier]\nPrix : [montant]\n[Caractéristiques principales si disponibles]\nContact : [numéro de téléphone]\n\nExemple :\nAppartement 3 pièces à Cocody, Palmeraie\nPrix : 230 000 FCFA/mois\nClimatisation, gardien\nContact : 07 XX XX XX\n\nINTERDICTIONS ABSOLUES :\n- Jamais de codes REF dans les messages au client (c'est un code interne)\n- Jamais d'emojis\n- Jamais plus de 3 biens à la fois\n- Jamais inventer des données non retournées par l'outil\n\nSi l'outil retourne AUCUN_EXACT -> propose les alternatives retournées\nSi l'outil retourne \"Aucun bien\" -> \"Je n'ai pas ce type de bien en ce moment. Tu veux que je te prévienne dès qu'une annonce arrive ?\"\n\nMots INTERDITS : erreur, problème, système, base de données, technique, difficulté\n\n===== TON =====\n- Chaleureux, humain, court (5-6 lignes max)\n- Tutoyer si le client tutoie, vouvoyer sinon\n- Pas d'emojis. Jamais.\n\n===== DÉCROCHER LA VISITE =====\nDès qu'un client montre de l'intérêt :\n1. \"Super choix, ce bien est très demandé\"\n2. \"Tu es disponible quand pour une visite ?\"\n3. \"Et c'est à quel nom ?\"\n4. Confirmation -> écrire obligatoirement \"visite confirmée\" + la REF (usage interne uniquement)"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -24792,
+        -2632
+      ],
+      "id": "145057af-f0a2-4f52-aeb8-b668531cded3",
+      "name": "Agent Eden"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 600,
+          "temperature": 0.4,
+          "toolChoice": "required"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -24848,
+        -2400
+      ],
+      "id": "4203133a-2171-4ad3-a277-47cb0e732461",
+      "name": "GPT-4.1-mini",
+      "credentials": {
+        "openAiApi": {
+          "id": "ZyCbkBkEuQkEhStv",
+          "name": "News Clé"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Normaliser Filtrer Anti-Boucle').first().json.remoteJid }}",
+        "contextWindowLength": 12
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -24720,
+        -2408
+      ],
+      "id": "d40dcdca-c276-4e90-b447-647ed8c4b9d4",
+      "name": "Memoire Conversation"
+    },
+    {
+      "parameters": {
+        "name": "recherche_biens",
+        "description": "Recherche des biens immobiliers disponibles en Côte d'Ivoire. Appelle pour toute question: disponibilité, prix, commune, type, chambres, REF. Passe la demande telle quelle.",
+        "jsCode": "const SUPABASE_URL = 'https://udyfhzyvalansmhkynnc.supabase.co';\nconst SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk';\nconst FIELDS = 'ref_bien,type_de_bien,type_offre,commune,quartier,zone_geographique,prix,chambre,meubles,caracteristiques,telephone_bien,telephone_expediteur,disponible,status,date_expiration';\n\nconst q = (query || '').trim().toLowerCase()\n  .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')\n  .replace(/['']/g, \"'\").replace(/[-_]/g, ' ');\n\nconst filters = [\n  'disponible=neq.Non',\n  'disponible=neq.false',\n  'status=neq.archived',\n  'status=neq.expired'\n];\n\nconst COMMUNES = {\n  'cocody':['cocody','coco'], 'yopougon':['yopougon','yopo','yop'],\n  'marcory':['marcory'], 'koumassi':['koumassi'],\n  'treichville':['treichville','treich'], 'plateau':['plateau'],\n  'adjame':['adjame'], 'abobo':['abobo'],\n  'port bouet':['port bouet','portbouet'], 'bingerville':['bingerville'],\n  'deux plateaux':['2 plateaux','deux plateaux'], 'bonoumin':['bonoumin'],\n  'bassam':['bassam','grand bassam'], 'assinie':['assinie']\n};\nconst COMMUNE_PROPER = {\n  'cocody':'Cocody','yopougon':'Yopougon','marcory':'Marcory','koumassi':'Koumassi',\n  'treichville':'Treichville','plateau':'Plateau','adjame':'Adjame','abobo':'Abobo',\n  'port bouet':'Port-Bouet','bingerville':'Bingerville',\n  'deux plateaux':'Plateaux','bonoumin':'Bonoumin',\n  'bassam':'Grand-Bassam','assinie':'Assinie'\n};\nvar critCommune = '';\nfor (var c in COMMUNES) {\n  if (COMMUNES[c].some(function(v){return q.includes(v);})) { critCommune=c; break; }\n}\nif (critCommune) filters.push('commune=ilike.*' + (COMMUNE_PROPER[critCommune]||critCommune) + '*');\n\nconst TYPES = ['villa','appartement','studio','duplex','triplex','maison','terrain','bureau','magasin','boutique','local','immeuble','garage'];\nvar critType = '';\nfor (var ti=0; ti<TYPES.length; ti++) {\n  if (q.includes(TYPES[ti])) { critType=TYPES[ti]; break; }\n}\nif (critType) filters.push('type_de_bien=ilike.*' + critType + '*');\n\nif (['location','louer','bail'].some(function(w){return q.includes(w);})) {\n  filters.push('type_offre=eq.Location');\n} else if (['vente','vendre','achat','acheter'].some(function(w){return q.includes(w);})) {\n  filters.push('type_offre=eq.Vente');\n}\n\nvar chM = q.match(/(\\d+)\\s*(?:pieces?|chambres?|ch\\b)/);\nif (chM) filters.push('chambre=ilike.*' + chM[1] + '*');\n\nif (q.includes('meuble')) filters.push('meubles=eq.true');\n\nvar refM = q.match(/ref[: ]*([a-z]{2,3}-[a-z]{2,3}-[a-z]-[a-z0-9]{4,10})/i);\nif (refM) filters.push('ref_bien=ilike.*' + refM[1].toUpperCase() + '*');\n\nconst QUARTIERS = ['angre','angree','riviera','bonoumin','niangon','orly','zone 4','vallon','palmeraie','attoban','gesco','djibi'];\nfor (var qi=0; qi<QUARTIERS.length; qi++) {\n  var qn = QUARTIERS[qi].normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');\n  if (q.includes(qn) && qn.length > 3) { filters.push('quartier=ilike.*' + QUARTIERS[qi] + '*'); break; }\n}\n\nconst isRecent = q === 'recent' || q === '' || (!critCommune && !critType && !chM && !refM);\nconst limit = isRecent ? 20 : 50;\nconst url = SUPABASE_URL + '/rest/v1/locaux?' + filters.join('&') + '&select=' + FIELDS + '&order=date_publication.desc&limit=' + limit;\n\nlet biens = [];\ntry {\n  const resp = await this.helpers.httpRequest({\n    method: 'GET',\n    url: url,\n    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }\n  });\n  biens = Array.isArray(resp) ? resp : [];\n  if (!Array.isArray(resp)) return '[ERR_RESP] ' + JSON.stringify(resp).substring(0, 150);\n} catch(e) {\n  return '[ERR_HTTP] ' + e.message;\n}\n\n// Filter expired\nconst now = new Date();\nbiens = biens.filter(function(b) {\n  return !(b.date_expiration && new Date(b.date_expiration) < now);\n});\n\n// Deduplicate: same price + same commune + same chambre + same phone = same bien\nvar seen = {};\nbiens = biens.filter(function(b) {\n  var key = [\n    (b.prix||'').replace(/[^0-9]/g,''),\n    (b.commune||'').toLowerCase(),\n    (b.chambre||'').replace(/[^0-9]/g,''),\n    (b.telephone_bien||b.telephone_expediteur||''),\n    (b.type_de_bien||'').toLowerCase().substring(0,5)\n  ].join('|');\n  if (seen[key]) return false;\n  seen[key] = true;\n  return true;\n});\n\nif (biens.length === 0) {\n  var ctx = '';\n  if (critCommune) ctx += ' à ' + critCommune;\n  if (chM) ctx += ' de ' + chM[1] + ' pièce(s)';\n  return 'Aucun bien' + ctx + ' disponible actuellement.';\n}\n\n// Format: natural, no REF shown to client, REF kept internally for confirmation\nfunction fmt(b, idx) {\n  var m = ['oui','true'].includes(String(b.meubles||'').toLowerCase());\n  var lieu = [b.commune, b.quartier, b.zone_geographique].filter(Boolean).join(', ') || 'Non précisé';\n  var tel = b.telephone_bien || b.telephone_expediteur || \"Contactez l'agence\";\n  var type = b.type_de_bien || 'Bien';\n  var ch = b.chambre ? b.chambre.replace(/[^0-9]/g,'') : '';\n  var pieces = ch ? ' ' + ch + ' piece(s)' : '';\n  var meuble = m ? ', meuble' : '';\n  var caract = b.caracteristiques ? '\\n' + b.caracteristiques.substring(0, 150) : '';\n  var exp = '';\n  if (b.date_expiration) {\n    var j = Math.ceil((new Date(b.date_expiration) - new Date()) / (864e5));\n    if (j <= 7) exp = ' (expire dans ' + j + 'j)';\n  }\n  var num = idx !== undefined ? (idx + 1) + '. ' : '';\n  return num + type + pieces + meuble + ' a ' + lieu + exp + '\\nPrix : ' + (b.prix || 'Sur demande') + '\\n' + (b.type_offre ? b.type_offre + ' | ' : '') + caract + '\\nContact : ' + tel + '\\n[REF:' + b.ref_bien + ']';\n}\n\nvar result = biens.slice(0, 3);\nif (result.length === 1) return '1 résultat :\\n' + fmt(result[0]);\nreturn result.length + ' résultats :\\n\\n' + result.map(function(b, i){ return fmt(b, i); }).join('\\n\\n');"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.1,
+      "position": [
+        -24592,
+        -2408
+      ],
+      "id": "7f4fb3e4-4c75-4ba7-96e6-a08a35294c5c",
+      "name": "recherche_biens"
+    },
+    {
+      "parameters": {
+        "jsCode": "const normalized = $('Normaliser Filtrer Anti-Boucle').first().json;\nconst agentOutput = $('Agent Eden').first().json.output || 'Bonjour ! Je suis Eden de Bobge\\'s Multi-Service. Comment puis-je vous aider ?';\n\nfunction extractNum(s) { return String(s||'').replace(/@[\\w.]+/g,'').replace(/[^0-9]/g,''); }\nfunction isValid(n) { return !!(n && /^[0-9]{8,15}$/.test(n)); }\n\nlet to = normalized.replyTo || '';\nif (!isValid(to) && !normalized.isGroup) {\n  if (isValid(normalized.cleanNumber)) to = normalized.cleanNumber;\n  else if (normalized.isNormal) to = extractNum(normalized.remoteJid);\n}\n\nconst canSend = normalized.isGroup ? true : isValid(to);\nif (!canSend) console.log('LID non resolvable:', normalized.remoteJid);\n\nreturn [{ json: { to, text: agentOutput, canSend } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -24384,
+        -2632
+      ],
+      "id": "4f17d51f-a122-455d-ae33-41aa7b041ba4",
+      "name": "Preparer Envoi"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "s1",
+                    "leftValue": "={{ $json.canSend }}",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Envoyer"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "s2",
+                    "leftValue": "={{ $json.canSend }}",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "LidInconnu"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -24160,
+        -2632
+      ],
+      "id": "e0599238-76a8-4d12-b9a5-8d3b14f2e9e4",
+      "name": "Peut Envoyer?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.wasenderapi.com/api/send-message",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer d5c9e3e991ef6c1032622dea850799388f52e917f8e2dae3351459c1f447f5cd"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.to, text: $json.text }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -23936,
+        -2728
+      ],
+      "id": "c7f1a8cd-34ce-43a6-9fff-e61697c3fe8f",
+      "name": "Repondre au Prospect",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const n = $('Normaliser Filtrer Anti-Boucle').first().json;\nconsole.log('LID non resolvable | JID:', n.remoteJid, '| cleanNumber:', n.cleanNumber);\nreturn [{ json: { logged: true, remoteJid: n.remoteJid } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -23936,
+        -2536
+      ],
+      "id": "e0a9b854-169a-4288-b8ce-a35faa9c23ae",
+      "name": "Logger LID Inconnu"
+    },
+    {
+      "parameters": {
+        "jsCode": "const agentOutput = $('Agent Eden').first().json.output || '';\nconst norm = $('Normaliser Filtrer Anti-Boucle').first().json;\nconst hasVisite = ['visite confirmee','visite confirmée','rdv confirme','rdv confirmé','rendez-vous confirme','rendez-vous confirmé'].some(function(kw){return agentOutput.toLowerCase().includes(kw);});\n// La REF est usage interne - on cherche le type+lieu dans la reponse pour le log\nvar refM = agentOutput.match(/\\b([A-Z]{2,3}-[A-Z]{2,3}-[LV]-[A-Z0-9]{4,10})\\b/i);\nvar ref = refM ? refM[1].toUpperCase() : '';\nreturn [{ json: {\n  hasVisite,\n  ref_bien: ref,\n  prospect_numero: norm.cleanNumber || norm.replyTo,\n  prospect_nom: norm.pushName || '',\n  logEntry: {\n    numero_prospect: norm.cleanNumber || norm.replyTo,\n    nom_prospect: norm.pushName || '',\n    message_entrant: (norm.messageBody || '').substring(0, 500),\n    reponse_agent: agentOutput.substring(0, 500),\n    ref_mentionne: ref,\n    visite_detectee: hasVisite,\n    horodatage: new Date().toISOString()\n  }\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -23712,
+        -2728
+      ],
+      "id": "f6973197-7110-47b2-b7cf-d73e39fc83fc",
+      "name": "Post Traitement Agent"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/conversations",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.logEntry) }}",
+        "options": {
+          "timeout": 8000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -23488,
+        -2824
+      ],
+      "id": "afe7a90c-51a3-47d7-967a-c4dd286d8402",
+      "name": "Logger Conversation",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "v1",
+                    "leftValue": "={{ $json.hasVisite }}",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "VisiteOui"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "v2",
+                    "leftValue": "={{ $json.hasVisite }}",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "PasVisite"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -23488,
+        -2632
+      ],
+      "id": "8362d824-fc92-42ff-b921-55a679937015",
+      "name": "Visite Confirmee?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/visite_programmee",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=ignore-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ numero:$json.prospect_numero, nom_prenom:$json.prospect_nom, ref_bien:$json.ref_bien, visite_prog:'Oui', created_at:new Date().toISOString() }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -23264,
+        -2728
+      ],
+      "id": "0aa78303-e4fd-4095-8b8c-0d904da5ada3",
+      "name": "Sauvegarder Visite",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.wasenderapi.com/api/send-message",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer d5c9e3e991ef6c1032622dea850799388f52e917f8e2dae3351459c1f447f5cd"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to:'2250789263373', text:'NOUVELLE VISITE - Bobges Multi-Service\\n\\nBien: '+($json.ref_bien||'Non precise')+'\\nProspect: '+($json.prospect_nom||'Inconnu')+'\\nNumero: '+$json.prospect_numero+'\\n\\nA contacter rapidement.' }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -23264,
+        -2536
+      ],
+      "id": "d66f55cd-3733-4261-be36-baee69a4a82a",
+      "name": "Notifier Agence",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        -27216,
+        -2304
+      ],
+      "id": "556d096d-b825-49e4-a11b-1b57066bb8ff",
+      "name": "Relance Quotidienne 9h"
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst en3j = new Date(now.getTime() + 3*24*60*60*1000);\nreturn [\n  { json: { type:'EXPIRING_SOON', filter:'status=eq.active&date_expiration=lt.'+en3j.toISOString()+'&date_expiration=gt.'+now.toISOString() } },\n  { json: { type:'EXPIRED', filter:'status=eq.active&date_expiration=lt.'+now.toISOString() } }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -26992,
+        -2304
+      ],
+      "id": "11025933-fd51-47b3-8fd1-3c1b8c8c1439",
+      "name": "Preparer Filtres Relance"
+    },
+    {
+      "parameters": {
+        "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux?select=id,ref_bien,type_de_bien,commune,expediteur,telephone_expediteur,relance_count,date_expiration&{{ $json.filter }}&limit=50",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -26768,
+        -2304
+      ],
+      "id": "588d2a6d-fc90-435d-81b5-2636fca9d412",
+      "name": "Charger Annonces a Relancer",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "id",
+        "include": "allOtherFields",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -26544,
+        -2304
+      ],
+      "id": "84fe11df-aba1-4af8-92b5-4043604ce7ca",
+      "name": "Boucler Annonces"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst type = $('Preparer Filtres Relance').first().json.type;\nif (!d.telephone_expediteur) return [];\nvar bien = (d.type_de_bien||'') + (d.commune?' a '+d.commune:'');\nvar msg = '';\nif (type==='EXPIRING_SOON') {\n  var j=Math.max(1,Math.ceil((new Date(d.date_expiration)-new Date())/(864e5)));\n  msg='Bonjour '+(d.expediteur||'')+',\\n\\nVotre annonce ('+(bien||d.ref_bien)+') expire dans '+j+' jour(s).\\n\\nRepondez OUI pour renouveler 30 jours ou NON pour archiver.\\n\\nBobges Multi-Service';\n} else {\n  msg='Bonjour '+(d.expediteur||'')+',\\n\\nVotre annonce ('+(bien||d.ref_bien)+') a expire.\\nElle est encore disponible ?\\n\\nRepondez OUI pour reactiver ou NON pour supprimer.\\n\\nBobges Multi-Service';\n}\nreturn [{ json: { ...d, relance_msg:msg, relance_type:type } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -26320,
+        -2304
+      ],
+      "id": "9949b9db-a91d-4cfc-8453-4cae420134a1",
+      "name": "Construire Message Relance"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.wasenderapi.com/api/send-message",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer d5c9e3e991ef6c1032622dea850799388f52e917f8e2dae3351459c1f447f5cd"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to:$json.telephone_expediteur, text:$json.relance_msg }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -26096,
+        -2304
+      ],
+      "id": "53345d2a-36f0-4e3c-84bd-edca7e8302cd",
+      "name": "Envoyer Relance",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux?id=eq.{{ $json.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ relance_count:($json.relance_count||0)+1, date_derniere_relance:new Date().toISOString(), status:$json.relance_type==='EXPIRED'?'pending_confirm':'active' }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -25872,
+        -2304
+      ],
+      "id": "eca5064a-357a-4559-98ba-8bf392514c0e",
+      "name": "Maj Compteur Relance",
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Normaliser Filtrer Anti-Boucle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normaliser Filtrer Anti-Boucle": {
+      "main": [
+        [
+          {
+            "node": "Groupe ou Prospect?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groupe ou Prospect?": {
+      "main": [
+        [
+          {
+            "node": "Preparer Filtrer Groupe",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Message Audio?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparer Filtrer Groupe": {
+      "main": [
+        [
+          {
+            "node": "IA Extraction Annonce",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IA Extraction Annonce": {
+      "main": [
+        [
+          {
+            "node": "Parser IA REF Hash",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser IA REF Hash": {
+      "main": [
+        [
+          {
+            "node": "Verifier Doublon Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verifier Doublon Supabase": {
+      "main": [
+        [
+          {
+            "node": "Decider Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decider Action": {
+      "main": [
+        [
+          {
+            "node": "INSERT ou RENEW?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "INSERT ou RENEW?": {
+      "main": [
+        [
+          {
+            "node": "Inserer Nouvelle Annonce",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Renouveler ou Reactiver",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inserer Nouvelle Annonce": {
+      "main": [
+        [
+          {
+            "node": "Sauvegarder Publication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Renouveler ou Reactiver": {
+      "main": [
+        [
+          {
+            "node": "Sauvegarder Publication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message Audio?": {
+      "main": [
+        [
+          {
+            "node": "Decrypter Audio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unifier Texte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decrypter Audio": {
+      "main": [
+        [
+          {
+            "node": "Telecharger Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telecharger Audio": {
+      "main": [
+        [
+          {
+            "node": "Transcription Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcription Audio": {
+      "main": [
+        [
+          {
+            "node": "Unifier Texte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unifier Texte": {
+      "main": [
+        [
+          {
+            "node": "Reponse Relance?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reponse Relance?": {
+      "main": [
+        [
+          {
+            "node": "Routeur Relance ou Agent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Routeur Relance ou Agent?": {
+      "main": [
+        [
+          {
+            "node": "Preparer Action Relance",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Agent Eden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparer Action Relance": {
+      "main": [
+        [
+          {
+            "node": "Executer Action Relance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executer Action Relance": {
+      "main": [
+        [
+          {
+            "node": "Confirmer Relance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT-4.1-mini": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agent Eden",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memoire Conversation": {
+      "ai_memory": [
+        [
+          {
+            "node": "Agent Eden",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "recherche_biens": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agent Eden",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent Eden": {
+      "main": [
+        [
+          {
+            "node": "Preparer Envoi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparer Envoi": {
+      "main": [
+        [
+          {
+            "node": "Peut Envoyer?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Peut Envoyer?": {
+      "main": [
+        [
+          {
+            "node": "Repondre au Prospect",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Logger LID Inconnu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Repondre au Prospect": {
+      "main": [
+        [
+          {
+            "node": "Post Traitement Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Traitement Agent": {
+      "main": [
+        [
+          {
+            "node": "Logger Conversation",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Visite Confirmee?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Visite Confirmee?": {
+      "main": [
+        [
+          {
+            "node": "Sauvegarder Visite",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notifier Agence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Relance Quotidienne 9h": {
+      "main": [
+        [
+          {
+            "node": "Preparer Filtres Relance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparer Filtres Relance": {
+      "main": [
+        [
+          {
+            "node": "Charger Annonces a Relancer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Charger Annonces a Relancer": {
+      "main": [
+        [
+          {
+            "node": "Boucler Annonces",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Boucler Annonces": {
+      "main": [
+        [
+          {
+            "node": "Construire Message Relance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construire Message Relance": {
+      "main": [
+        [
+          {
+            "node": "Envoyer Relance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envoyer Relance": {
+      "main": [
+        [
+          {
+            "node": "Maj Compteur Relance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mémoire Conversation": {
+      "ai_memory": [
+        [
+          {
+            "node": "Agent Eden",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": {
+    "node:Schedule Relance 24h": {
+      "recurrenceRules": []
+    },
+    "node:Anti-Boucle Prospect": {
+      "seenMessages": {
+        "3EB04D08FB3CE1CDF5F96D": 1772247145212,
+        "3EB0C75ED3D157A2C31A4F": 1772247302262
+      },
+      "lastMsgTime": {
+        "104599767777380": 1772247302262
+      }
+    },
+    "node:Normaliser Webhook": {
+      "processedIds": {
+        "3EB0C75ED3D157A2C31A4F": 1772247302250,
+        "3A97BE7A681B5BBC13B9": 1772247387821,
+        "3AB5A3EC8B5C5ADA107D": 1772247411392,
+        "3A8C89BB4FB7848BF6B9": 1772247418118
+      }
+    },
+    "node:Relance Quotidienne 9h": {
+      "recurrenceRules": []
+    },
+    "node:Normaliser Filtrer Anti-Boucle": {
+      "seen": {
+        "3EB0651EF9BA2198982766": 1772255662462,
+        "3EB025EC386005FF1859AA": 1772256053270,
+        "A53246065EC67B321C582B16F709076D": 1772256240741
+      }
+    },
+    "global": {
+      "flood": {
+        "104599767777380": 1772249912084,
+        "242081654112323": 1772250496037,
+        "22589263373": 1772256053270,
+        "103384308834339": 1772252089118,
+        "264015985041483": 1772253996090,
+        "197023185813724": 1772254588765,
+        "112772989849702": 1772256240741
+      }
+    }
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "ee206bef-dd30-4f54-b884-ce51631ec7b4",
+  "activeVersionId": "ee206bef-dd30-4f54-b884-ce51631ec7b4",
+  "versionCounter": 1015,
+  "triggerCount": 2,
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-02-28T05:25:56.818Z",
+    "createdAt": "2026-02-28T05:25:56.818Z",
+    "versionId": "ee206bef-dd30-4f54-b884-ce51631ec7b4",
+    "workflowId": "LTZJrc7tYwv6Qm6a5wtZ0",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "wassender-immobilier",
+          "options": {
+            "rawBody": true
+          }
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          -27216,
+          -2972
+        ],
+        "id": "fd9f05ca-c1de-45d0-94f8-f9c008939a04",
+        "name": "Webhook WhatsApp",
+        "webhookId": "wassender-immobilier-webhook"
+      },
+      {
+        "parameters": {
+          "jsCode": "try {\n  const BOTS = ['2250142694380', '2250789263373'];\n  const body = $input.first().json.body || $input.first().json;\n  const data = body.data || body;\n\n  let msg = null;\n  if (Array.isArray(data.messages)) msg = data.messages[0];\n  else if (data.messages && typeof data.messages === 'object') msg = data.messages;\n  else if (data.message) msg = data.message;\n  else msg = data;\n  if (!msg) return [];\n\n  const key = msg.key || {};\n  const message = msg.message || {};\n  const remoteJid = key.remoteJid || msg.remoteJid || '';\n  const fromMe = key.fromMe === true || key.fromMe === 'true';\n  const messageId = key.id || msg.id || '';\n\n  if (fromMe) return [];\n  if (!remoteJid || remoteJid === 'status@broadcast') return [];\n  if (message.reactionMessage || message.protocolMessage) return [];\n\n  let messageBody = msg.messageBody || msg.body\n    || message.conversation\n    || message.extendedTextMessage?.text\n    || message.imageMessage?.caption\n    || '';\n  messageBody = (messageBody || '').replace(/[\\x00-\\x1f]/g, '').substring(0, 2000).trim();\n\n  const hasAudio = !!message.audioMessage;\n  const hasImage = !!message.imageMessage;\n  const hasText = messageBody.length > 0;\n  if (!hasText && !hasAudio && !hasImage) return [];\n\n  const isGroup = remoteJid.includes('@g.us');\n  const isLid = remoteJid.includes('@lid');\n  const isNormal = remoteJid.includes('@s.whatsapp.net');\n\n  function extractNum(str) {\n    if (!str) return '';\n    return String(str).replace(/@[\\w.]+/g, '').replace(/[^0-9]/g, '');\n  }\n  function isValidPhone(n) { return !!(n && n.length >= 8 && n.length <= 15); }\n  function findPhoneInObj(obj, depth) {\n    if (!obj || typeof obj !== 'object' || depth > 5) return '';\n    const keys = ['cleanedSenderPn','senderPn','participantPn','cleanedParticipantPn','from','sender','phoneNumber','phone'];\n    for (const k of keys) {\n      if (obj[k]) { const n = extractNum(String(obj[k])); if (isValidPhone(n) && !BOTS.some(b => n.includes(b))) return n; }\n    }\n    for (const k of Object.keys(obj)) {\n      if (typeof obj[k] === 'object' && obj[k] !== null) { const f = findPhoneInObj(obj[k], depth + 1); if (f) return f; }\n    }\n    return '';\n  }\n\n  let cleanNumber = '';\n  const directSources = [msg.cleanedSenderPn, msg.senderPn, msg.phoneNumber, key.cleanedSenderPn, key.senderPn, data.cleanedSenderPn, data.senderPn, body.cleanedSenderPn, body.senderPn];\n  for (const src of directSources) {\n    if (src) { const n = extractNum(String(src)); if (isValidPhone(n)) { cleanNumber = n; break; } }\n  }\n  if (!cleanNumber && isGroup) { const p = extractNum(key.participant || msg.participant || ''); if (isValidPhone(p)) cleanNumber = p; }\n  if (!cleanNumber && isNormal) { const n = extractNum(remoteJid); if (isValidPhone(n)) cleanNumber = n; }\n  if (!cleanNumber) cleanNumber = findPhoneInObj(msg, 0) || findPhoneInObj(data, 0) || findPhoneInObj(body, 0);\n\n  if (BOTS.some(b => (cleanNumber && cleanNumber.includes(b)) || remoteJid.includes(b))) return [];\n\n  if (messageId) {\n    const sd = $getWorkflowStaticData('node');\n    if (!sd.seen) sd.seen = {};\n    const now = Date.now();\n    Object.keys(sd.seen).forEach(id => { if (now - sd.seen[id] > 600000) delete sd.seen[id]; });\n    if (sd.seen[messageId]) return [];\n    sd.seen[messageId] = now;\n  }\n\n  const sd2 = $getWorkflowStaticData('global');\n  if (!sd2.flood) sd2.flood = {};\n  const nowF = Date.now();\n  const userKey = cleanNumber || remoteJid;\n  if (sd2.flood[userKey] && (nowF - sd2.flood[userKey]) < 3000) return [];\n  sd2.flood[userKey] = nowF;\n\n  let replyTo = '';\n  if (isNormal) replyTo = extractNum(remoteJid);\n  else if (isGroup) replyTo = remoteJid;\n  else if (isLid) replyTo = cleanNumber;\n  else replyTo = cleanNumber || extractNum(remoteJid);\n\n  const replyToIsValid = isGroup ? true : /^[0-9]{8,15}$/.test(replyTo);\n  const groupName = isGroup ? (msg.groupMetadata?.subject || data.groupName || data.groupSubject || remoteJid.replace('@g.us', '')) : '';\n  const horodatage = new Date((msg.messageTimestamp || Math.floor(Date.now() / 1000)) * 1000).toLocaleString('fr-FR', { timeZone: 'Africa/Abidjan' });\n\n  return [{ json: { replyTo, replyToIsValid, remoteJid, cleanNumber, isLid, isNormal, isGroup, groupName, pushName: (msg.pushName || '').replace(/[\\x00-\\x1f]/g, '').substring(0, 100), messageBody, messageId, hasAudio, hasImage, hasText, audioMessage: message.audioMessage || null, imageMessage: message.imageMessage || null, timestamp: msg.messageTimestamp || Math.floor(Date.now() / 1000), horodatage } }];\n} catch(e) { console.log('Erreur normalisation:', e.message); return []; }"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -26992,
+          -2972
+        ],
+        "id": "1a32d949-5f53-414d-9396-3087fe9c3350",
+        "name": "Normaliser Filtrer Anti-Boucle"
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "typeValidation": "loose"
+                  },
+                  "conditions": [
+                    {
+                      "id": "g1",
+                      "leftValue": "={{ $json.isGroup }}",
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "true",
+                        "singleValue": true
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "Groupe"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "typeValidation": "loose"
+                  },
+                  "conditions": [
+                    {
+                      "id": "g2",
+                      "leftValue": "={{ $json.isGroup }}",
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "false",
+                        "singleValue": true
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "Prospect"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.2,
+        "position": [
+          -26768,
+          -2972
+        ],
+        "id": "6575a06b-da8b-4d21-bd04-a5f2f5e16829",
+        "name": "Groupe ou Prospect?"
+      },
+      {
+        "parameters": {
+          "jsCode": "const d = $input.first().json;\nif (!d.hasText && !d.hasImage) return [];\nconst msg = d.messageBody || '';\nconst msgLow = msg.toLowerCase();\nconst keywords = ['appartement','studio','chambre','maison','villa','duplex','triplex','terrain','bureau','magasin','boutique','entrepot','local','residence','parking','garage','immeuble','parcelle','lotissement','cocody','yopougon','marcory','koumassi','treichville','plateau','adjame','abobo','port-bouet','bingerville','riviera','angre','bassam','assinie','meuble','climatise','piscine','louer','vendre','location','vente','bail','fcfa','m2','m²','hectare','million','disponible'];\nconst score = keywords.filter(k => msgLow.includes(k)).length;\nconst hasSurface = /\\d+\\s*m[²2]/i.test(msg);\nconst hasPrice = /\\d+\\s*(million|milion|mille|fcfa|k)/i.test(msg);\nif (score < 2 && !(hasSurface && hasPrice) && d.hasText && !d.hasImage) return [];\nreturn [{ json: { message: msg, expediteur: d.pushName || '', telephone: d.cleanNumber || '', groupe: d.groupName || '', groupe_jid: d.remoteJid || '', horodatage: d.horodatage, messageId: d.messageId, has_image: d.hasImage, imageMessage: d.imageMessage } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -26544,
+          -3216
+        ],
+        "id": "2bffe9c2-c7c0-4f64-9109-5bbd710a35d0",
+        "name": "Preparer Filtrer Groupe"
+      },
+      {
+        "parameters": {
+          "modelId": {
+            "__rl": true,
+            "value": "gpt-4.1-mini",
+            "mode": "list",
+            "cachedResultName": "GPT-4.1-MINI"
+          },
+          "responses": {
+            "values": [
+              {
+                "role": "system",
+                "content": "Tu es un expert immobilier Côte d'Ivoire. Extrais les données structurées de cette annonce WhatsApp.\n\nCommunes valides: Cocody, Yopougon, Marcory, Koumassi, Treichville, Plateau, Adjamé, Abobo, Attécoubé, Port-Bouët, Bingerville, Songon, Anyama, Grand-Bassam, Jacqueville.\n\nREGLES STRICTES:\n- Champ vide si information absente. Ne JAMAIS inventer.\n- disponible: Oui par défaut\n- type_offre: déduis depuis contexte (louer=Location, vendre=Vente)\n- prix: extraire le prix EXACT tel qu'écrit dans l'annonce (ex: '150 000 FCFA/mois', '25 millions', '5 000 FCFA/m²')\n- Si le prix est ABSENT ou incompréhensible: laisser vide\n- type_de_bien: être précis (Appartement, Studio, Villa, Maison, Terrain, Bureau, Duplex, Triplex, Magasin, Entrepôt, Immeuble, Parking)\n- Si type_de_bien est introuvable: laisser vide\n- telephone: extraire uniquement si présent dans le message\n- VALIDATION: si tu ne peux pas identifier au minimum (type_de_bien ET commune) OU (prix ET type_offre), retourne un JSON vide {}\n\nFormat attendu:\n{\"type_de_bien\":\"\",\"type_offre\":\"Location|Vente\",\"zone_geographique\":\"\",\"commune\":\"\",\"quartier\":\"\",\"prix\":\"\",\"surface\":\"\",\"chambre\":\"\",\"meubles\":\"Oui|Non\",\"caracteristiques\":\"\",\"telephone\":\"\",\"publie_par\":\"\",\"disponible\":\"Oui|Non\"}"
+              },
+              {
+                "content": "=Annonce de {{ $json.expediteur }} | Groupe: {{ $json.groupe }}\nContact: {{ $json.telephone }}\nMessage: {{ $json.message }}"
+              }
+            ]
+          },
+          "builtInTools": {},
+          "options": {
+            "maxTokens": 400,
+            "textFormat": {
+              "textOptions": {
+                "type": "json_object"
+              }
+            },
+            "temperature": 0
+          }
+        },
+        "type": "@n8n/n8n-nodes-langchain.openAi",
+        "typeVersion": 2.1,
+        "position": [
+          -26320,
+          -3216
+        ],
+        "id": "0204bec6-31cc-431b-8b85-3b773b6a828a",
+        "name": "IA Extraction Annonce",
+        "credentials": {
+          "openAiApi": {
+            "id": "ZyCbkBkEuQkEhStv",
+            "name": "News Clé"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "try {\n  const raw = $input.first().json;\n  const source = $('Preparer Filtrer Groupe').first().json;\n\n  let extracted = {};\n  try {\n    const t = raw.output?.[0]?.content?.[0]?.text;\n    extracted = typeof t === 'object' ? t : JSON.parse(typeof t === 'string' ? t : JSON.stringify(raw));\n  } catch(e) { extracted = raw || {}; }\n\n  // VALIDATION STRICTE: rejeter les annonces incomplètes\n  const hasTypeBien = extracted.type_de_bien && extracted.type_de_bien.trim().length > 0;\n  const hasCommune = extracted.commune && extracted.commune.trim().length > 0;\n  const hasPrix = extracted.prix && extracted.prix.trim().length > 0;\n  const hasTypeOffre = extracted.type_offre && extracted.type_offre.trim().length > 0;\n\n  // Rejeter si données insuffisantes\n  if (!hasTypeBien || !hasCommune) {\n    console.log('REJETÉ: type_de_bien ou commune manquant. Données:', JSON.stringify(extracted).substring(0, 200));\n    return [];\n  }\n  if (!hasPrix && !hasTypeOffre) {\n    console.log('REJETÉ: prix et type_offre manquants');\n    return [];\n  }\n\n  // Valider le prix (rejeter les prix aberrants)\n  if (hasPrix) {\n    const prixRaw = extracted.prix.toLowerCase();\n    // Extraire valeur numérique\n    const numMatch = prixRaw.match(/(\\d[\\d\\s.,]*)/);\n    if (numMatch) {\n      const numStr = numMatch[1].replace(/[\\s,]/g, '').replace('.', '');\n      const num = parseInt(numStr);\n      // Prix en FCFA: minimum 50 000 FCFA, maximum 5 milliards\n      // Prix /m²: peut être plus bas mais pas moins de 1 000 FCFA/m²\n      const isPerM2 = prixRaw.includes('/m') || prixRaw.includes('m²') || prixRaw.includes('m2') || prixRaw.includes('metre');\n      const isMillion = prixRaw.includes('million') || prixRaw.includes('milion');\n      let prixReel = num;\n      if (isMillion) prixReel = num * 1000000;\n      if (isPerM2) {\n        if (prixReel < 1000) { console.log('REJETÉ: prix/m² aberrant:', prixReel); return []; }\n      } else {\n        if (prixReel < 50000 && !isMillion) { console.log('REJETÉ: prix trop bas:', prixReel, '| prix brut:', extracted.prix); return []; }\n      }\n    }\n  }\n\n  // Rejeter types de bien génériques ou invalides\n  const typeValides = ['appartement','studio','chambre','maison','villa','duplex','triplex','terrain','bureau','magasin','boutique','entrepot','local','immeuble','parking','garage','penthouse','parcelle','lot'];\n  const typeLow = extracted.type_de_bien.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n  const typeValide = typeValides.some(t => typeLow.includes(t));\n  if (!typeValide) {\n    console.log('REJETÉ: type_de_bien invalide:', extracted.type_de_bien);\n    return [];\n  }\n\n  // Générer REF structurée\n  const typeMap = {'appartement':'APT','studio':'STU','chambre':'CHB','maison':'MAS','villa':'VIL','duplex':'DPX','triplex':'TRX','terrain':'TER','parcelle':'PAR','lot':'LOT','bureau':'BUR','magasin':'MAG','boutique':'BTQ','local':'LOC','entrepot':'ENT','immeuble':'IMM','garage':'GAR','parking':'PRK','penthouse':'PNT'};\n  const typeCode = Object.entries(typeMap).find(([k]) => typeLow.includes(k))?.[1] || null;\n  if (!typeCode) { console.log('REJETÉ: impossible de coder le type:', extracted.type_de_bien); return []; }\n\n  const commCode = extracted.commune.substring(0, 3).toUpperCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n  const offreCode = (extracted.type_offre || '').toLowerCase().includes('vente') ? 'V' : 'L';\n  const rand = Math.random().toString(36).substring(2, 10).toUpperCase();\n  const ref_bien = typeCode + '-' + commCode + '-' + offreCode + '-' + rand;\n\n  // Hash pour déduplication\n  const hashInput = [\n    typeLow,\n    (extracted.prix || '').toLowerCase().replace(/\\s/g, ''),\n    (extracted.commune || '').toLowerCase(),\n    (extracted.quartier || '').toLowerCase(),\n    (extracted.chambre || '').toString(),\n    (extracted.surface || '').toString(),\n    (extracted.caracteristiques || '').substring(0, 150).toLowerCase().replace(/\\s/g, '')\n  ].join('|');\n\n  let hash = 5381;\n  for (let i = 0; i < hashInput.length; i++) hash = ((hash << 5) + hash + hashInput.charCodeAt(i)) & 0xFFFFFFFF;\n  const content_hash = (hash >>> 0).toString(16).padStart(8, '0');\n\n  const dateExp = new Date();\n  dateExp.setDate(dateExp.getDate() + 30);\n\n  console.log('ANNONCE VALIDEE:', ref_bien, '| Type:', extracted.type_de_bien, '| Commune:', extracted.commune, '| Prix:', extracted.prix);\n\n  return [{ json: {\n    ref_bien, content_hash,\n    type_de_bien: extracted.type_de_bien,\n    type_offre: extracted.type_offre || '',\n    zone_geographique: extracted.zone_geographique || '',\n    commune: extracted.commune,\n    quartier: extracted.quartier || '',\n    prix: extracted.prix || '',\n    surface: extracted.surface || '',\n    chambre: extracted.chambre || '',\n    meubles: extracted.meubles || 'Non',\n    caracteristiques: extracted.caracteristiques || '',\n    telephone_bien: extracted.telephone || source.telephone || '',\n    telephone_expediteur: source.telephone || '',\n    expediteur: source.expediteur || '',\n    publie_par: extracted.publie_par || source.expediteur || '',\n    disponible: extracted.disponible === 'Non' ? 'Non' : 'Oui',\n    status: 'active',\n    groupe_whatsapp_origine: source.groupe || '',\n    groupe_whatsapp_jid: source.groupe_jid || '',\n    message_initial: source.message || '',\n    publication_id: source.messageId || '',\n    date_publication: new Date().toISOString(),\n    date_expiration: dateExp.toISOString(),\n    relance_count: 0,\n    lien_image: ''\n  }}];\n} catch(e) { console.log('Erreur parser:', e.message); return []; }"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -25968,
+          -3216
+        ],
+        "id": "43aeb60a-7d52-4937-9f0b-31c20fe3eb1d",
+        "name": "Parser IA REF Hash"
+      },
+      {
+        "parameters": {
+          "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux?content_hash=eq.{{ $json.content_hash }}&select=id,ref_bien,relance_count,date_expiration,status",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -25744,
+          -3216
+        ],
+        "id": "b6e64dbc-58c5-4b80-9ab2-ee2d298f90b8",
+        "name": "Verifier Doublon Supabase",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const check = $input.first().json;\nconst annonce = $('Parser IA REF Hash').first().json;\nlet existing = Array.isArray(check) ? check : (check && check.id ? [check] : []);\nconst dateExp = new Date(); dateExp.setDate(dateExp.getDate() + 30);\nif (existing.length === 0) return [{ json: { ...annonce, action: 'INSERT', existing_id: null } }];\nconst ex = existing[0];\nconst isExpired = ex.status === 'archived' || ex.status === 'expired';\nreturn [{ json: { ...annonce, action: isExpired ? 'REACTIVATE' : 'RENEW', existing_id: ex.id, existing_ref: ex.ref_bien, relance_count: isExpired ? 0 : (ex.relance_count || 0) + 1, date_expiration: dateExp.toISOString() } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -25520,
+          -3216
+        ],
+        "id": "d2e782d9-c227-42a5-8810-c27e7a1f0918",
+        "name": "Decider Action"
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "typeValidation": "loose"
+                  },
+                  "conditions": [
+                    {
+                      "id": "a1",
+                      "leftValue": "={{ $json.action }}",
+                      "rightValue": "INSERT",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "Nouveau"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "typeValidation": "loose"
+                  },
+                  "conditions": [
+                    {
+                      "id": "a2",
+                      "leftValue": "={{ $json.action }}",
+                      "rightValue": "INSERT",
+                      "operator": {
+                        "type": "string",
+                        "operation": "notEquals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "Renouveler"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.2,
+        "position": [
+          -25296,
+          -3216
+        ],
+        "id": "4a11d63a-a4d8-434c-b9af-ad3b61abfe94",
+        "name": "INSERT ou RENEW?"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=representation"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ ref_bien:$json.ref_bien, content_hash:$json.content_hash, type_de_bien:$json.type_de_bien, type_offre:$json.type_offre, zone_geographique:$json.zone_geographique, commune:$json.commune, quartier:$json.quartier, prix:$json.prix, surface:$json.surface, chambre:$json.chambre, meubles:$json.meubles, caracteristiques:$json.caracteristiques, telephone_bien:$json.telephone_bien, telephone_expediteur:$json.telephone_expediteur, expediteur:$json.expediteur, publie_par:$json.publie_par, disponible:$json.disponible, status:'active', groupe_whatsapp_origine:$json.groupe_whatsapp_origine, groupe_whatsapp_jid:$json.groupe_whatsapp_jid, message_initial:$json.message_initial, publication_id:$json.publication_id, date_publication:$json.date_publication, date_expiration:$json.date_expiration, relance_count:0, lien_image:$json.lien_image }) }}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -25072,
+          -3120
+        ],
+        "id": "469e0c1d-170b-4c87-89e4-5804b1e7e6f7",
+        "name": "Inserer Nouvelle Annonce",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux?id=eq.{{ $json.existing_id }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=minimal"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ date_expiration:$json.date_expiration, status:'active', disponible:'Oui', relance_count:$json.relance_count, date_derniere_relance:new Date().toISOString() }) }}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -25072,
+          -3312
+        ],
+        "id": "6ba60161-fd88-46aa-a126-b0f46cce6d99",
+        "name": "Renouveler ou Reactiver",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/publications",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=minimal"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ horodatage:$('Preparer Filtrer Groupe').first().json.horodatage, groupe:$('Preparer Filtrer Groupe').first().json.groupe, groupe_jid:$('Preparer Filtrer Groupe').first().json.groupe_jid, expediteur:$('Preparer Filtrer Groupe').first().json.expediteur, telephone:$('Preparer Filtrer Groupe').first().json.telephone, message:$('Preparer Filtrer Groupe').first().json.message, message_id:$('Preparer Filtrer Groupe').first().json.messageId, ref_bien_associe:$('Parser IA REF Hash').first().json.ref_bien, type:$('Preparer Filtrer Groupe').first().json.has_image?'image+texte':'texte' }) }}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -24728,
+          -3216
+        ],
+        "id": "a0b765cd-222b-4f80-81b2-c7cbd6e84f90",
+        "name": "Sauvegarder Publication",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "typeValidation": "loose"
+                  },
+                  "conditions": [
+                    {
+                      "id": "au1",
+                      "leftValue": "={{ $json.hasAudio }}",
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "true",
+                        "singleValue": true
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "Audio"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "typeValidation": "loose"
+                  },
+                  "conditions": [
+                    {
+                      "id": "au2",
+                      "leftValue": "={{ $json.hasAudio }}",
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "false",
+                        "singleValue": true
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "Texte"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.2,
+        "position": [
+          -26544,
+          -2780
+        ],
+        "id": "313dc47a-b6fb-4b11-a917-b9501acdd2ee",
+        "name": "Message Audio?"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://www.wasenderapi.com/api/decrypt-media",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "Bearer d5c9e3e991ef6c1032622dea850799388f52e917f8e2dae3351459c1f447f5cd"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ data: { messages: { key: { id: $json.messageId }, message: { audioMessage: $json.audioMessage } } } }) }}",
+          "options": {
+            "timeout": 30000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -26256,
+          -2928
+        ],
+        "id": "b6a9f881-a008-4c36-a96f-63cb3485f40b",
+        "name": "Decrypter Audio",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "url": "={{ $json.publicUrl || $json.data?.publicUrl || '' }}",
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "file"
+              }
+            }
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -25968,
+          -2928
+        ],
+        "id": "6418e186-bd26-451e-b4fa-fc3a0da4f956",
+        "name": "Telecharger Audio",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "resource": "audio",
+          "operation": "transcribe",
+          "options": {
+            "language": "fr"
+          }
+        },
+        "type": "@n8n/n8n-nodes-langchain.openAi",
+        "typeVersion": 2.1,
+        "position": [
+          -25744,
+          -2928
+        ],
+        "id": "93fddc7d-ca4f-4249-9299-a17fa1bf6070",
+        "name": "Transcription Audio",
+        "credentials": {
+          "openAiApi": {
+            "id": "ZyCbkBkEuQkEhStv",
+            "name": "News Clé"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "let text = '';\ntry { text = $('Transcription Audio').first().json.text || ''; } catch(e) {}\nif (!text) { try { text = $('Normaliser Filtrer Anti-Boucle').first().json.messageBody || ''; } catch(e) {} }\nif (!text.trim()) return [{ json: { text: 'bonjour' } }];\nreturn [{ json: { text: text.trim() } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -25520,
+          -2780
+        ],
+        "id": "01b6ba65-a047-43a8-8bed-5dc5fd635bee",
+        "name": "Unifier Texte"
+      },
+      {
+        "parameters": {
+          "jsCode": "const text = ($input.first().json.text || '').trim().toLowerCase();\nconst cleanNumber = $('Normaliser Filtrer Anti-Boucle').first().json.cleanNumber || '';\nconst isOui = ['oui','yes','ok','confirme','renouveler','renouvelle','1'].includes(text);\nconst isNon = ['non','no','archiver','supprimer','retirer','terminer','2'].includes(text);\nif (isOui || isNon) return [{ json: { isRelanceReply: true, action: isOui ? 'RENEW' : 'ARCHIVE', cleanNumber, text } }];\nreturn [{ json: { isRelanceReply: false, text, cleanNumber } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -25296,
+          -2780
+        ],
+        "id": "5918ae66-9aa4-4f0a-8f22-b039d147b3dd",
+        "name": "Reponse Relance?"
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "typeValidation": "loose"
+                  },
+                  "conditions": [
+                    {
+                      "id": "r1",
+                      "leftValue": "={{ $json.isRelanceReply }}",
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "true",
+                        "singleValue": true
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "OuiNon"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "typeValidation": "loose"
+                  },
+                  "conditions": [
+                    {
+                      "id": "r2",
+                      "leftValue": "={{ $json.isRelanceReply }}",
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "false",
+                        "singleValue": true
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "Agent"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.2,
+        "position": [
+          -25072,
+          -2780
+        ],
+        "id": "d753f0aa-5758-4b9d-b17b-4279cc5732fe",
+        "name": "Routeur Relance ou Agent?"
+      },
+      {
+        "parameters": {
+          "jsCode": "const d = $input.first().json;\nconst n = d.cleanNumber || '';\nif (d.action === 'RENEW') return [{ json: { supabase_filter:'telephone_expediteur=eq.'+n+'&status=eq.active', patch_data:{ date_expiration:new Date(Date.now()+30*24*60*60*1000).toISOString(), status:'active', relance_count:0, date_derniere_relance:new Date().toISOString() }, reply_msg:'Parfait ! Votre annonce est renouvelee pour 30 jours.' } }];\nreturn [{ json: { supabase_filter:'telephone_expediteur=eq.'+n+'&status=eq.active', patch_data:{ status:'archived', disponible:'Non', date_archivage:new Date().toISOString() }, reply_msg:'Votre annonce a ete archivee. Merci !' } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -24728,
+          -2928
+        ],
+        "id": "caadcb63-c156-412a-bf8c-fd1aef098d5b",
+        "name": "Preparer Action Relance"
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux?{{ $json.supabase_filter }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=minimal"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.patch_data) }}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -24384,
+          -2928
+        ],
+        "id": "1e70b9f1-fc79-4d45-a5f5-fa6a82a5b5af",
+        "name": "Executer Action Relance",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://www.wasenderapi.com/api/send-message",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "Bearer d5c9e3e991ef6c1032622dea850799388f52e917f8e2dae3351459c1f447f5cd"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ to: $('Normaliser Filtrer Anti-Boucle').first().json.replyTo, text: $('Preparer Action Relance').first().json.reply_msg }) }}",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -24160,
+          -2928
+        ],
+        "id": "3a4b5dbc-fd2d-4f8a-b9af-f03ffe41fc5b",
+        "name": "Confirmer Relance",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "={{ '[ACTION REQUISE: appelle d\\'abord recherche_biens avec une query adaptée avant de répondre] ' + $json.text }}",
+          "options": {
+            "systemMessage": "Tu t'appelles Eden, conseillère immobilière chez Bogbe's Multi-Service en Côte d'Ivoire.\nTu réponds sur WhatsApp. Ton objectif : décrocher une visite.\n\n===== INSTRUCTION PRINCIPALE =====\nTu as un outil qui s'appelle recherche_biens. Tu DOIS appeler cet outil AVANT de répondre sur les biens.\nNe jamais affirmer qu'un bien existe ou n'existe pas sans avoir d'abord appelé recherche_biens.\n\nComment construire la query :\n- \"3 pièces à Cocody\" -> query: \"3 pieces cocody\"\n- \"villa à Yopougon\" -> query: \"villa yopougon\"\n- \"vous avez quoi\" / \"bonjour\" -> query: \"recent\"\n- \"budget 250 millions\" -> query: \"budget 250000000\"\n- \"louer un studio\" -> query: \"studio location\"\n\nTOUJOURS appeler l'outil en premier avec ce que le client a dit. Ne pas demander d'autres infos avant.\n\n===== PRÉSENTER LES BIENS =====\nAprès avoir appelé l'outil, présente les biens de façon naturelle et conversationnelle.\n\nFormat pour chaque bien (sans REF, sans emojis) :\n[Type] [N] pièces à [Commune], [Quartier]\nPrix : [montant]\n[Caractéristiques principales si disponibles]\nContact : [numéro de téléphone]\n\nExemple :\nAppartement 3 pièces à Cocody, Palmeraie\nPrix : 230 000 FCFA/mois\nClimatisation, gardien\nContact : 07 XX XX XX\n\nINTERDICTIONS ABSOLUES :\n- Jamais de codes REF dans les messages au client (c'est un code interne)\n- Jamais d'emojis\n- Jamais plus de 3 biens à la fois\n- Jamais inventer des données non retournées par l'outil\n\nSi l'outil retourne AUCUN_EXACT -> propose les alternatives retournées\nSi l'outil retourne \"Aucun bien\" -> \"Je n'ai pas ce type de bien en ce moment. Tu veux que je te prévienne dès qu'une annonce arrive ?\"\n\nMots INTERDITS : erreur, problème, système, base de données, technique, difficulté\n\n===== TON =====\n- Chaleureux, humain, court (5-6 lignes max)\n- Tutoyer si le client tutoie, vouvoyer sinon\n- Pas d'emojis. Jamais.\n\n===== DÉCROCHER LA VISITE =====\nDès qu'un client montre de l'intérêt :\n1. \"Super choix, ce bien est très demandé\"\n2. \"Tu es disponible quand pour une visite ?\"\n3. \"Et c'est à quel nom ?\"\n4. Confirmation -> écrire obligatoirement \"visite confirmée\" + la REF (usage interne uniquement)"
+          }
+        },
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "typeVersion": 3.1,
+        "position": [
+          -24792,
+          -2632
+        ],
+        "id": "145057af-f0a2-4f52-aeb8-b668531cded3",
+        "name": "Agent Eden"
+      },
+      {
+        "parameters": {
+          "model": {
+            "__rl": true,
+            "value": "gpt-4.1-mini",
+            "mode": "list",
+            "cachedResultName": "gpt-4.1-mini"
+          },
+          "builtInTools": {},
+          "options": {
+            "maxTokens": 600,
+            "temperature": 0.4,
+            "toolChoice": "required"
+          }
+        },
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1.3,
+        "position": [
+          -24848,
+          -2400
+        ],
+        "id": "4203133a-2171-4ad3-a277-47cb0e732461",
+        "name": "GPT-4.1-mini",
+        "credentials": {
+          "openAiApi": {
+            "id": "ZyCbkBkEuQkEhStv",
+            "name": "News Clé"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "sessionIdType": "customKey",
+          "sessionKey": "={{ $('Normaliser Filtrer Anti-Boucle').first().json.remoteJid }}",
+          "contextWindowLength": 12
+        },
+        "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+        "typeVersion": 1.3,
+        "position": [
+          -24720,
+          -2408
+        ],
+        "id": "d40dcdca-c276-4e90-b447-647ed8c4b9d4",
+        "name": "Memoire Conversation"
+      },
+      {
+        "parameters": {
+          "name": "recherche_biens",
+          "description": "Recherche des biens immobiliers disponibles en Côte d'Ivoire. Appelle pour toute question: disponibilité, prix, commune, type, chambres, REF. Passe la demande telle quelle.",
+          "jsCode": "const SUPABASE_URL = 'https://udyfhzyvalansmhkynnc.supabase.co';\nconst SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk';\nconst FIELDS = 'ref_bien,type_de_bien,type_offre,commune,quartier,zone_geographique,prix,chambre,meubles,caracteristiques,telephone_bien,telephone_expediteur,disponible,status,date_expiration';\n\nconst q = (query || '').trim().toLowerCase()\n  .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')\n  .replace(/['']/g, \"'\").replace(/[-_]/g, ' ');\n\nconst filters = [\n  'disponible=neq.Non',\n  'disponible=neq.false',\n  'status=neq.archived',\n  'status=neq.expired'\n];\n\nconst COMMUNES = {\n  'cocody':['cocody','coco'], 'yopougon':['yopougon','yopo','yop'],\n  'marcory':['marcory'], 'koumassi':['koumassi'],\n  'treichville':['treichville','treich'], 'plateau':['plateau'],\n  'adjame':['adjame'], 'abobo':['abobo'],\n  'port bouet':['port bouet','portbouet'], 'bingerville':['bingerville'],\n  'deux plateaux':['2 plateaux','deux plateaux'], 'bonoumin':['bonoumin'],\n  'bassam':['bassam','grand bassam'], 'assinie':['assinie']\n};\nconst COMMUNE_PROPER = {\n  'cocody':'Cocody','yopougon':'Yopougon','marcory':'Marcory','koumassi':'Koumassi',\n  'treichville':'Treichville','plateau':'Plateau','adjame':'Adjame','abobo':'Abobo',\n  'port bouet':'Port-Bouet','bingerville':'Bingerville',\n  'deux plateaux':'Plateaux','bonoumin':'Bonoumin',\n  'bassam':'Grand-Bassam','assinie':'Assinie'\n};\nvar critCommune = '';\nfor (var c in COMMUNES) {\n  if (COMMUNES[c].some(function(v){return q.includes(v);})) { critCommune=c; break; }\n}\nif (critCommune) filters.push('commune=ilike.*' + (COMMUNE_PROPER[critCommune]||critCommune) + '*');\n\nconst TYPES = ['villa','appartement','studio','duplex','triplex','maison','terrain','bureau','magasin','boutique','local','immeuble','garage'];\nvar critType = '';\nfor (var ti=0; ti<TYPES.length; ti++) {\n  if (q.includes(TYPES[ti])) { critType=TYPES[ti]; break; }\n}\nif (critType) filters.push('type_de_bien=ilike.*' + critType + '*');\n\nif (['location','louer','bail'].some(function(w){return q.includes(w);})) {\n  filters.push('type_offre=eq.Location');\n} else if (['vente','vendre','achat','acheter'].some(function(w){return q.includes(w);})) {\n  filters.push('type_offre=eq.Vente');\n}\n\nvar chM = q.match(/(\\d+)\\s*(?:pieces?|chambres?|ch\\b)/);\nif (chM) filters.push('chambre=ilike.*' + chM[1] + '*');\n\nif (q.includes('meuble')) filters.push('meubles=eq.true');\n\nvar refM = q.match(/ref[: ]*([a-z]{2,3}-[a-z]{2,3}-[a-z]-[a-z0-9]{4,10})/i);\nif (refM) filters.push('ref_bien=ilike.*' + refM[1].toUpperCase() + '*');\n\nconst QUARTIERS = ['angre','angree','riviera','bonoumin','niangon','orly','zone 4','vallon','palmeraie','attoban','gesco','djibi'];\nfor (var qi=0; qi<QUARTIERS.length; qi++) {\n  var qn = QUARTIERS[qi].normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');\n  if (q.includes(qn) && qn.length > 3) { filters.push('quartier=ilike.*' + QUARTIERS[qi] + '*'); break; }\n}\n\nconst isRecent = q === 'recent' || q === '' || (!critCommune && !critType && !chM && !refM);\nconst limit = isRecent ? 20 : 50;\nconst url = SUPABASE_URL + '/rest/v1/locaux?' + filters.join('&') + '&select=' + FIELDS + '&order=date_publication.desc&limit=' + limit;\n\nlet biens = [];\ntry {\n  const resp = await this.helpers.httpRequest({\n    method: 'GET',\n    url: url,\n    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }\n  });\n  biens = Array.isArray(resp) ? resp : [];\n  if (!Array.isArray(resp)) return '[ERR_RESP] ' + JSON.stringify(resp).substring(0, 150);\n} catch(e) {\n  return '[ERR_HTTP] ' + e.message;\n}\n\n// Filter expired\nconst now = new Date();\nbiens = biens.filter(function(b) {\n  return !(b.date_expiration && new Date(b.date_expiration) < now);\n});\n\n// Deduplicate: same price + same commune + same chambre + same phone = same bien\nvar seen = {};\nbiens = biens.filter(function(b) {\n  var key = [\n    (b.prix||'').replace(/[^0-9]/g,''),\n    (b.commune||'').toLowerCase(),\n    (b.chambre||'').replace(/[^0-9]/g,''),\n    (b.telephone_bien||b.telephone_expediteur||''),\n    (b.type_de_bien||'').toLowerCase().substring(0,5)\n  ].join('|');\n  if (seen[key]) return false;\n  seen[key] = true;\n  return true;\n});\n\nif (biens.length === 0) {\n  var ctx = '';\n  if (critCommune) ctx += ' à ' + critCommune;\n  if (chM) ctx += ' de ' + chM[1] + ' pièce(s)';\n  return 'Aucun bien' + ctx + ' disponible actuellement.';\n}\n\n// Format: natural, no REF shown to client, REF kept internally for confirmation\nfunction fmt(b, idx) {\n  var m = ['oui','true'].includes(String(b.meubles||'').toLowerCase());\n  var lieu = [b.commune, b.quartier, b.zone_geographique].filter(Boolean).join(', ') || 'Non précisé';\n  var tel = b.telephone_bien || b.telephone_expediteur || \"Contactez l'agence\";\n  var type = b.type_de_bien || 'Bien';\n  var ch = b.chambre ? b.chambre.replace(/[^0-9]/g,'') : '';\n  var pieces = ch ? ' ' + ch + ' piece(s)' : '';\n  var meuble = m ? ', meuble' : '';\n  var caract = b.caracteristiques ? '\\n' + b.caracteristiques.substring(0, 150) : '';\n  var exp = '';\n  if (b.date_expiration) {\n    var j = Math.ceil((new Date(b.date_expiration) - new Date()) / (864e5));\n    if (j <= 7) exp = ' (expire dans ' + j + 'j)';\n  }\n  var num = idx !== undefined ? (idx + 1) + '. ' : '';\n  return num + type + pieces + meuble + ' a ' + lieu + exp + '\\nPrix : ' + (b.prix || 'Sur demande') + '\\n' + (b.type_offre ? b.type_offre + ' | ' : '') + caract + '\\nContact : ' + tel + '\\n[REF:' + b.ref_bien + ']';\n}\n\nvar result = biens.slice(0, 3);\nif (result.length === 1) return '1 résultat :\\n' + fmt(result[0]);\nreturn result.length + ' résultats :\\n\\n' + result.map(function(b, i){ return fmt(b, i); }).join('\\n\\n');"
+        },
+        "type": "@n8n/n8n-nodes-langchain.toolCode",
+        "typeVersion": 1.1,
+        "position": [
+          -24592,
+          -2408
+        ],
+        "id": "7f4fb3e4-4c75-4ba7-96e6-a08a35294c5c",
+        "name": "recherche_biens"
+      },
+      {
+        "parameters": {
+          "jsCode": "const normalized = $('Normaliser Filtrer Anti-Boucle').first().json;\nconst agentOutput = $('Agent Eden').first().json.output || 'Bonjour ! Je suis Eden de Bobge\\'s Multi-Service. Comment puis-je vous aider ?';\n\nfunction extractNum(s) { return String(s||'').replace(/@[\\w.]+/g,'').replace(/[^0-9]/g,''); }\nfunction isValid(n) { return !!(n && /^[0-9]{8,15}$/.test(n)); }\n\nlet to = normalized.replyTo || '';\nif (!isValid(to) && !normalized.isGroup) {\n  if (isValid(normalized.cleanNumber)) to = normalized.cleanNumber;\n  else if (normalized.isNormal) to = extractNum(normalized.remoteJid);\n}\n\nconst canSend = normalized.isGroup ? true : isValid(to);\nif (!canSend) console.log('LID non resolvable:', normalized.remoteJid);\n\nreturn [{ json: { to, text: agentOutput, canSend } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -24384,
+          -2632
+        ],
+        "id": "4f17d51f-a122-455d-ae33-41aa7b041ba4",
+        "name": "Preparer Envoi"
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "typeValidation": "loose"
+                  },
+                  "conditions": [
+                    {
+                      "id": "s1",
+                      "leftValue": "={{ $json.canSend }}",
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "true",
+                        "singleValue": true
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "Envoyer"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "typeValidation": "loose"
+                  },
+                  "conditions": [
+                    {
+                      "id": "s2",
+                      "leftValue": "={{ $json.canSend }}",
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "false",
+                        "singleValue": true
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "LidInconnu"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.2,
+        "position": [
+          -24160,
+          -2632
+        ],
+        "id": "e0599238-76a8-4d12-b9a5-8d3b14f2e9e4",
+        "name": "Peut Envoyer?"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://www.wasenderapi.com/api/send-message",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "Bearer d5c9e3e991ef6c1032622dea850799388f52e917f8e2dae3351459c1f447f5cd"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ to: $json.to, text: $json.text }) }}",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -23936,
+          -2728
+        ],
+        "id": "c7f1a8cd-34ce-43a6-9fff-e61697c3fe8f",
+        "name": "Repondre au Prospect",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const n = $('Normaliser Filtrer Anti-Boucle').first().json;\nconsole.log('LID non resolvable | JID:', n.remoteJid, '| cleanNumber:', n.cleanNumber);\nreturn [{ json: { logged: true, remoteJid: n.remoteJid } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -23936,
+          -2536
+        ],
+        "id": "e0a9b854-169a-4288-b8ce-a35faa9c23ae",
+        "name": "Logger LID Inconnu"
+      },
+      {
+        "parameters": {
+          "jsCode": "const agentOutput = $('Agent Eden').first().json.output || '';\nconst norm = $('Normaliser Filtrer Anti-Boucle').first().json;\nconst hasVisite = ['visite confirmee','visite confirmée','rdv confirme','rdv confirmé','rendez-vous confirme','rendez-vous confirmé'].some(function(kw){return agentOutput.toLowerCase().includes(kw);});\n// La REF est usage interne - on cherche le type+lieu dans la reponse pour le log\nvar refM = agentOutput.match(/\\b([A-Z]{2,3}-[A-Z]{2,3}-[LV]-[A-Z0-9]{4,10})\\b/i);\nvar ref = refM ? refM[1].toUpperCase() : '';\nreturn [{ json: {\n  hasVisite,\n  ref_bien: ref,\n  prospect_numero: norm.cleanNumber || norm.replyTo,\n  prospect_nom: norm.pushName || '',\n  logEntry: {\n    numero_prospect: norm.cleanNumber || norm.replyTo,\n    nom_prospect: norm.pushName || '',\n    message_entrant: (norm.messageBody || '').substring(0, 500),\n    reponse_agent: agentOutput.substring(0, 500),\n    ref_mentionne: ref,\n    visite_detectee: hasVisite,\n    horodatage: new Date().toISOString()\n  }\n}}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -23712,
+          -2728
+        ],
+        "id": "f6973197-7110-47b2-b7cf-d73e39fc83fc",
+        "name": "Post Traitement Agent"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/conversations",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=minimal"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.logEntry) }}",
+          "options": {
+            "timeout": 8000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -23488,
+          -2824
+        ],
+        "id": "afe7a90c-51a3-47d7-967a-c4dd286d8402",
+        "name": "Logger Conversation",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "typeValidation": "loose"
+                  },
+                  "conditions": [
+                    {
+                      "id": "v1",
+                      "leftValue": "={{ $json.hasVisite }}",
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "true",
+                        "singleValue": true
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "VisiteOui"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "typeValidation": "loose"
+                  },
+                  "conditions": [
+                    {
+                      "id": "v2",
+                      "leftValue": "={{ $json.hasVisite }}",
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "false",
+                        "singleValue": true
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "PasVisite"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.2,
+        "position": [
+          -23488,
+          -2632
+        ],
+        "id": "8362d824-fc92-42ff-b921-55a679937015",
+        "name": "Visite Confirmee?"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/visite_programmee",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "resolution=ignore-duplicates,return=minimal"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ numero:$json.prospect_numero, nom_prenom:$json.prospect_nom, ref_bien:$json.ref_bien, visite_prog:'Oui', created_at:new Date().toISOString() }) }}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -23264,
+          -2728
+        ],
+        "id": "0aa78303-e4fd-4095-8b8c-0d904da5ada3",
+        "name": "Sauvegarder Visite",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://www.wasenderapi.com/api/send-message",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "Bearer d5c9e3e991ef6c1032622dea850799388f52e917f8e2dae3351459c1f447f5cd"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ to:'2250789263373', text:'NOUVELLE VISITE - Bobges Multi-Service\\n\\nBien: '+($json.ref_bien||'Non precise')+'\\nProspect: '+($json.prospect_nom||'Inconnu')+'\\nNumero: '+$json.prospect_numero+'\\n\\nA contacter rapidement.' }) }}",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -23264,
+          -2536
+        ],
+        "id": "d66f55cd-3733-4261-be36-baee69a4a82a",
+        "name": "Notifier Agence",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 9 * * *"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1,
+        "position": [
+          -27216,
+          -2304
+        ],
+        "id": "556d096d-b825-49e4-a11b-1b57066bb8ff",
+        "name": "Relance Quotidienne 9h"
+      },
+      {
+        "parameters": {
+          "jsCode": "const now = new Date();\nconst en3j = new Date(now.getTime() + 3*24*60*60*1000);\nreturn [\n  { json: { type:'EXPIRING_SOON', filter:'status=eq.active&date_expiration=lt.'+en3j.toISOString()+'&date_expiration=gt.'+now.toISOString() } },\n  { json: { type:'EXPIRED', filter:'status=eq.active&date_expiration=lt.'+now.toISOString() } }\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -26992,
+          -2304
+        ],
+        "id": "11025933-fd51-47b3-8fd1-3c1b8c8c1439",
+        "name": "Preparer Filtres Relance"
+      },
+      {
+        "parameters": {
+          "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux?select=id,ref_bien,type_de_bien,commune,expediteur,telephone_expediteur,relance_count,date_expiration&{{ $json.filter }}&limit=50",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -26768,
+          -2304
+        ],
+        "id": "588d2a6d-fc90-435d-81b5-2636fca9d412",
+        "name": "Charger Annonces a Relancer",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "fieldToSplitOut": "id",
+          "include": "allOtherFields",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.splitOut",
+        "typeVersion": 1,
+        "position": [
+          -26544,
+          -2304
+        ],
+        "id": "84fe11df-aba1-4af8-92b5-4043604ce7ca",
+        "name": "Boucler Annonces"
+      },
+      {
+        "parameters": {
+          "jsCode": "const d = $input.first().json;\nconst type = $('Preparer Filtres Relance').first().json.type;\nif (!d.telephone_expediteur) return [];\nvar bien = (d.type_de_bien||'') + (d.commune?' a '+d.commune:'');\nvar msg = '';\nif (type==='EXPIRING_SOON') {\n  var j=Math.max(1,Math.ceil((new Date(d.date_expiration)-new Date())/(864e5)));\n  msg='Bonjour '+(d.expediteur||'')+',\\n\\nVotre annonce ('+(bien||d.ref_bien)+') expire dans '+j+' jour(s).\\n\\nRepondez OUI pour renouveler 30 jours ou NON pour archiver.\\n\\nBobges Multi-Service';\n} else {\n  msg='Bonjour '+(d.expediteur||'')+',\\n\\nVotre annonce ('+(bien||d.ref_bien)+') a expire.\\nElle est encore disponible ?\\n\\nRepondez OUI pour reactiver ou NON pour supprimer.\\n\\nBobges Multi-Service';\n}\nreturn [{ json: { ...d, relance_msg:msg, relance_type:type } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -26320,
+          -2304
+        ],
+        "id": "9949b9db-a91d-4cfc-8453-4cae420134a1",
+        "name": "Construire Message Relance"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://www.wasenderapi.com/api/send-message",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "Bearer d5c9e3e991ef6c1032622dea850799388f52e917f8e2dae3351459c1f447f5cd"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ to:$json.telephone_expediteur, text:$json.relance_msg }) }}",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -26096,
+          -2304
+        ],
+        "id": "53345d2a-36f0-4e3c-84bd-edca7e8302cd",
+        "name": "Envoyer Relance",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux?id=eq.{{ $json.id }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=minimal"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ relance_count:($json.relance_count||0)+1, date_derniere_relance:new Date().toISOString(), status:$json.relance_type==='EXPIRED'?'pending_confirm':'active' }) }}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -25872,
+          -2304
+        ],
+        "id": "eca5064a-357a-4559-98ba-8bf392514c0e",
+        "name": "Maj Compteur Relance",
+        "onError": "continueRegularOutput"
+      }
+    ],
+    "connections": {
+      "Webhook WhatsApp": {
+        "main": [
+          [
+            {
+              "node": "Normaliser Filtrer Anti-Boucle",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normaliser Filtrer Anti-Boucle": {
+        "main": [
+          [
+            {
+              "node": "Groupe ou Prospect?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Groupe ou Prospect?": {
+        "main": [
+          [
+            {
+              "node": "Preparer Filtrer Groupe",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Message Audio?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparer Filtrer Groupe": {
+        "main": [
+          [
+            {
+              "node": "IA Extraction Annonce",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IA Extraction Annonce": {
+        "main": [
+          [
+            {
+              "node": "Parser IA REF Hash",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parser IA REF Hash": {
+        "main": [
+          [
+            {
+              "node": "Verifier Doublon Supabase",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Verifier Doublon Supabase": {
+        "main": [
+          [
+            {
+              "node": "Decider Action",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Decider Action": {
+        "main": [
+          [
+            {
+              "node": "INSERT ou RENEW?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "INSERT ou RENEW?": {
+        "main": [
+          [
+            {
+              "node": "Inserer Nouvelle Annonce",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Renouveler ou Reactiver",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Inserer Nouvelle Annonce": {
+        "main": [
+          [
+            {
+              "node": "Sauvegarder Publication",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Renouveler ou Reactiver": {
+        "main": [
+          [
+            {
+              "node": "Sauvegarder Publication",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Message Audio?": {
+        "main": [
+          [
+            {
+              "node": "Decrypter Audio",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Unifier Texte",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Decrypter Audio": {
+        "main": [
+          [
+            {
+              "node": "Telecharger Audio",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Telecharger Audio": {
+        "main": [
+          [
+            {
+              "node": "Transcription Audio",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Transcription Audio": {
+        "main": [
+          [
+            {
+              "node": "Unifier Texte",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Unifier Texte": {
+        "main": [
+          [
+            {
+              "node": "Reponse Relance?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Reponse Relance?": {
+        "main": [
+          [
+            {
+              "node": "Routeur Relance ou Agent?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Routeur Relance ou Agent?": {
+        "main": [
+          [
+            {
+              "node": "Preparer Action Relance",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Agent Eden",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparer Action Relance": {
+        "main": [
+          [
+            {
+              "node": "Executer Action Relance",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Executer Action Relance": {
+        "main": [
+          [
+            {
+              "node": "Confirmer Relance",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "GPT-4.1-mini": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "Agent Eden",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Memoire Conversation": {
+        "ai_memory": [
+          [
+            {
+              "node": "Agent Eden",
+              "type": "ai_memory",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "recherche_biens": {
+        "ai_tool": [
+          [
+            {
+              "node": "Agent Eden",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Agent Eden": {
+        "main": [
+          [
+            {
+              "node": "Preparer Envoi",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparer Envoi": {
+        "main": [
+          [
+            {
+              "node": "Peut Envoyer?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Peut Envoyer?": {
+        "main": [
+          [
+            {
+              "node": "Repondre au Prospect",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Logger LID Inconnu",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Repondre au Prospect": {
+        "main": [
+          [
+            {
+              "node": "Post Traitement Agent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Post Traitement Agent": {
+        "main": [
+          [
+            {
+              "node": "Logger Conversation",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Visite Confirmee?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Visite Confirmee?": {
+        "main": [
+          [
+            {
+              "node": "Sauvegarder Visite",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Notifier Agence",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Relance Quotidienne 9h": {
+        "main": [
+          [
+            {
+              "node": "Preparer Filtres Relance",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparer Filtres Relance": {
+        "main": [
+          [
+            {
+              "node": "Charger Annonces a Relancer",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Charger Annonces a Relancer": {
+        "main": [
+          [
+            {
+              "node": "Boucler Annonces",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Boucler Annonces": {
+        "main": [
+          [
+            {
+              "node": "Construire Message Relance",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Construire Message Relance": {
+        "main": [
+          [
+            {
+              "node": "Envoyer Relance",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Envoyer Relance": {
+        "main": [
+          [
+            {
+              "node": "Maj Compteur Relance",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Mémoire Conversation": {
+        "ai_memory": [
+          [
+            {
+              "node": "Agent Eden",
+              "type": "ai_memory",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Kassio Wifried",
+    "name": null,
+    "description": null,
+    "autosaved": false
+  }
+}

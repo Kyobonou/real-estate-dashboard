@@ -54,7 +54,7 @@ const AppRoutes = () => {
                 }>
                     <Route index element={
                         <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary>
+                            <ErrorBoundary resetKey={location.pathname}>
                                 <Dashboard />
                             </ErrorBoundary>
                         </Suspense>
@@ -62,7 +62,7 @@ const AppRoutes = () => {
 
                     <Route path="properties" element={
                         <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary>
+                            <ErrorBoundary resetKey={location.pathname}>
                                 <Properties />
                             </ErrorBoundary>
                         </Suspense>
@@ -70,7 +70,7 @@ const AppRoutes = () => {
 
                     <Route path="visits" element={
                         <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary>
+                            <ErrorBoundary resetKey={location.pathname}>
                                 <Visits />
                             </ErrorBoundary>
                         </Suspense>
@@ -78,7 +78,7 @@ const AppRoutes = () => {
 
                     <Route path="images" element={
                         <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary>
+                            <ErrorBoundary resetKey={location.pathname}>
                                 <ImagesPage />
                             </ErrorBoundary>
                         </Suspense>
@@ -86,7 +86,7 @@ const AppRoutes = () => {
 
                     <Route path="gallery" element={
                         <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary>
+                            <ErrorBoundary resetKey={location.pathname}>
                                 <ImageGallery />
                             </ErrorBoundary>
                         </Suspense>
@@ -94,7 +94,7 @@ const AppRoutes = () => {
 
                     <Route path="expiring" element={
                         <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary>
+                            <ErrorBoundary resetKey={location.pathname}>
                                 <ExpiringProperties />
                             </ErrorBoundary>
                         </Suspense>
@@ -102,7 +102,7 @@ const AppRoutes = () => {
 
                     <Route path="clients" element={
                         <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary>
+                            <ErrorBoundary resetKey={location.pathname}>
                                 <Clients />
                             </ErrorBoundary>
                         </Suspense>
@@ -110,7 +110,7 @@ const AppRoutes = () => {
 
                     <Route path="analytics" element={
                         <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary>
+                            <ErrorBoundary resetKey={location.pathname}>
                                 <Analytics />
                             </ErrorBoundary>
                         </Suspense>
@@ -118,7 +118,7 @@ const AppRoutes = () => {
 
                     <Route path="settings" element={
                         <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary>
+                            <ErrorBoundary resetKey={location.pathname}>
                                 <Settings />
                             </ErrorBoundary>
                         </Suspense>
@@ -126,7 +126,7 @@ const AppRoutes = () => {
 
                     <Route path="requests" element={
                         <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary>
+                            <ErrorBoundary resetKey={location.pathname}>
                                 <RequestsPage />
                             </ErrorBoundary>
                         </Suspense>
@@ -134,7 +134,7 @@ const AppRoutes = () => {
 
                     <Route path="tools/ad-generator" element={
                         <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary>
+                            <ErrorBoundary resetKey={location.pathname}>
                                 <AdGenerator />
                             </ErrorBoundary>
                         </Suspense>
@@ -142,7 +142,7 @@ const AppRoutes = () => {
 
                     <Route path="pipeline" element={
                         <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary>
+                            <ErrorBoundary resetKey={location.pathname}>
                                 <Pipeline />
                             </ErrorBoundary>
                         </Suspense>

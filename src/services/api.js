@@ -82,6 +82,23 @@ class ApiService {
         return this.sheetsApi.isOnline;
     }
 
+    // Property lifecycle
+    async getExpiringProperties(daysThreshold = 30) {
+        return this.sheetsApi.getExpiringProperties(daysThreshold);
+    }
+
+    async renewProperty(propertyId, days = 30) {
+        return this.sheetsApi.renewProperty(propertyId, days);
+    }
+
+    async archiveProperty(propertyId) {
+        return this.sheetsApi.archiveProperty(propertyId);
+    }
+
+    async toggleDisponible(propertyId, currentDisponible) {
+        return this.sheetsApi.toggleDisponible(propertyId, currentDisponible);
+    }
+
     // Utility
     formatPrice(amount) {
         return this.sheetsApi.formatPrice(amount);

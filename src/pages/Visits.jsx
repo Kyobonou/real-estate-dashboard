@@ -314,7 +314,7 @@ const VisitActions = React.memo(({ visit, addToast, onOpenSheet }) => {
     return (
         <div className="visit-actions">
             <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); onOpenSheet(visit); }} title="Fiche de visite">
-                <FileText size={14} /> <span className="desktop-only">Fiche</span>
+                <FileText size={14} /> <span>Fiche visite</span>
             </button>
             <button className="btn btn-secondary btn-sm" onClick={handleCall} title="Appeler">
                 <Phone size={14} /> <span className="desktop-only">Appeler</span>

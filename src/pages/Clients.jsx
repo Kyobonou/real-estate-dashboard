@@ -3,10 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Users, Search, RefreshCw, LayoutGrid, List, Phone,
     Calendar, MapPin, CheckCircle, Clock, X, TrendingUp,
-    UserPlus, UserCheck, UserX, SlidersHorizontal, ArrowUpDown, Filter, User,
+    UserPlus, UserCheck, UserX, ArrowUpDown, User,
     ArrowUp, ArrowDown
 } from 'lucide-react';
 import apiService from '../services/api';
+import { formatPhoneCI } from '../utils/phoneUtils';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../contexts/AuthContext';
 import Skeleton from '../components/Skeleton';
@@ -119,15 +120,7 @@ const ClientActions = React.memo(({ client, addToast, canAction = true }) => {
             return;
         }
 
-        // Nettoyage complet
-        let phone = client.numero.replace(/\D/g, '');
-
-        if (phone.startsWith('0')) {
-            phone = '225' + phone.substring(1);
-        } else if (phone.length === 10) {
-            phone = '225' + phone;
-        }
-
+        const phone = formatPhoneCI(client.numero);
         const message = encodeURIComponent(`Bonjour ${client.nomPrenom}, nous revenons vers vous concernant votre recherche immobilière.`);
         window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
         addToast({ type: 'success', title: 'WhatsApp', message: 'Lancement de la conversation...' });
@@ -393,7 +386,7 @@ const ClientDetailModal = ({ client, onClose, addToast, canAction }) => {
                     <div className="modal-timeline">
                         <h4><Calendar size={15} /> Historique des visites</h4>
                         <div className="timeline">
-                            {client.visites.map((visit, i) => (
+                            {(client.visites || []).map((visit, i) => (
                                 <div key={i} className={`timeline-item ${visit.visiteProg ? 'confirmed' : 'pending'}`}>
                                     <div className="timeline-dot">
                                         {visit.visiteProg ? <CheckCircle size={14} /> : <Clock size={14} />}

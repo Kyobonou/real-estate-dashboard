@@ -2,9 +2,9 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     MapPin, Tag, Grid, List, Search, Filter, X, Phone, Eye,
-    Download, Share2, Home, Key, Loader, Bed, Building, Map,
+    Download, Home, Key, Loader, Bed, Building, Map,
     ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Images,
-    User, MessageSquare, Copy, Check, RefreshCw
+    User, MessageSquare, Copy, Check, RefreshCw, Lock, Unlock, Sparkles
 } from 'lucide-react';
 import * as XLSX from 'xlsx'; // Import bibliothèque Excel
 import apiService from '../services/api';
@@ -15,6 +15,7 @@ import Skeleton from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
 import geocodingService from '../services/geocodingService';
 import { debounce } from '../utils/performance';
+import { formatPhoneCI, extractBestPhone } from '../utils/phoneUtils';
 import './Properties.css';
 
 const PropertiesSkeleton = ({ viewMode }) => (
@@ -77,12 +78,24 @@ const PropertiesSkeleton = ({ viewMode }) => (
 );
 
 
-const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
+const PropertyDetailsModal = ({ property, isOpen, onClose, onToggleDisponible }) => {
     const { addToast } = useToast();
     const [modalImages, setModalImages] = useState([]);
     const [activeImgIdx, setActiveImgIdx] = useState(0);
     const [galleryView, setGalleryView] = useState('carousel');
     const [msgCopied, setMsgCopied] = useState(false);
+    const [toggling, setToggling] = useState(false);
+    const [aiImproved, setAiImproved] = useState(false);
+
+    const handleToggleDisponible = async () => {
+        if (!property?.id || toggling) return;
+        setToggling(true);
+        const result = await onToggleDisponible(property.id, property.disponible);
+        if (!result?.success) {
+            addToast({ type: 'error', title: 'Erreur', message: result?.error || 'Impossible de modifier le statut' });
+        }
+        setToggling(false);
+    };
 
     useEffect(() => {
         if (!isOpen || !property?.publicationId) {
@@ -90,6 +103,7 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
             setActiveImgIdx(0);
             setGalleryView('carousel');
             setMsgCopied(false);
+            setAiImproved(false);
             return;
         }
         apiService.getImagesForPublication(property.publicationId).then(imgs => {
@@ -99,7 +113,7 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
         });
     }, [isOpen, property?.publicationId]);
 
-    const contactPhone = property?.telephoneBien || property?.telephoneExpediteur || '';
+    const contactPhone = extractBestPhone(property);
 
     const handleContact = () => {
         if (!contactPhone) {
@@ -111,19 +125,17 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
     };
 
     const handleWhatsApp = () => {
-        const raw = contactPhone.replace(/\D/g, '');
-        if (!raw) {
+        const phone = formatPhoneCI(contactPhone);
+        if (!phone) {
             addToast({ type: 'error', title: 'Erreur', message: 'Numéro de téléphone non disponible' });
             return;
         }
-        let phone = raw;
-        if (!phone.startsWith('225')) phone = '225' + phone;
 
         const agentName = property.expediteur || property.publiePar || '';
         const lieu = [property.commune, property.quartier].filter(Boolean).join(', ') || property.zone || '';
         const groupeRef = (property.groupName || property.groupeWhatsApp) ? `\nGroupe source : ${property.groupName || property.groupeWhatsApp}` : '';
         const msgOrigin = property.description
-            ? `\n\nVotre annonce :\n"${property.description.substring(0, 200)}${property.description.length > 200 ? '...' : ''}"`
+            ? `\n\n------- Message d'origine -------\n${property.description}\n---------------------------------`
             : '';
 
         const text = `Bonjour${agentName ? ' ' + agentName : ''},\n\nJe suis intéressé(e) par votre bien : ${property.typeBien} à ${lieu} (${property.prixFormate} FCFA).${groupeRef}${msgOrigin}\n\nMerci de me recontacter.`;
@@ -305,12 +317,16 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
                                     <span className="info-value" style={{ fontWeight: 600, letterSpacing: '0.3px' }}>{contactPhone || '—'}</span>
                                 </div>
                             </div>
-                            {(property.groupName || property.groupeWhatsApp) && (
+                            {property.groupeWhatsApp && (
                                 <div className="info-item" style={{ gridColumn: '1 / -1' }}>
                                     <MessageSquare size={18} style={{ color: '#25D366', flexShrink: 0 }} />
                                     <div>
                                         <span className="info-label">Groupe WhatsApp source</span>
-                                        <span className="info-value" style={{ fontSize: '0.82rem', wordBreak: 'break-all' }}>{property.groupName || property.groupeWhatsApp}</span>
+                                        <span className="info-value" style={{ fontSize: '0.82rem', wordBreak: 'break-all' }}>
+                                            {(property.groupName && !property.groupName.startsWith('Groupe '))
+                                                ? property.groupName
+                                                : property.groupeWhatsApp}
+                                        </span>
                                     </div>
                                 </div>
                             )}
@@ -331,18 +347,41 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
                     {/* ── MESSAGE ORIGINAL ── */}
                     {messageOriginal && (
                         <div className="details-section">
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                                <h4 style={{ margin: 0 }}>Message de l'agent</h4>
-                                <button
-                                    onClick={handleCopyMessage}
-                                    style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: '0.78rem', fontWeight: 600, borderRadius: 7, border: '1px solid var(--border-subtle, #e2e8f0)', background: msgCopied ? '#dcfce7' : 'var(--bg-panel, #fff)', color: msgCopied ? '#16a34a' : 'var(--text-secondary)', cursor: 'pointer', transition: 'all 0.2s' }}
-                                >
-                                    {msgCopied ? <Check size={14} /> : <Copy size={14} />}
-                                    {msgCopied ? 'Copié !' : 'Copier'}
-                                </button>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '10px' }}>
+                                <h4 style={{ margin: 0 }}>Caractéristiques</h4>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button
+                                        onClick={() => setAiImproved(!aiImproved)}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: '0.78rem', fontWeight: 600, borderRadius: 7, border: '1px solid var(--border-subtle, #e2e8f0)', background: aiImproved ? '#ede9fe' : 'var(--bg-panel, #fff)', color: aiImproved ? '#6d28d9' : 'var(--text-secondary)', cursor: 'pointer', transition: 'all 0.2s' }}
+                                    >
+                                        <Sparkles size={14} />
+                                        {aiImproved ? 'Voir Original' : 'Améliorer (IA)'}
+                                    </button>
+                                    <button
+                                        onClick={handleCopyMessage}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', fontSize: '0.78rem', fontWeight: 600, borderRadius: 7, border: '1px solid var(--border-subtle, #e2e8f0)', background: msgCopied ? '#dcfce7' : 'var(--bg-panel, #fff)', color: msgCopied ? '#16a34a' : 'var(--text-secondary)', cursor: 'pointer', transition: 'all 0.2s' }}
+                                    >
+                                        {msgCopied ? <Check size={14} /> : <Copy size={14} />}
+                                        {msgCopied ? 'Copié !' : 'Copier'}
+                                    </button>
+                                </div>
                             </div>
-                            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit', fontSize: '0.875rem', color: 'var(--text-primary, #1e293b)', lineHeight: 1.6, background: 'var(--bg-secondary, #f8fafc)', padding: '0.875rem 1rem', borderRadius: 8, border: '1px solid var(--border-subtle, #e2e8f0)', maxHeight: '300px', overflowY: 'auto' }}>
-                                {messageOriginal}
+                            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit', fontSize: '0.875rem', color: 'var(--text-primary, #1e293b)', lineHeight: 1.6, background: aiImproved ? '#f8fafc' : 'var(--bg-secondary, #f8fafc)', padding: '0.875rem 1rem', borderRadius: 8, border: aiImproved ? '1px solid #c4b5fd' : '1px solid var(--border-subtle, #e2e8f0)', maxHeight: '300px', overflowY: 'auto' }}>
+                                {aiImproved ? (() => {
+                                    let lines = messageOriginal.split('\n').map(l => l.trim()).filter(l => l);
+                                    return lines.map(l => {
+                                        if (l.match(/^[0-9]+\s*(chambre|salon|douche|wc|salle|m2|m²|pièces?)/i) || l.match(/^(✓|•|-)\s/)) {
+                                            return `✔️ ${l.replace(/^(✓|•|-)\s/, '')}`;
+                                        }
+                                        if (l.includes(':') && !l.toLowerCase().includes('http')) {
+                                            return `🔹 ${l}`;
+                                        }
+                                        if (l.match(/(fcfa|cfa|frs|prix)/i)) {
+                                            return `💰 ${l}`;
+                                        }
+                                        return l;
+                                    }).join('\n\n');
+                                })() : messageOriginal}
                             </pre>
                         </div>
                     )}
@@ -352,6 +391,18 @@ const PropertyDetailsModal = ({ property, isOpen, onClose }) => {
                         <button className="btn btn-secondary" onClick={handleContact}>
                             <Phone size={18} />
                             Appeler
+                        </button>
+                        <button
+                            className={`btn ${property?.disponible ? 'btn-danger' : 'btn-success'}`}
+                            onClick={handleToggleDisponible}
+                            disabled={toggling}
+                            style={{ opacity: toggling ? 0.7 : 1 }}
+                        >
+                            {toggling
+                                ? <Loader size={18} className="spinning" />
+                                : property?.disponible ? <Lock size={18} /> : <Unlock size={18} />
+                            }
+                            {property?.disponible ? 'Marquer Occupé' : 'Marquer Disponible'}
                         </button>
                     </div>
                 </div>
@@ -413,6 +464,14 @@ const PropertyListView = React.memo(({ properties, onViewDetails, handleContact,
                                             {property.refBien && (
                                                 <span className="biens-ref-badge">#{property.refBien}</span>
                                             )}
+                                            {property.groupeWhatsApp && (
+                                                <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#15803d', background: 'rgba(37,211,102,0.12)', border: '1px solid rgba(37,211,102,0.35)', borderRadius: 4, padding: '1px 6px', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                                    title={property.groupName || property.groupeWhatsApp}>
+                                                    {(property.groupName && !property.groupName.startsWith('Groupe '))
+                                                        ? property.groupName
+                                                        : property.groupeWhatsApp}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 </td>
@@ -451,20 +510,16 @@ const PropertyListView = React.memo(({ properties, onViewDetails, handleContact,
     );
 });
 
-const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
-    const [isHovered, setIsHovered] = useState(false);
+const PropertyCard = ({ property, index, onViewDetails }) => {
     const { addToast } = useToast();
-    const statusColor = property.disponible ? 'var(--success)' : 'var(--danger)';
 
     const handleContact = (e) => {
         e.stopPropagation();
-        const num = property.telephoneBien || property.telephoneExpediteur || '';
-        if (num) {
-            let phone = num.replace(/\D/g, '');
-            if (!phone.startsWith('225')) phone = '225' + phone;
+        const phone = extractBestPhone(property);
+        if (phone) {
             const message = encodeURIComponent(`Bonjour, je suis intéressé par: ${property.typeBien} à ${property.zone}`);
             window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
-            addToast({ type: 'success', title: 'Contact', message: `WhatsApp vers ${num}` });
+            addToast({ type: 'success', title: 'Contact', message: `WhatsApp vers ${phone}` });
         } else {
             addToast({ type: 'error', title: 'Erreur', message: 'Numéro de téléphone non disponible' });
         }
@@ -477,8 +532,6 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: index * 0.1 }}
             whileHover={{ y: -8 }}
-            onHoverStart={() => setIsHovered(true)}
-            onHoverEnd={() => setIsHovered(false)}
             onClick={() => onViewDetails(property)}
         >
             <div className="property-image-wrapper">
@@ -529,10 +582,12 @@ const PropertyCard = ({ property, index, viewMode, onViewDetails }) => {
                             # {property.refBien}
                         </span>
                     )}
-                    {(property.name || property.groupeWhatsApp) && (
-                        <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#15803d', background: 'rgba(37,211,102,0.12)', border: '1px solid rgba(37,211,102,0.35)', borderRadius: 5, padding: '2px 7px', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                            title={property.name || property.groupeWhatsApp}>
-                            {property.name || property.groupeWhatsApp}
+                    {property.groupeWhatsApp && (
+                        <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#15803d', background: 'rgba(37,211,102,0.12)', border: '1px solid rgba(37,211,102,0.35)', borderRadius: 5, padding: '2px 7px', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            title={property.groupName || property.groupeWhatsApp}>
+                            {(property.groupName && !property.groupName.startsWith('Groupe '))
+                                ? property.groupName
+                                : property.groupeWhatsApp}
                         </span>
                     )}
                 </div>
@@ -659,8 +714,8 @@ const Properties = () => {
                     message: errorMsg === 'NetworkError'
                         ? 'Vérifiez votre connexion internet'
                         : errorMsg.includes('timeout')
-                        ? 'Le serveur met trop de temps. Réessayez.'
-                        : errorMsg
+                            ? 'Le serveur met trop de temps. Réessayez.'
+                            : errorMsg
                 });
             }
         } catch (error) {
@@ -690,14 +745,25 @@ const Properties = () => {
         setSortConfig({ key, direction });
     };
 
-    const handleTableContact = (property, e) => {
-        const num = property.telephoneBien || property.telephoneExpediteur || '';
-        if (num) {
-            let phone = num.replace(/\D/g, '');
-            if (!phone.startsWith('225')) phone = '225' + phone;
+    const handleToggleDisponible = async (propertyId, currentDisponible) => {
+        const result = await apiService.toggleDisponible(propertyId, currentDisponible);
+        if (result.success) {
+            const label = result.disponible ? 'Disponible' : 'Occupé';
+            addToast({ type: 'success', title: 'Statut mis à jour', message: `Bien marqué comme ${label}` });
+            setProperties(prev => prev.map(p =>
+                p.id === propertyId ? { ...p, disponible: result.disponible } : p
+            ));
+            setSelectedProperty(prev => prev?.id === propertyId ? { ...prev, disponible: result.disponible } : prev);
+        }
+        return result;
+    };
+
+    const handleTableContact = (property) => {
+        const phone = extractBestPhone(property);
+        if (phone) {
             const message = encodeURIComponent(`Bonjour, je suis intéressé par: ${property.typeBien} à ${property.zone}`);
             window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
-            addToast({ type: 'success', title: 'Contact', message: `WhatsApp vers ${num}` });
+            addToast({ type: 'success', title: 'Contact', message: `WhatsApp vers ${phone}` });
         } else {
             addToast({ type: 'error', title: 'Erreur', message: 'Numéro de téléphone non disponible' });
         }
@@ -1245,6 +1311,7 @@ const Properties = () => {
                 property={selectedProperty}
                 isOpen={modalOpen}
                 onClose={() => setModalOpen(false)}
+                onToggleDisponible={handleToggleDisponible}
             />
         </motion.div>
     );

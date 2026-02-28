@@ -316,8 +316,8 @@ class SupabaseService {
             if (error) throw error;
 
             const transformed = data.map(p => {
-                // Determine boolean values from text 'Oui'/'Non'
-                const isDispo = (p.disponible && typeof p.disponible === 'string' && p.disponible.toLowerCase() === 'oui') || p.disponible === true;
+                // Default to Disponible (true) unless explicitly set to 'Non'/false
+                const isDispo = p.disponible !== false && !(typeof p.disponible === 'string' && p.disponible.toLowerCase() === 'non');
                 const isMeuble = (p.meubles && typeof p.meubles === 'string' && p.meubles.toLowerCase() === 'oui') || p.meubles === true;
 
                 // Parse Price (handle text with shorthand M, k, FCFA)
@@ -384,14 +384,17 @@ class SupabaseService {
                 if (p.contentHash) seenHashes.add(p.contentHash);
 
                 // Check text fingerprint (copied messages with same content)
+                // Include commune in key: same message can contain multiple distinct properties
+                // from different communes — they are NOT duplicates
                 let isDupText = false;
                 if (p.description && p.description.length > 20) {
-                    const fp = p.description
+                    const textPart = p.description
                         .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
                         .toLowerCase()
                         .replace(/[^a-z0-9]/g, '')
                         .substring(0, 250);
-                    if (fp.length > 20) {
+                    const fp = (p.commune || '') + '|' + textPart;
+                    if (textPart.length > 20) {
                         if (seenTextFp.has(fp)) isDupText = true;
                         else seenTextFp.add(fp);
                     }
@@ -717,10 +720,171 @@ class SupabaseService {
         }
     }
 
+    // === PROPERTY LIFECYCLE ACTIONS ===
+
+    async renewProperty(propertyId, days = 30) {
+        if (!propertyId) return { success: false, error: 'ID manquant' };
+        try {
+            const newExpiration = new Date();
+            newExpiration.setDate(newExpiration.getDate() + days);
+
+            const { error } = await supabase
+                .from('locaux')
+                .update({
+                    date_expiration: newExpiration.toISOString(),
+                    status: 'active',
+                    relance_count: supabase.rpc ? undefined : 0, // reset ou increment selon config
+                })
+                .eq('id', propertyId);
+
+            if (error) throw error;
+            this._invalidate('properties');
+            return { success: true, newExpiration: newExpiration.toISOString() };
+        } catch (error) {
+            console.error('renewProperty Error:', error);
+            return { success: false, error: this._getErrorMessage(error) };
+        }
+    }
+
+    async archiveProperty(propertyId) {
+        if (!propertyId) return { success: false, error: 'ID manquant' };
+        try {
+            const { error } = await supabase
+                .from('locaux')
+                .update({
+                    status: 'archived',
+                    disponible: 'Non',
+                })
+                .eq('id', propertyId);
+
+            if (error) throw error;
+            this._invalidate('properties');
+            return { success: true };
+        } catch (error) {
+            console.error('archiveProperty Error:', error);
+            return { success: false, error: this._getErrorMessage(error) };
+        }
+    }
+
+    async toggleDisponible(propertyId, currentDisponible) {
+        if (!propertyId) return { success: false, error: 'ID manquant' };
+        try {
+            const newValue = currentDisponible ? 'Non' : 'Oui';
+            const { error } = await supabase
+                .from('locaux')
+                .update({ disponible: newValue })
+                .eq('id', propertyId);
+
+            if (error) throw error;
+            this._invalidate('properties');
+            return { success: true, disponible: newValue === 'Oui' };
+        } catch (error) {
+            console.error('toggleDisponible Error:', error);
+            return { success: false, error: this._getErrorMessage(error) };
+        }
+    }
+
+    async getExpiringProperties(daysThreshold = 30) {
+        try {
+            const thresholdDate = new Date();
+            thresholdDate.setDate(thresholdDate.getDate() + daysThreshold);
+
+            // Fallback: properties published 25+ days ago (30-day shelf life, 5 days warning)
+            const fallbackDate = new Date();
+            fallbackDate.setDate(fallbackDate.getDate() - 25);
+
+            // Query 1: properties with explicit date_expiration set, expiring within threshold
+            // Query 2: properties without date_expiration, published 25+ days ago (approaching 30-day shelf life)
+            const [res1, res2] = await Promise.all([
+                supabase
+                    .from('locaux')
+                    .select('*')
+                    .eq('disponible', 'Oui')
+                    .or('status.eq.active,status.is.null')
+                    .not('date_expiration', 'is', null)
+                    .lte('date_expiration', thresholdDate.toISOString())
+                    .order('date_expiration', { ascending: true })
+                    .limit(150),
+                supabase
+                    .from('locaux')
+                    .select('*')
+                    .eq('disponible', 'Oui')
+                    .or('status.eq.active,status.is.null')
+                    .is('date_expiration', null)
+                    .not('date_publication', 'is', null)
+                    .lte('date_publication', fallbackDate.toISOString())
+                    .order('date_publication', { ascending: true })
+                    .limit(150)
+            ]);
+
+            // Merge and deduplicate by id
+            const seen = new Set();
+            const merged = [...(res1.data || []), ...(res2.data || [])].filter(p => {
+                if (seen.has(p.id)) return false;
+                seen.add(p.id);
+                return true;
+            });
+
+            // For properties without date_expiration, compute from date_publication + 30 days
+            const data = merged.map(p => {
+                if (!p.date_expiration && p.date_publication) {
+                    try {
+                        const pub = new Date(p.date_publication);
+                        if (!isNaN(pub.getTime())) {
+                            const computed = new Date(pub);
+                            computed.setDate(computed.getDate() + 30);
+                            return { ...p, date_expiration: computed.toISOString() };
+                        }
+                    } catch { /* keep null */ }
+                }
+                return p;
+            });
+
+            const transformed = data.map(p => {
+                const isDispo = p.disponible !== false && !(typeof p.disponible === 'string' && p.disponible.toLowerCase() === 'non');
+                const rawPrice = this.parsePrice(p.prix || '0');
+                return {
+                    id: p.id,
+                    refBien: p.ref_bien || '',
+                    publicationId: p.publication_id || '',
+                    typeBien: this.normalizePropertyType(p.type_de_bien),
+                    typeOffre: p.type_offre || '',
+                    zone: p.zone_geographique || '',
+                    commune: p.commune || '',
+                    quartier: p.quartier || '',
+                    prix: p.prix || '',
+                    rawPrice,
+                    prixFormate: this.formatPrice(rawPrice, p.message_initial || ''),
+                    telephoneBien: p.telephone_bien || p.telephone || '',
+                    telephoneExpediteur: p.telephone_expediteur || p.telephone || '',
+                    expediteur: p.expediteur || '',
+                    caracteristiques: p.caracteristiques || '',
+                    description: p.message_initial || p.caracteristiques || '',
+                    disponible: isDispo,
+                    meuble: p.meubles?.toLowerCase() === 'oui',
+                    chambres: parseInt(p.chambre) || 0,
+                    groupeWhatsApp: p.groupe_whatsapp_origine || '',
+                    groupeWhatsAppOrigine: p.groupe_whatsapp_origine || '',
+                    imageUrl: p.lien_image || '',
+                    datePublication: this.formatDateShort(p.date_publication),
+                    dateExpiration: p.date_expiration || null,
+                    renewalStatus: p.status || 'active',
+                    relanceCount: p.relance_count || 0,
+                    status: isDispo ? 'Disponible' : 'Occupé',
+                };
+            });
+
+            // Enrich with WhatsApp group names (same as getProperties)
+            const enriched = await whatsappGroupService.enrichWithGroupNames(transformed, 'groupeWhatsApp');
+
+            return { success: true, data: enriched };
+        } catch (error) {
+            console.error('getExpiringProperties Error:', error);
+            return { success: false, error: this._getErrorMessage(error), data: [] };
+        }
+    }
+
     // === AUTH ===
-    // Use Supabase Auth for real usage, but for now fallback to the hardcoded list 
-    // to maintain existing "demo" users without forcing user to create Auth Users in Supabase yet.
-    // Or we can query a 'users' table if created.
     async login(email, password) {
         // Fallback legacy login for smooth transition
         const validUsers = [
