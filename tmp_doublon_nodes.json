@@ -1,0 +1,58 @@
+{
+  "Parser IA REF Hash": {
+    "parameters": {
+      "jsCode": "try {\n  const raw = $input.first().json;\n  const source = $('Preparer Filtrer Groupe').first().json;\n\n  let extracted = {};\n  try {\n    const t = raw.output?.[0]?.content?.[0]?.text;\n    extracted = typeof t === 'object' ? t : JSON.parse(typeof t === 'string' ? t : JSON.stringify(raw));\n  } catch(e) { extracted = raw || {}; }\n\n  // VALIDATION STRICTE: rejeter les annonces incomplètes\n  const hasTypeBien = extracted.type_de_bien && extracted.type_de_bien.trim().length > 0;\n  const hasCommune = extracted.commune && extracted.commune.trim().length > 0;\n  const hasPrix = extracted.prix && extracted.prix.trim().length > 0;\n  const hasTypeOffre = extracted.type_offre && extracted.type_offre.trim().length > 0;\n\n  // Rejeter si données insuffisantes\n  if (!hasTypeBien || !hasCommune) {\n    console.log('REJETÉ: type_de_bien ou commune manquant. Données:', JSON.stringify(extracted).substring(0, 200));\n    return [];\n  }\n  if (!hasPrix && !hasTypeOffre) {\n    console.log('REJETÉ: prix et type_offre manquants');\n    return [];\n  }\n\n  // Valider le prix (rejeter les prix aberrants)\n  if (hasPrix) {\n    const prixRaw = extracted.prix.toLowerCase();\n    // Extraire valeur numérique\n    const numMatch = prixRaw.match(/(\\d[\\d\\s.,]*)/);\n    if (numMatch) {\n      const numStr = numMatch[1].replace(/[\\s,]/g, '').replace('.', '');\n      const num = parseInt(numStr);\n      // Prix en FCFA: minimum 50 000 FCFA, maximum 5 milliards\n      // Prix /m²: peut être plus bas mais pas moins de 1 000 FCFA/m²\n      const isPerM2 = prixRaw.includes('/m') || prixRaw.includes('m²') || prixRaw.includes('m2') || prixRaw.includes('metre');\n      const isMillion = prixRaw.includes('million') || prixRaw.includes('milion');\n      let prixReel = num;\n      if (isMillion) prixReel = num * 1000000;\n      if (isPerM2) {\n        if (prixReel < 1000) { console.log('REJETÉ: prix/m² aberrant:', prixReel); return []; }\n      } else {\n        if (prixReel < 50000 && !isMillion) { console.log('REJETÉ: prix trop bas:', prixReel, '| prix brut:', extracted.prix); return []; }\n      }\n    }\n  }\n\n  // Rejeter types de bien génériques ou invalides\n  const typeValides = ['appartement','studio','chambre','maison','villa','duplex','triplex','terrain','bureau','magasin','boutique','entrepot','local','immeuble','parking','garage','penthouse','parcelle','lot'];\n  const typeLow = extracted.type_de_bien.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n  const typeValide = typeValides.some(t => typeLow.includes(t));\n  if (!typeValide) {\n    console.log('REJETÉ: type_de_bien invalide:', extracted.type_de_bien);\n    return [];\n  }\n\n  // Générer REF structurée\n  const typeMap = {'appartement':'APT','studio':'STU','chambre':'CHB','maison':'MAS','villa':'VIL','duplex':'DPX','triplex':'TRX','terrain':'TER','parcelle':'PAR','lot':'LOT','bureau':'BUR','magasin':'MAG','boutique':'BTQ','local':'LOC','entrepot':'ENT','immeuble':'IMM','garage':'GAR','parking':'PRK','penthouse':'PNT'};\n  const typeCode = Object.entries(typeMap).find(([k]) => typeLow.includes(k))?.[1] || null;\n  if (!typeCode) { console.log('REJETÉ: impossible de coder le type:', extracted.type_de_bien); return []; }\n\n  const commCode = extracted.commune.substring(0, 3).toUpperCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n  const offreCode = (extracted.type_offre || '').toLowerCase().includes('vente') ? 'V' : 'L';\n  const rand = Math.random().toString(36).substring(2, 10).toUpperCase();\n  const ref_bien = typeCode + '-' + commCode + '-' + offreCode + '-' + rand;\n\n  // Hash pour déduplication\n  const hashInput = [\n    typeLow,\n    (extracted.prix || '').toLowerCase().replace(/\\s/g, ''),\n    (extracted.commune || '').toLowerCase(),\n    (extracted.quartier || '').toLowerCase(),\n    (extracted.chambre || '').toString(),\n    (extracted.surface || '').toString(),\n    (extracted.caracteristiques || '').substring(0, 150).toLowerCase().replace(/\\s/g, '')\n  ].join('|');\n\n  let hash = 5381;\n  for (let i = 0; i < hashInput.length; i++) hash = ((hash << 5) + hash + hashInput.charCodeAt(i)) & 0xFFFFFFFF;\n  const content_hash = (hash >>> 0).toString(16).padStart(8, '0');\n\n  const dateExp = new Date();\n  dateExp.setDate(dateExp.getDate() + 30);\n\n  console.log('ANNONCE VALIDEE:', ref_bien, '| Type:', extracted.type_de_bien, '| Commune:', extracted.commune, '| Prix:', extracted.prix);\n\n  return [{ json: {\n    ref_bien, content_hash,\n    type_de_bien: extracted.type_de_bien,\n    type_offre: extracted.type_offre || '',\n    zone_geographique: extracted.zone_geographique || '',\n    commune: extracted.commune,\n    quartier: extracted.quartier || '',\n    prix: extracted.prix || '',\n    surface: extracted.surface || '',\n    chambre: extracted.chambre || '',\n    meubles: extracted.meubles || 'Non',\n    caracteristiques: extracted.caracteristiques || '',\n    telephone_bien: extracted.telephone || source.telephone || '',\n    telephone_expediteur: source.telephone || '',\n    expediteur: source.expediteur || '',\n    publie_par: extracted.publie_par || source.expediteur || '',\n    disponible: extracted.disponible === 'Non' ? 'Non' : 'Oui',\n    status: 'active',\n    groupe_whatsapp_origine: source.groupe || '',\n    groupe_whatsapp_jid: source.groupe_jid || '',\n    message_initial: source.message || '',\n    publication_id: source.messageId || '',\n    date_publication: new Date().toISOString(),\n    date_expiration: dateExp.toISOString(),\n    relance_count: 0,\n    lien_image: ''\n  }}];\n} catch(e) { console.log('Erreur parser:', e.message); return []; }"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -25968,
+      -3216
+    ],
+    "id": "43aeb60a-7d52-4937-9f0b-31c20fe3eb1d",
+    "name": "Parser IA REF Hash"
+  },
+  "Verifier Doublon Supabase": {
+    "parameters": {
+      "url": "=https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/locaux?content_hash=eq.{{ $json.content_hash }}&select=id,ref_bien,relance_count,date_expiration,status",
+      "sendHeaders": true,
+      "headerParameters": {
+        "parameters": [
+          {
+            "name": "apikey",
+            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          },
+          {
+            "name": "Authorization",
+            "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          }
+        ]
+      },
+      "options": {
+        "timeout": 10000
+      }
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+      -25744,
+      -3216
+    ],
+    "id": "b6e64dbc-58c5-4b80-9ab2-ee2d298f90b8",
+    "name": "Verifier Doublon Supabase",
+    "onError": "continueRegularOutput"
+  },
+  "Decider Action": {
+    "parameters": {
+      "jsCode": "const check = $input.first().json;\nconst annonce = $('Parser IA REF Hash').first().json;\nlet existing = Array.isArray(check) ? check : (check && check.id ? [check] : []);\nconst dateExp = new Date(); dateExp.setDate(dateExp.getDate() + 30);\nif (existing.length === 0) return [{ json: { ...annonce, action: 'INSERT', existing_id: null } }];\nconst ex = existing[0];\nconst isExpired = ex.status === 'archived' || ex.status === 'expired';\nreturn [{ json: { ...annonce, action: isExpired ? 'REACTIVATE' : 'RENEW', existing_id: ex.id, existing_ref: ex.ref_bien, relance_count: isExpired ? 0 : (ex.relance_count || 0) + 1, date_expiration: dateExp.toISOString() } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -25520,
+      -3216
+    ],
+    "id": "d2e782d9-c227-42a5-8810-c27e7a1f0918",
+    "name": "Decider Action"
+  }
+}

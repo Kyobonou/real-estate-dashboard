@@ -1,0 +1,35 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "n8n_update_partial_workflow",
+  "params": {
+    "id": "LTZJrc7tYwv6Qm6a5wtZ0",
+    "operations": [
+      {
+        "nodeId": "3f5beaee-9718-4037-bd61-7155cc86215b",
+        "type": "updateNode",
+        "updates": {
+          "parameters": {
+            "specifyInputSchema": true,
+            "schemaType": "fromJson",
+            "jsonSchemaExample": "{\n  \"query\": \"villa cocody\"\n}",
+            "name": "recherche_biens_immobiliers",
+            "description": "OBLIGATOIRE. Cherche des biens immobiliers dans la base de donnees. Argument requis: 'query'.",
+            "jsCode": "const SUPABASE_URL = 'https://udyfhzyvalansmhkynnc.supabase.co';\nconst SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk';\n\ntry {\n  let q = '';\n  if (typeof query !== 'undefined') {\n    q = query || '';\n  }\n  if (!q && typeof $input !== 'undefined' && typeof $input.first === 'function') {\n    const item = $input.first();\n    if (item && item.json && item.json.query) q = item.json.query;\n  }\n  q = String(q).toLowerCase().trim();\n\n  const SELECT_FIELDS = [\n    'id', 'ref_bien', 'type_de_bien', 'type_offre', 'zone_geographique', 'commune',\n    'quartier', 'prix', 'chambre', 'meubles', 'caracteristiques', 'telephone_bien',\n    'telephone_expediteur', 'expediteur', 'publie_par', 'disponible', 'status',\n    'groupe_whatsapp_origine', 'lien_image', 'message_initial', 'date_publication',\n    'date_expiration', 'publication_id'\n  ].join(',');\n\n  const filters = [];\n  if (!q.includes('non disponible') && !q.includes('vendu') && !q.includes('loué')) {\n    filters.push('disponible=eq.Oui');\n  }\n\n  const communes = [\n    { variants: ['cocody'], value: 'Cocody' },\n    { variants: ['yopougon', 'yopo'], value: 'Yopougon' },\n    { variants: ['marcory'], value: 'Marcory' },\n    { variants: ['koumassi'], value: 'Koumassi' },\n    { variants: ['treichville', 'treiche'], value: 'Treichville' },\n    { variants: ['plateau'], value: 'Plateau' },\n    { variants: ['adjamé', 'adjame'], value: 'Adjamé' },\n    { variants: ['abobo'], value: 'Abobo' },\n    { variants: ['attécoubé', 'attecoube'], value: 'Attécoubé' },\n    { variants: ['port-bouët', 'port-bouet', 'portbouet'], value: 'Port-Bouët' },\n    { variants: ['bingerville'], value: 'Bingerville' },\n    { variants: ['songon'], value: 'Songon' },\n    { variants: ['anyama'], value: 'Anyama' },\n    { variants: ['grand-bassam', 'bassam'], value: 'Grand-Bassam' },\n    { variants: ['assinie'], value: 'Assinie' }\n  ];\n  const communeTrouvee = communes.find(c => c.variants.some(v => q.includes(v)));\n  if (communeTrouvee) {\n    filters.push('commune=ilike.*' + encodeURIComponent(communeTrouvee.value) + '*');\n  }\n\n  const typesBien = ['villa', 'appartement', 'studio', 'duplex', 'triplex', 'maison', 'terrain', 'bureau', 'magasin', 'boutique', 'local', 'garage', 'immeuble', 'chambre', 'residence', 'résidence'];\n  const typeTrouve = typesBien.find(t => q.includes(t));\n  if (typeTrouve) {\n    let typeRecherche = typeTrouve;\n    if (typeTrouve === 'residence' || typeTrouve === 'résidence') typeRecherche = 'résidence';\n    filters.push('type_de_bien=ilike.*' + encodeURIComponent(typeRecherche) + '*');\n  }\n\n  if (q.includes('vente') || q.includes('vendre') || q.includes('achat') || q.includes('acheter')) {\n    filters.push('type_offre=eq.Vente');\n  } else if (q.includes('location') || q.includes('louer') || q.includes('locat') || q.includes('bail')) {\n    filters.push('type_offre=eq.Location');\n  }\n\n  const baseUrl = SUPABASE_URL + '/rest/v1/locaux';\n  const queryParts = [...filters, 'select=' + SELECT_FIELDS, 'order=date_publication.desc', 'limit=15'];\n  const url = baseUrl + '?' + queryParts.join('&');\n\n  const response = await fetch(url, {\n    headers: {\n      'apikey': SUPABASE_KEY,\n      'Authorization': 'Bearer ' + SUPABASE_KEY,\n      'Content-Type': 'application/json'\n    }\n  });\n\n  if (!response.ok) {\n    return 'Erreur de recherche (1)';\n  }\n\n  const biens = await response.json();\n\n  if (!biens || biens.length === 0) {\n    return 'Aucun résultat trouvé pour cette recherche dans la base de données. Vous pouvez chercher un autre quartier ou modifier le type de bien.';\n  }\n\n  const resultats = biens.map(b => {\n    const meuble = (b.meubles === true || b.meubles === 'Oui') ? ' | ✅ Meublé' : ' | ❌ Non meublé';\n    const chambres = b.chambre ? b.chambre + ' pièce(s)' : '';\n    const image = b.lien_image ? '🖼️ Image: ' + b.lien_image : '';\n    \n    return [\n      '---',\n      '🏠 *' + (b.ref_bien || 'N/A') + '* | ' + (b.type_offre || '') + ' | ' + (b.type_de_bien || ''),\n      '📍 ' + [b.commune, b.quartier, b.zone_geographique].filter(Boolean).join('/'),\n      '💰 Prix: ' + (b.prix || 'Non communiqué'),\n      '🛏️ Pièces: ' + chambres + meuble,\n      '📞 Contact: ' + (b.telephone_bien || b.telephone_expediteur || 'Non disponible'),\n      image\n    ].filter(Boolean).join('\\n');\n  }).join('\\n\\n');\n\n  return 'SUCCESS: Trouvé (' + biens.length + ' résultats) ! \\n' + resultats;\n} catch (err) {\n  return 'Erreur: ' + err.message;\n}"
+          }
+        }
+      },
+      {
+        "nodeId": "18c343ad-5926-4fa8-9ff4-6800ac524618",
+        "type": "updateNode",
+        "updates": {
+          "parameters": {
+            "options": {
+              "systemMessage": "# IDENTITÉ\nTu es Immo Plus, l'assistant immobilier WhatsApp de Côte d'Ivoire. Tu aides à trouver des biens immobiliers (location/vente).\n\n# RÈGLE ABSOLUE N°1 - TOUJOURS UTILISER L'OUTIL\n**OBLIGATOIRE** : Pour TOUTE demande de recherche sur des biens immobiliers (disponibilité, prix, commune, quartier, type, chambres, caractéristiques, etc.), tu DOIS appeler l'outil `recherche_biens_immobiliers` AVANT de répondre.\n- L'outil a besoin du paramètre obligatoire `query`. Fournis-lui la requête de l'utilisateur (exemple: 'studio meublé a cocody', 'villa a yopougon').\n- N'invente JAMAIS et ne suppose JAMAIS de résultats ou d'erreurs. Tu dois appeler l'outil de recherche, c'est l'ordinateur qui te donnera la réponse depuis la base de données. Attends sa réponse !!!\n\n# RÈGLES DE RÉPONSE\n1. Une fois que l'outil te répond avec des biens classés avec \"SUCCESS:\", montre-les au format ci-dessous.\n2. Ne dis JAMAIS que tu as eu un problème technique. Si tu n'y arrives pas, dis juste : \"Désolé, je n'ai pas trouvé ce que vous cherchez, essayez une autre commune\".\n3. Prends note si l'utilisateur veut louer, acheter, meublé, non meublé etc, et passe cette information à l'outil ! Exemple: \"duplex a louer a cocody\".\n\n# FORMAT RÉSULTATS (utilise EXACTEMENT ce format)\n*[REF]* | [TYPE] - [COMMUNE] [QUARTIER]\n💰 [PRIX] FCFA | 🛏️ [N] pièce(s)[si meublé: | ✅ Meublé]\n📞 [Telephone]\n\nAprès la liste: \"Intéressé(e) ? Citez le REF du bien.\""
+            }
+          }
+        }
+      }
+    ]
+  }
+}

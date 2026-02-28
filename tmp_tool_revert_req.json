@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":1,"method":"n8n_update_partial_workflow","params":{"id":"LTZJrc7tYwv6Qm6a5wtZ0","operations":[{"nodeId":"3f5beaee-9718-4037-bd61-7155cc86215b","type":"updateNode","updates":{"parameters":{"specifyInputSchema":false}}}]}}
