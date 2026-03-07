@@ -145,25 +145,7 @@
     /* Ensure separate from any content above */
 }
 
-.btn-whatsapp {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    width: 100%;
-    background: #25D366;
-    color: white;
-    border: none;
-    padding: 0.75rem;
-    border-radius: var(--radius-sm);
-    font-weight: 600;
-    cursor: pointer;
-    transition: background-color var(--transition-fast);
-}
 
-.btn-whatsapp:hover {
-    background: #128C7E;
-}
 
 @media (max-width: 768px) {
     .image-gallery-page {

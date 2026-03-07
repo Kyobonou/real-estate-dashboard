@@ -1,9 +1,67 @@
-/* VISITS PAGE V2.0 - Clean & Professional */
+/* === VISIT DRAWER (Fiche de Visite) ===
+ * Uses a fixed-position drawer + backdrop that overlays the page
+ * without affecting the underlying layout.
+ */
 
-.visits-v2 {
-    padding: 2rem;
-    max-width: 1600px;
-    margin: 0 auto;
+/* Backdrop: covers the entire viewport */
+.visit-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    z-index: 400;
+    cursor: pointer;
+}
+
+/* Drawer panel: slides in from right */
+.visit-drawer-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 520px;
+    max-width: 100vw;
+    background: var(--bg-panel, #ffffff);
+    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.18);
+    z-index: 401;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Header — sticky at top of drawer */
+.visit-drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.1rem 1.5rem;
+    border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+    background: var(--bg-panel, #ffffff);
+    flex-shrink: 0;
+    z-index: 1;
+}
+
+.visit-sheet-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    /* Smooth scroll on iOS */
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Mobile: full-width bottom sheet */
+@media (max-width: 640px) {
+    .visit-drawer-panel {
+        width: 100vw;
+        top: auto;
+        height: 92dvh;
+        border-radius: 16px 16px 0 0;
+        bottom: 0;
+    }
 }
 
 /* HEADER */
@@ -186,24 +244,26 @@
 }
 
 .user-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
     font-weight: 700;
-    font-size: 1.1rem;
+    font-size: 0.95rem;
     box-shadow: var(--shadow-sm);
+    background: var(--brand-primary);
 }
 
 .user-text h3 {
-    font-size: 1.125rem;
+    font-size: 1rem;
+    /* Reduced from 1.125rem */
     /* Match Clients */
     color: var(--text-primary);
     font-weight: 700;
-    margin: 0 0 0.25rem 0;
+    margin: 0 0 0.125rem 0;
 }
 
 .user-text span {
@@ -261,12 +321,12 @@
     padding: 0.75rem;
     background-color: var(--warning-bg);
     border-radius: var(--radius-md);
-    border: 1px solid rgba(245, 158, 11, 0.2);
+    border: 1px solid var(--warning);
 }
 
 .visit-notes p {
     font-size: 0.875rem;
-    color: var(--slate-700);
+    color: var(--text-secondary);
     margin: 0;
     font-style: italic;
 }
@@ -689,7 +749,6 @@
     }
 }
 
-/* ─── VISIT SHEET MODAL ─────────────────────────────────────────────────── */
 
 .visit-sheet-modal {
     max-width: 680px;
@@ -705,10 +764,10 @@
     justify-content: space-between;
     align-items: center;
     padding: 1.25rem 1.5rem;
-    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    border-bottom: 1px solid var(--border-subtle);
     position: sticky;
     top: 0;
-    background: var(--bg-panel, #ffffff);
+    background: var(--bg-panel);
     z-index: 1;
 }
 
@@ -746,8 +805,8 @@
 }
 
 .visit-sheet-section {
-    background: var(--bg-secondary, #f8fafc);
-    border: 1px solid var(--border-color, #e2e8f0);
+    background: var(--bg-app);
+    border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md, 10px);
     padding: 1.25rem;
 }
@@ -783,22 +842,23 @@
 
 .info-label {
     display: block;
-    font-size: 0.75rem;
+    font-size: 0.68rem;
     font-weight: 600;
-    color: var(--text-muted, #94a3b8);
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
 
 .info-value {
     display: block;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 500;
     color: var(--text-primary);
 }
 
 .info-value.large {
-    font-size: 1rem;
+    font-size: 0.95rem;
+    /* Reduced from 1rem */
     font-weight: 600;
 }
 
@@ -808,18 +868,18 @@
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
-    background: var(--bg-primary, #f1f5f9);
-    border: 1px solid var(--border-color, #e2e8f0);
+    background: var(--bg-app);
+    border: 1px solid var(--border-subtle);
     border-radius: 8px;
     padding: 0.75rem;
-    color: var(--text-secondary);
+    color: var(--text-primary);
     margin: 0;
 }
 
 /* ─── SIGNATURES ─────────────────────────────────────────────────────────── */
 
 .visit-signatures {
-    border-top: 2px dashed var(--border-color, #e2e8f0);
+    border-top: 2px dashed var(--border-subtle);
 }
 
 .signature-block {
@@ -849,7 +909,7 @@
 
 .signature-line {
     width: 100%;
-    border-bottom: 2px solid var(--border-color, #d1d5db);
+    border-bottom: 2px solid var(--border-subtle);
     margin: 1.5rem 0 0.5rem;
     min-height: 60px;
 }
@@ -863,12 +923,18 @@
 /* ─── PRINT STYLES ───────────────────────────────────────────────────────── */
 
 @media print {
+
     .visits-toolbar,
-    .visits-header .header-actions,
+    .visits-header,
     .pagination-controls,
     .visit-actions,
     .modal-header .btn-secondary,
-    .modal-header .btn-icon-close {
+    .modal-header .btn-icon-close,
+    .modal-header .btn-primary,
+    .visits-grid,
+    .visits-list-container,
+    .calendar-view,
+    .empty-state {
         display: none !important;
     }
 
@@ -903,4 +969,163 @@
         border-radius: 0;
     }
 }
+
+/* Visits Container Mobile Fixes */
+@media (max-width: 480px) {
+    .visits-page {
+        padding: 0.75rem 0.5rem !important;
+    }
 }
+
+/* ─── VISIT DATE BANNER ───────────────────────────────────────────────────── */
+
+.visit-date-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.9rem 1.1rem;
+    background: linear-gradient(135deg, rgba(27, 66, 153, 0.1), rgba(27, 66, 153, 0.04));
+    border: 1.5px solid rgba(27, 66, 153, 0.22);
+    border-radius: var(--radius-md);
+    margin-bottom: 1.25rem;
+    color: var(--brand-primary, #1B4299);
+}
+
+.visit-date-banner svg {
+    flex-shrink: 0;
+    color: var(--brand-primary, #1B4299);
+}
+
+.visit-date-label {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.7;
+}
+
+.visit-date-value {
+    display: block;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--brand-primary, #1B4299);
+    margin-top: 0.1rem;
+}
+
+/* ─── WHATSAPP AGENT BUTTON ───────────────────────────────────────────────── */
+
+.btn-icon-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    color: var(--brand-primary);
+    background: var(--primary-10);
+    transition: all 0.2s ease;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-icon-link:hover {
+    background: var(--brand-primary);
+    color: white;
+    transform: translateY(-1px);
+}
+
+.btn-whatsapp-agent {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.85rem 1.25rem;
+    background: #25D366;
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 6px -1px rgba(37, 211, 102, 0.2);
+}
+
+.btn-whatsapp-agent:hover {
+    background: #128C7E;
+    box-shadow: 0 10px 15px -3px rgba(37, 211, 102, 0.3);
+    transform: translateY(-2px);
+}
+
+.btn-whatsapp-agent:active {
+    transform: translateY(0);
+}
+
+/* ─── PHONE LINK ──────────────────────────────────────────────────────────── */
+
+.info-phone-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--brand-primary, #1B4299);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.info-phone-link:hover {
+    text-decoration: underline;
+}
+
+/* ─── BIEN CHIPS (in VisitSheet) ──────────────────────────────────────────── */
+
+.bien-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: var(--bg-app, #f1f5f9);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+}
+
+.bien-chip.chip-type {
+    background: var(--info-bg);
+    color: var(--info);
+    border: 1px solid transparent;
+}
+
+.bien-chip.chip-offre {
+    background: var(--success-bg);
+    color: var(--success);
+    border: 1px solid transparent;
+}
+
+.bien-chip.chip-chambres {
+    background: var(--warning-bg);
+    color: var(--warning);
+    border: 1px solid transparent;
+}
+
+/* ─── VISIT AGENT SECTION ─────────────────────────────────────────────────── */
+
+.visit-agent-section {
+    border-top: 1.5px solid var(--border-subtle);
+    padding-top: 1.25rem;
+    margin-top: 0.5rem;
+}
+
+.ref-badge-mini {
+    padding: 0.1rem 0.4rem;
+    background: var(--primary-10);
+    color: var(--brand-primary);
+    border: 1px solid var(--primary-20);
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    font-family: var(--font-mono, monospace);
+    letter-spacing: 0.02em;
+}
+
+/* ─── FIN DES STYLES ─── */

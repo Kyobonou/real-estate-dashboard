@@ -3,17 +3,17 @@
     position: fixed;
     bottom: 2rem;
     right: 2rem;
-    width: 60px;
-    height: 60px;
+    width: 50px;
+    height: 50px;
     background: var(--brand-primary);
     color: white;
     border-radius: 50%;
     border: none;
-    box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4);
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     cursor: pointer;
     z-index: 1000;
 }
@@ -221,8 +221,13 @@ body.dark .message-content {
 }
 
 @keyframes chatSpin {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* Input Area */
@@ -285,11 +290,11 @@ body.dark .message-content {
 /* Mobile: chat en bottom sheet */
 @media (max-width: 640px) {
     .chat-fab {
-        bottom: 1.25rem;
+        bottom: calc(75px + env(safe-area-inset-bottom, 0px));
         right: 1rem;
-        width: 52px;
-        height: 52px;
-        font-size: 1.25rem;
+        width: 44px;
+        height: 44px;
+        font-size: 1.1rem;
     }
 
     /* Cacher le FAB quand le chat est ouvert : le X du header suffit */

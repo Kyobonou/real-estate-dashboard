@@ -4,18 +4,23 @@ import {
     Calendar as CalendarIcon, Clock, Phone, MapPin, CheckCircle,
     Search, RefreshCw, LayoutGrid, List, ChevronLeft, ChevronRight,
     ArrowUpDown, ArrowUp, ArrowDown, X, Printer, MessageSquare,
-    User, Home, Building, FileText
+    User, Home, Building, FileText, ExternalLink, Bed, Tag, AlertCircle
 } from 'lucide-react';
 import apiService from '../services/api';
 import supabaseService from '../services/supabaseService';
 import { useToast } from '../components/Toast';
 import Skeleton from '../components/Skeleton';
 import { debounce } from '../utils/performance';
+import pdfService from '../services/pdfService';
+import { extractBestPhone, formatPhoneCI } from '../utils/phoneUtils';
+import PullToRefresh from '../components/PullToRefresh';
+import ConfettiEffect from '../components/ConfettiEffect';
+import { hapticSuccess, hapticLight, hapticMedium } from '../utils/haptics';
 import './Visits.css';
 
 // ─── VISIT SHEET (FICHE DE VISITE) MODAL ────────────────────────────────────
 
-const VisitSheet = ({ visit, onClose }) => {
+const VisitSheet = ({ visit, onClose, onSuccess }) => {
     const [property, setProperty] = useState(null);
     const [loadingProp, setLoadingProp] = useState(false);
 
@@ -30,191 +35,313 @@ const VisitSheet = ({ visit, onClose }) => {
         }
     }, [visit]);
 
+    const displayPrice = useMemo(() => {
+        if (visit?.localInteresse && typeof visit.localInteresse === 'string' && visit.localInteresse.includes('|')) {
+            const parts = visit.localInteresse.split('|').map(p => p.trim());
+            if (parts.length >= 3) {
+                const pricePart = parts[parts.length - 1];
+                if (/\d|million|mille|fcfa/i.test(pricePart)) {
+                    return pricePart;
+                }
+            }
+        }
+        if (property?.prixFormate) {
+            return `${property.prixFormate} FCFA`;
+        }
+        return '';
+    }, [visit, property]);
+
     if (!visit) return null;
 
-    const handlePrint = () => window.print();
+    const _buildPdfData = () => {
+        const lieu = property
+            ? [property.commune, property.quartier, property.zone].filter(Boolean).join(', ')
+            : visit.localInteresse || '';
 
-    const handleAgentWhatsApp = () => {
-        const phone = (property?.telephoneBien || property?.telephoneExpediteur || '').replace(/\D/g, '');
-        if (!phone) return;
-        const lieu = [property?.commune, property?.quartier, property?.zone].filter(Boolean).join(', ');
-        const bien = property ? `${property.typeBien} à ${lieu || 'localisation inconnue'}` : visit.localInteresse || 'votre bien';
-        const msg = encodeURIComponent(`Bonjour${property?.expediteur ? ' ' + property.expediteur : ''},\n\nJe souhaite organiser une visite avec ${visit.nomPrenom} pour ${bien}.\nDate prévue : ${visit.dateRv || 'à confirmer'}.\n\nMerci de me confirmer votre disponibilité.`);
-        window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+        const _propPhone = extractBestPhone(property);
+        const agentPhone = _propPhone || visit.agence_tel || '';
+        const agentName = property?.publiePar || property?.expediteur || visit.agence_nom || '';
+
+        return {
+            content: visit.nomPrenom || 'Visiteur',
+            property: property
+                ? `${property.typeBien || 'Bien'} ${property.typeOffre || ''}`.trim()
+                : visit.localInteresse || 'Bien immobilier',
+            address: lieu,
+            price: displayPrice,
+            date: visit.dateRv || '',
+            phone: visit.numero || '',
+            ref: property?.refBien || visit.refBien || '',
+            agentPhone: agentPhone,
+            agentName: agentName,
+            caracteristiques: property?.caracteristiques || ''
+        };
     };
 
-    const agentPhone = property?.telephoneBien || property?.telephoneExpediteur || '';
-    const agentName = property?.expediteur || '';
+    const handlePrint = () => {
+        hapticSuccess();            // vibration de succès
+        pdfService.printVisitVoucher(_buildPdfData());
+        if (onSuccess) onSuccess();
+    };
+
+    const handleGeneratePdf = () => {
+        hapticSuccess();            // vibration de succès
+        pdfService.generateVisitVoucher(_buildPdfData());
+        if (onSuccess) onSuccess();
+    };
+    const _propPhone = extractBestPhone(property);
+    const agentPhone = _propPhone || visit.agence_tel || '';
+    const agentName = property?.publiePar || property?.expediteur || visit.agence_nom || '';
+
+    const handleAgentWhatsApp = (phoneOverride) => {
+        const phone = phoneOverride || agentPhone;
+        if (!phone) return;
+        hapticMedium();
+        const lieu = property
+            ? [property.commune, property.quartier, property.zone].filter(Boolean).join(', ')
+            : visit.localInteresse || '';
+        const bien = property
+            ? `${property.typeBien}${lieu ? ' à ' + lieu : ''}`
+            : visit.localInteresse || 'votre bien';
+        const ref = property?.refBien || visit.refBien || '';
+        const greetingName = agentName;
+        const greeting = greetingName ? ` ${greetingName}` : '';
+        const msg = encodeURIComponent(
+            `Bonjour${greeting},\n\n` +
+            `Je souhaite organiser une visite avec *${visit.nomPrenom || 'un client'}* pour *${bien}*${ref ? ` (Réf: ${ref})` : ''}.\n` +
+            `📅 Date prévue : *${visit.dateRv || 'à confirmer'}*\n\n` +
+            `Merci de me confirmer votre disponibilité.`
+        );
+        window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+    };
     const lieu = property
         ? [property.commune, property.quartier, property.zone].filter(Boolean).join(' · ') || '—'
         : visit.localInteresse || '—';
     const description = property?.description || '';
+    const groupSource = property?.groupeWhatsApp || property?.groupeWhatsappOrigine || property?.groupName || '';
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content visit-sheet-modal" onClick={e => e.stopPropagation()}>
-                {/* Header */}
-                <div className="modal-header">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <FileText size={20} />
-                        <div>
-                            <h2 style={{ margin: 0, fontSize: '1.1rem' }}>Fiche de Visite</h2>
-                            {visit.refBien && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{visit.refBien}</span>}
+        <AnimatePresence>
+            <>
+                {/* Backdrop - fixed overlay */}
+                <motion.div
+                    className="visit-drawer-backdrop"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    onClick={onClose}
+                />
+                {/* Drawer Panel */}
+                <motion.div
+                    className="visit-drawer-panel"
+                    initial={{ x: '100%' }}
+                    animate={{ x: 0 }}
+                    exit={{ x: '100%' }}
+                    transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+                    onClick={e => e.stopPropagation()}
+                >
+                    {/* ── Header ── */}
+                    <div className="visit-drawer-header">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <FileText size={20} />
+                            <div>
+                                <h2 style={{ margin: 0, fontSize: '1.1rem' }}>Fiche de Visite</h2>
+                                {visit.refBien && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Réf. {visit.refBien}</span>}
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button className="btn btn-primary btn-sm" onClick={handleGeneratePdf}>
+                                <FileText size={16} /><span>Bon de visite</span>
+                            </button>
+                            <button className="btn btn-secondary btn-sm" onClick={handlePrint}>
+                                <Printer size={16} /><span>Imprimer</span>
+                            </button>
+                            <button className="btn-icon-close" onClick={onClose}><X size={20} /></button>
                         </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button className="btn btn-secondary btn-sm" onClick={handlePrint} title="Imprimer">
-                            <Printer size={16} />
-                            <span>Imprimer</span>
-                        </button>
-                        <button className="btn-icon-close" onClick={onClose}><X size={20} /></button>
-                    </div>
-                </div>
 
-                <div className="visit-sheet-body">
+                    <div className="visit-sheet-body">
 
-                    {/* ── Section Client & Date ── */}
-                    <div className="visit-sheet-section visit-sheet-highlight">
-                        <h3 className="section-title"><User size={16} /> Informations Client</h3>
-                        <div className="visit-sheet-grid-2">
-                            <div className="visit-info-block">
-                                <span className="info-label">Nom du client</span>
-                                <span className="info-value large">{visit.nomPrenom || '—'}</span>
+                        {/* ── DATE DE VISITE – Bandeau prioritaire ── */}
+                        <div className="visit-date-banner">
+                            <CalendarIcon size={20} />
+                            <div>
+                                <span className="visit-date-label">Date de visite prévue</span>
+                                <span className="visit-date-value">{visit.dateRv || 'Non définie'}</span>
                             </div>
-                            <div className="visit-info-block">
-                                <span className="info-label">Téléphone client</span>
-                                <span className="info-value large">{visit.numero || '—'}</span>
-                            </div>
-                            <div className="visit-info-block">
-                                <span className="info-label">Date de visite prévue</span>
-                                <span className="info-value large" style={{ color: 'var(--primary)' }}>{visit.dateRv || '—'}</span>
-                            </div>
-                            <div className="visit-info-block">
-                                <span className="info-label">Statut</span>
-                                <span className={`badge ${visit.visiteProg ? 'badge-success' : 'badge-warning'}`} style={{ display: 'inline-flex', marginTop: '0.25rem' }}>
-                                    {visit.visiteProg ? <CheckCircle size={14} /> : <Clock size={14} />}
-                                    {visit.visiteProg ? 'Visite confirmée' : 'En attente de confirmation'}
+                            <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                                <span className={`badge ${visit.visiteProg ? 'badge-success' : 'badge-warning'}`} style={{ display: 'inline-flex', gap: '0.3rem', alignItems: 'center' }}>
+                                    {visit.visiteProg ? <CheckCircle size={13} /> : <Clock size={13} />}
+                                    {visit.visiteProg ? 'Confirmée' : 'En attente'}
                                 </span>
+                                {visit.created_at && (
+                                    <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', textAlign: 'right', marginTop: '2px' }}>
+                                        Enregistré le {new Date(visit.created_at).toLocaleString('fr-FR', {
+                                            day: '2-digit', month: '2-digit', year: '2-digit',
+                                            hour: '2-digit', minute: '2-digit'
+                                        })}
+                                    </span>
+                                )}
                             </div>
                         </div>
-                    </div>
 
-                    {/* ── Section Bien à Visiter ── */}
-                    <div className="visit-sheet-section">
-                        <h3 className="section-title"><Building size={16} /> Bien à Visiter</h3>
-                        {loadingProp ? (
-                            <div style={{ padding: '1rem 0' }}>
-                                <Skeleton width="100%" height="16px" style={{ marginBottom: '0.5rem' }} />
-                                <Skeleton width="70%" height="16px" />
-                            </div>
-                        ) : property ? (
-                            <>
-                                <div className="visit-sheet-grid-2">
-                                    <div className="visit-info-block">
-                                        <span className="info-label">Référence</span>
-                                        <span className="info-value">{property.refBien || '—'}</span>
-                                    </div>
-                                    <div className="visit-info-block">
-                                        <span className="info-label">Type</span>
-                                        <span className="info-value">{property.typeBien} — {property.typeOffre}</span>
-                                    </div>
-                                    <div className="visit-info-block">
-                                        <span className="info-label">Localisation</span>
-                                        <span className="info-value">{lieu}</span>
-                                    </div>
-                                    <div className="visit-info-block">
-                                        <span className="info-label">Prix</span>
-                                        <span className="info-value" style={{ fontWeight: 700 }}>{property.prixFormate} FCFA</span>
-                                    </div>
-                                    {property.chambre && (
-                                        <div className="visit-info-block">
-                                            <span className="info-label">Chambres</span>
-                                            <span className="info-value">{property.chambre}</span>
-                                        </div>
-                                    )}
-                                    {property.meubles && (
-                                        <div className="visit-info-block">
-                                            <span className="info-label">Meublé</span>
-                                            <span className="info-value">{property.meubles}</span>
-                                        </div>
-                                    )}
-                                </div>
-                                {description && (
-                                    <div style={{ marginTop: '1rem' }}>
-                                        <span className="info-label">Description (message original)</span>
-                                        <pre className="message-preview" style={{ marginTop: '0.5rem', maxHeight: '120px', overflow: 'auto' }}>{description}</pre>
-                                    </div>
-                                )}
-                            </>
-                        ) : (
-                            <div className="visit-info-block">
-                                <span className="info-label">Bien concerné</span>
-                                <span className="info-value">{visit.localInteresse || '—'}</span>
-                                {visit.refBien && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>Réf: {visit.refBien} (non trouvé en base)</span>}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* ── Section Agent / Démarcheur ── */}
-                    <div className="visit-sheet-section">
-                        <h3 className="section-title"><MessageSquare size={16} /> Agent Immobilier / Démarcheur</h3>
-                        {property ? (
+                        {/* ── Section Client ── */}
+                        <div className="visit-sheet-section visit-sheet-highlight">
+                            <h3 className="section-title"><User size={16} /> Client</h3>
                             <div className="visit-sheet-grid-2">
                                 <div className="visit-info-block">
                                     <span className="info-label">Nom</span>
-                                    <span className="info-value">{agentName || '—'}</span>
+                                    <span className="info-value large">{visit.nomPrenom || '—'}</span>
                                 </div>
                                 <div className="visit-info-block">
                                     <span className="info-label">Téléphone</span>
-                                    <span className="info-value">{agentPhone || '—'}</span>
+                                    {visit.numero ? (
+                                        <a href={`tel:${visit.numero}`} className="info-value large info-phone-link">
+                                            <Phone size={13} /> {visit.numero}
+                                        </a>
+                                    ) : <span className="info-value large">—</span>}
                                 </div>
-                                {property.groupeWhatsappOrigine && (
+                            </div>
+                        </div>
+
+                        {/* ── Section Bien à Visiter ── */}
+                        <div className="visit-sheet-section">
+                            <h3 className="section-title"><Building size={16} /> Bien à Visiter</h3>
+                            {loadingProp ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.5rem 0' }}>
+                                    <Skeleton width="100%" height="16px" />
+                                    <Skeleton width="70%" height="16px" />
+                                    <Skeleton width="50%" height="16px" />
+                                </div>
+                            ) : property ? (
+                                <>
+                                    {/* Badges type / offre */}
+                                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                                        {property.typeBien && <span className="bien-chip chip-type"><Home size={11} />{property.typeBien}</span>}
+                                        {property.typeOffre && <span className="bien-chip chip-offre"><Tag size={11} />{property.typeOffre}</span>}
+                                        {property.chambre && <span className="bien-chip chip-chambres"><Bed size={11} />{property.chambre}{String(property.chambre).match(/ch|pièce|piece/i) ? '' : ' ch.'}</span>}
+                                        {property.meubles && <span className="bien-chip">Meublé</span>}
+                                    </div>
+                                    <div className="visit-sheet-grid-2">
+                                        <div className="visit-info-block" style={{ minWidth: 0 }}>
+                                            <span className="info-label">Référence</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                                <span className="info-value" style={{ fontWeight: 600, wordBreak: 'break-all' }}>{property.refBien || '—'}</span>
+                                                {property.refBien && (
+                                                    <a
+                                                        href={`/biens?search=${property.refBien}`}
+                                                        className="btn-icon-link"
+                                                        title="Voir ce bien"
+                                                        onClick={(e) => { e.preventDefault(); window.location.href = `/biens?search=${property.refBien}`; }}
+                                                    >
+                                                        <ExternalLink size={14} />
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="visit-info-block">
+                                            <span className="info-label">Prix</span>
+                                            <span className="info-value" style={{ fontWeight: 700, color: 'var(--brand-primary)' }}>
+                                                {displayPrice || '—'}
+                                            </span>
+                                        </div>
+                                        <div className="visit-info-block" style={{ gridColumn: '1 / -1' }}>
+                                            <span className="info-label"><MapPin size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> Localisation</span>
+                                            <span className="info-value">{lieu}</span>
+                                        </div>
+                                    </div>
+                                    {description && (
+                                        <div style={{ marginTop: '0.75rem' }}>
+                                            <span className="info-label">Annonce originale</span>
+                                            <pre className="message-preview" style={{ marginTop: '0.4rem', maxHeight: '100px', overflow: 'auto', fontSize: '0.78rem', whiteSpace: 'pre-wrap' }}>{description}</pre>
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <div>
+                                    <div className="visit-info-block">
+                                        <span className="info-label">Bien concerné (saisi manuellement)</span>
+                                        <span className="info-value">{visit.localInteresse || '—'}</span>
+                                    </div>
+                                    {visit.refBien && (
+                                        <div style={{ marginTop: '0.5rem', padding: '0.6rem 0.8rem', background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                            <AlertCircle size={14} style={{ color: '#d97706', flexShrink: 0 }} />
+                                            Réf. <strong>{visit.refBien}</strong> introuvable en base.
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* ── Section Agent / Démarcheur ── */}
+                        <div className="visit-sheet-section visit-agent-section">
+                            <h3 className="section-title"><MessageSquare size={16} /> Contact Annonceur</h3>
+                            <div className="visit-sheet-grid-2">
+                                <div className="visit-info-block">
+                                    <span className="info-label">Agent / Démarcheur</span>
+                                    <span className="info-value">{agentName || 'Non spécifié'}</span>
+                                </div>
+                                <div className="visit-info-block">
+                                    <span className="info-label">Téléphone</span>
+                                    {agentPhone ? (
+                                        <a href={`tel:${agentPhone}`} className="info-value info-phone-link">
+                                            <Phone size={13} /> {agentPhone}
+                                        </a>
+                                    ) : <span className="info-value">—</span>}
+                                </div>
+                                {groupSource && (
                                     <div className="visit-info-block" style={{ gridColumn: '1 / -1' }}>
                                         <span className="info-label">Groupe WhatsApp source</span>
-                                        <span className="info-value">{property.groupeWhatsappOrigine}</span>
+                                        <span className="info-value">{groupSource}</span>
                                     </div>
                                 )}
                             </div>
-                        ) : (
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-                                Retrouvez le bien en base (réf: {visit.refBien || visit.localInteresse || '—'}) pour voir les coordonnées de l'agent.
-                            </p>
-                        )}
 
-                        {agentPhone && (
-                            <button
-                                className="btn btn-whatsapp"
-                                style={{ marginTop: '1rem', width: '100%' }}
-                                onClick={handleAgentWhatsApp}
-                            >
-                                <MessageSquare size={16} />
-                                Contacter l'agent par WhatsApp
-                            </button>
-                        )}
-                    </div>
+                            {/* Bouton WhatsApp agent — visible si téléphone disponible */}
+                            {agentPhone ? (
+                                <button
+                                    className="btn-whatsapp-agent"
+                                    style={{ marginTop: '1.25rem', width: '100%', justifyContent: 'center', fontWeight: 600 }}
+                                    onClick={() => handleAgentWhatsApp(agentPhone)}
+                                >
+                                    <MessageSquare size={18} />
+                                    Organiser la visite sur WhatsApp
+                                </button>
+                            ) : (
+                                <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', gap: '0.75rem', alignItems: 'flex-start', border: '1px dashed var(--border-color)' }}>
+                                    <AlertCircle size={18} style={{ color: 'var(--brand-warning)', flexShrink: 0 }} />
+                                    <div>
+                                        <p style={{ fontWeight: 600, margin: '0 0 0.25rem 0', color: 'var(--text-primary)' }}>Coordonnées manquantes</p>
+                                        <p style={{ margin: 0 }}>Nous n'avons pas pu identifier l'annonceur. Vous pouvez essayer de retrouver le bien avec la référence <strong>{visit.refBien || 'N/A'}</strong>.</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
 
-                    {/* ── Signatures ── */}
-                    <div className="visit-sheet-section visit-signatures print-only-show">
-                        <h3 className="section-title">Signatures</h3>
-                        <div className="visit-sheet-grid-2">
-                            <div className="signature-block">
-                                <p className="signature-role">Agent Immobilier</p>
-                                <p className="signature-name">{agentName || '____________________'}</p>
-                                <div className="signature-line"></div>
-                                <p className="signature-caption">Signature</p>
-                            </div>
-                            <div className="signature-block">
-                                <p className="signature-role">Client</p>
-                                <p className="signature-name">{visit.nomPrenom || '____________________'}</p>
-                                <div className="signature-line"></div>
-                                <p className="signature-caption">Signature</p>
+                        {/* ── Signatures (impression) ── */}
+                        <div className="visit-sheet-section visit-signatures print-only-show">
+                            <h3 className="section-title">Signatures</h3>
+                            <div className="visit-sheet-grid-2">
+                                <div className="signature-block">
+                                    <p className="signature-role">Agent Immobilier</p>
+                                    <p className="signature-name">{agentName || '____________________'}</p>
+                                    <div className="signature-line"></div>
+                                    <p className="signature-caption">Signature</p>
+                                </div>
+                                <div className="signature-block">
+                                    <p className="signature-role">Client</p>
+                                    <p className="signature-name">{visit.nomPrenom || '____________________'}</p>
+                                    <div className="signature-line"></div>
+                                    <p className="signature-caption">Signature</p>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                </div>
-            </div>
-        </div>
+                    </div>
+                </motion.div>
+            </>
+        </AnimatePresence>
     );
 };
 
@@ -244,7 +371,7 @@ const VisitsSkeleton = ({ viewMode }) => (
                 <table className="visits-table">
                     <thead>
                         <tr>
-                            {[1, 2, 3, 4, 5].map(k => <th key={k}><Skeleton width="60%" height="16px" /></th>)}
+                            {[1, 2, 3, 4, 5, 6].map(k => <th key={k}><Skeleton width="60%" height="16px" /></th>)}
                         </tr>
                     </thead>
                     <tbody>
@@ -253,6 +380,7 @@ const VisitsSkeleton = ({ viewMode }) => (
                                 <td><div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}><Skeleton className="skeleton-circle" width="32px" height="32px" /><Skeleton width="100px" height="16px" /></div></td>
                                 <td><Skeleton width="80px" height="16px" /></td>
                                 <td><Skeleton width="100px" height="16px" /></td>
+                                <td><Skeleton width="90px" height="16px" /></td>
                                 <td><Skeleton width="80px" height="24px" style={{ borderRadius: '20px' }} /></td>
                                 <td><Skeleton width="80px" height="32px" /></td>
                             </tr>
@@ -295,6 +423,7 @@ const VisitActions = React.memo(({ visit, addToast, onOpenSheet }) => {
             addToast({ type: 'warning', title: 'Erreur', message: 'Numéro de téléphone manquant' });
             return;
         }
+        hapticMedium();
         window.open(`tel:${visit.numero}`, '_self');
     };
 
@@ -304,6 +433,7 @@ const VisitActions = React.memo(({ visit, addToast, onOpenSheet }) => {
             addToast({ type: 'warning', title: 'Erreur', message: 'Numéro de téléphone manquant' });
             return;
         }
+        hapticMedium();
         let phone = visit.numero.replace(/\D/g, '');
         if (phone.startsWith('0')) phone = '225' + phone.substring(1);
         else if (phone.length === 10) phone = '225' + phone;
@@ -334,7 +464,7 @@ const GridView = React.memo(({ visits, addToast, onOpenSheet }) => (
             <div
                 key={visit.id}
                 className={`card visit-card-v2 ${visit.visiteProg ? 'programmed' : 'tentative'} fade-in`}
-                onClick={() => onOpenSheet(visit)}
+                onClick={() => { hapticLight(); onOpenSheet(visit); }}
                 style={{ cursor: 'pointer' }}
             >
                 <div className={`badge ${visit.visiteProg ? 'badge-success' : 'badge-warning'}`}>
@@ -349,7 +479,10 @@ const GridView = React.memo(({ visits, addToast, onOpenSheet }) => (
                         </div>
                         <div className="user-text">
                             <h3>{visit.nomPrenom || 'Client Inconnu'}</h3>
-                            <span>{visit.numero || '-'}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <span style={{ fontSize: '0.85rem', opacity: 0.8 }}>{visit.numero || '-'}</span>
+                                {visit.refBien && <span className="ref-badge-mini">{visit.refBien}</span>}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -365,8 +498,20 @@ const GridView = React.memo(({ visits, addToast, onOpenSheet }) => (
                     <div className="detail-item">
                         <CalendarIcon size={16} />
                         <div>
-                            <span className="label">Date</span>
+                            <span className="label">Date Prévue</span>
                             <span className="value">{visit.dateRv}</span>
+                        </div>
+                    </div>
+                    <div className="detail-item" style={{ gridColumn: '1 / -1' }}>
+                        <Clock size={16} />
+                        <div>
+                            <span className="label">Enregistré le</span>
+                            <span className="value">
+                                {visit.created_at ? new Date(visit.created_at).toLocaleString('fr-FR', {
+                                    day: '2-digit', month: '2-digit', year: '2-digit',
+                                    hour: '2-digit', minute: '2-digit'
+                                }) : '-'}
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -401,6 +546,9 @@ const ListView = React.memo(({ visits, addToast, sortConfig, onSort, onOpenSheet
                         <th onClick={() => onSort('dateRv')} className="sortable-header">
                             <div className="header-cell-content">Date Prévue {getSortIcon('dateRv')}</div>
                         </th>
+                        <th onClick={() => onSort('created_at')} className="sortable-header">
+                            <div className="header-cell-content">Enregistré le {getSortIcon('created_at')}</div>
+                        </th>
                         <th onClick={() => onSort('visiteProg')} className="sortable-header">
                             <div className="header-cell-content">Statut {getSortIcon('visiteProg')}</div>
                         </th>
@@ -409,7 +557,7 @@ const ListView = React.memo(({ visits, addToast, sortConfig, onSort, onOpenSheet
                 </thead>
                 <tbody>
                     {visits.map((visit) => (
-                        <tr key={visit.id} onClick={() => onOpenSheet(visit)} style={{ cursor: 'pointer' }}>
+                        <tr key={visit.id} onClick={() => { hapticLight(); onOpenSheet(visit); }} style={{ cursor: 'pointer' }}>
                             <td>
                                 <div className="list-user-cell">
                                     <div className="list-user-avatar" style={{ background: visit.visiteProg ? 'var(--gradient-success)' : 'var(--gradient-primary)' }}>
@@ -423,6 +571,14 @@ const ListView = React.memo(({ visits, addToast, sortConfig, onSort, onOpenSheet
                             </td>
                             <td>{visit.localInteresse || '-'}</td>
                             <td>{visit.dateRv}</td>
+                            <td>
+                                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                    {visit.created_at ? new Date(visit.created_at).toLocaleString('fr-FR', {
+                                        day: '2-digit', month: '2-digit', year: '2-digit',
+                                        hour: '2-digit', minute: '2-digit'
+                                    }) : '-'}
+                                </span>
+                            </td>
                             <td>
                                 <span className={`badge ${visit.visiteProg ? 'badge-success' : 'badge-warning'}`}>
                                     {visit.visiteProg ? 'Confirmée' : 'Tentative'}
@@ -528,6 +684,7 @@ const Visits = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [sortConfig, setSortConfig] = useState({ key: 'dateRv', direction: 'desc' });
     const [selectedVisit, setSelectedVisit] = useState(null);
+    const [showSuccess, setShowSuccess] = useState(false);
     const ITEMS_PER_PAGE = 20;
     const { addToast } = useToast();
 
@@ -575,6 +732,7 @@ const Visits = () => {
             const matchesSearch =
                 (visit.nomPrenom || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (visit.localInteresse || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (visit.refBien || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (visit.numero || '').includes(searchTerm);
             const matchesFilter =
                 filter === 'all' ||
@@ -615,100 +773,110 @@ const Visits = () => {
     }
 
     return (
-        <div className="visits-v2 fade-in">
+        <PullToRefresh onRefresh={loadVisits}>
+            <div className={`visits-v2 fade-in ${selectedVisit ? 'has-side-panel' : ''}`}>
+                <ConfettiEffect isActive={showSuccess} onComplete={() => setShowSuccess(false)} />
 
-            {/* Visit Sheet Modal */}
-            <AnimatePresence>
-                {selectedVisit && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.15 }}
-                    >
-                        <VisitSheet visit={selectedVisit} onClose={() => setSelectedVisit(null)} />
-                    </motion.div>
+                {/* Visit Sheet Modal */}
+                <AnimatePresence>
+                    {selectedVisit && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.15 }}
+                        >
+                            <VisitSheet
+                                visit={selectedVisit}
+                                onClose={() => setSelectedVisit(null)}
+                                onSuccess={() => setShowSuccess(true)}
+                            />
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                <header className="visits-header">
+                    <div className="header-text">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <h1 style={{ margin: 0 }}>Gestion des Visites</h1>
+                            <span className="badge badge-primary" style={{ fontSize: '0.6rem', padding: '0.1rem 0.4rem', opacity: 0.8 }}>v2.1</span>
+                        </div>
+                        <p className="text-muted">Planifiez et suivez les rencontres avec vos clients</p>
+                    </div>
+                    <div className="header-actions">
+                        <button className={`btn btn-secondary ${refreshing ? 'spinning' : ''}`} onClick={handleRefresh}>
+                            <RefreshCw size={18} />
+                            <span className="desktop-only">Actualiser</span>
+                        </button>
+                    </div>
+                </header>
+
+                <div className="visits-toolbar">
+                    <div className="toolbar-left">
+                        <div className="search-box">
+                            <Search size={18} />
+                            <input
+                                type="text"
+                                placeholder="Rechercher..."
+                                defaultValue={searchTerm}
+                                onChange={(e) => debouncedSearch(e.target.value)}
+                            />
+                        </div>
+                        <div className="filter-chips">
+                            <button className={`chip ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>Toutes</button>
+                            <button className={`chip ${filter === 'programmed' ? 'active' : ''}`} onClick={() => setFilter('programmed')}>Confirmées</button>
+                            <button className={`chip ${filter === 'tentative' ? 'active' : ''}`} onClick={() => setFilter('tentative')}>Tentatives</button>
+                        </div>
+                    </div>
+                    <div className="view-toggles">
+                        <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')} title="Vue Grille"><LayoutGrid size={20} /></button>
+                        <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')} title="Vue Liste"><List size={20} /></button>
+                        <button className={`view-btn ${viewMode === 'calendar' ? 'active' : ''}`} onClick={() => setViewMode('calendar')} title="Vue Calendrier"><CalendarIcon size={20} /></button>
+                    </div>
+                </div>
+
+                {viewMode === 'grid' && <GridView visits={paginatedVisits} addToast={addToast} onOpenSheet={setSelectedVisit} />}
+                {viewMode === 'list' && <ListView visits={paginatedVisits} addToast={addToast} sortConfig={sortConfig} onSort={handleSort} onOpenSheet={setSelectedVisit} />}
+                {viewMode === 'calendar' && <CalendarView visits={visits} onOpenSheet={setSelectedVisit} />}
+
+                {viewMode !== 'calendar' && filteredVisits.length === 0 && (
+                    <div className="empty-state">
+                        <CalendarIcon size={48} />
+                        <p>Aucune visite ne correspond à vos critères</p>
+                        <button className="btn btn-secondary" onClick={() => { setFilter('all'); setSearchTerm(''); }}>
+                            Effacer les filtres
+                        </button>
+                    </div>
                 )}
-            </AnimatePresence>
 
-            <header className="visits-header">
-                <div className="header-text">
-                    <h1>Gestion des Visites</h1>
-                    <p>{visits.length} visites enregistrées</p>
-                </div>
-                <div className="header-actions">
-                    <button className={`btn btn-secondary ${refreshing ? 'spinning' : ''}`} onClick={handleRefresh}>
-                        <RefreshCw size={18} />
-                        <span className="desktop-only">Actualiser</span>
-                    </button>
-                </div>
-            </header>
-
-            <div className="visits-toolbar">
-                <div className="toolbar-left">
-                    <div className="search-box">
-                        <Search size={18} />
-                        <input
-                            type="text"
-                            placeholder="Rechercher..."
-                            defaultValue={searchTerm}
-                            onChange={(e) => debouncedSearch(e.target.value)}
-                        />
+                {viewMode !== 'calendar' && filteredVisits.length > ITEMS_PER_PAGE && (
+                    <div className="pagination-controls" style={{
+                        display: 'flex', justifyContent: 'center', alignItems: 'center',
+                        gap: '0.5rem', padding: '2rem 0', marginTop: '2rem',
+                        borderTop: '1px solid var(--border-color)'
+                    }}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>Précédent</button>
+                        <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                            {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                .filter(page => page <= 3 || page > totalPages - 3 || Math.abs(page - currentPage) <= 1)
+                                .map((page, index, array) => {
+                                    const prevPage = array[index - 1];
+                                    return (
+                                        <React.Fragment key={page}>
+                                            {prevPage && page - prevPage > 1 && <span style={{ padding: '0 0.5rem', color: 'var(--text-secondary)' }}>...</span>}
+                                            <button className={`btn ${currentPage === page ? 'btn-primary' : 'btn-ghost'} btn-sm`} onClick={() => setCurrentPage(page)} style={{ minWidth: '2.5rem' }}>{page}</button>
+                                        </React.Fragment>
+                                    );
+                                })}
+                        </div>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Suivant</button>
+                        <span style={{ marginLeft: '1rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                            Page {currentPage} sur {totalPages} ({filteredVisits.length} visites)
+                        </span>
                     </div>
-                    <div className="filter-chips">
-                        <button className={`chip ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>Toutes</button>
-                        <button className={`chip ${filter === 'programmed' ? 'active' : ''}`} onClick={() => setFilter('programmed')}>Confirmées</button>
-                        <button className={`chip ${filter === 'tentative' ? 'active' : ''}`} onClick={() => setFilter('tentative')}>Tentatives</button>
-                    </div>
-                </div>
-                <div className="view-toggles">
-                    <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')} title="Vue Grille"><LayoutGrid size={20} /></button>
-                    <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')} title="Vue Liste"><List size={20} /></button>
-                    <button className={`view-btn ${viewMode === 'calendar' ? 'active' : ''}`} onClick={() => setViewMode('calendar')} title="Vue Calendrier"><CalendarIcon size={20} /></button>
-                </div>
+                )}
             </div>
-
-            {viewMode === 'grid' && <GridView visits={paginatedVisits} addToast={addToast} onOpenSheet={setSelectedVisit} />}
-            {viewMode === 'list' && <ListView visits={paginatedVisits} addToast={addToast} sortConfig={sortConfig} onSort={handleSort} onOpenSheet={setSelectedVisit} />}
-            {viewMode === 'calendar' && <CalendarView visits={visits} onOpenSheet={setSelectedVisit} />}
-
-            {viewMode !== 'calendar' && filteredVisits.length === 0 && (
-                <div className="empty-state">
-                    <CalendarIcon size={48} />
-                    <p>Aucune visite ne correspond à vos critères</p>
-                    <button className="btn btn-secondary" onClick={() => { setFilter('all'); setSearchTerm(''); }}>
-                        Effacer les filtres
-                    </button>
-                </div>
-            )}
-
-            {viewMode !== 'calendar' && filteredVisits.length > ITEMS_PER_PAGE && (
-                <div className="pagination-controls" style={{
-                    display: 'flex', justifyContent: 'center', alignItems: 'center',
-                    gap: '0.5rem', padding: '2rem 0', marginTop: '2rem',
-                    borderTop: '1px solid var(--border-color)'
-                }}>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>Précédent</button>
-                    <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
-                        {Array.from({ length: totalPages }, (_, i) => i + 1)
-                            .filter(page => page <= 3 || page > totalPages - 3 || Math.abs(page - currentPage) <= 1)
-                            .map((page, index, array) => {
-                                const prevPage = array[index - 1];
-                                return (
-                                    <React.Fragment key={page}>
-                                        {prevPage && page - prevPage > 1 && <span style={{ padding: '0 0.5rem', color: 'var(--text-secondary)' }}>...</span>}
-                                        <button className={`btn ${currentPage === page ? 'btn-primary' : 'btn-ghost'} btn-sm`} onClick={() => setCurrentPage(page)} style={{ minWidth: '2.5rem' }}>{page}</button>
-                                    </React.Fragment>
-                                );
-                            })}
-                    </div>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Suivant</button>
-                    <span style={{ marginLeft: '1rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                        Page {currentPage} sur {totalPages} ({filteredVisits.length} visites)
-                    </span>
-                </div>
-            )}
-        </div>
+        </PullToRefresh>
     );
 };
 

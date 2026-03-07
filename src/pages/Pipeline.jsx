@@ -72,12 +72,41 @@ const Pipeline = () => {
         }
     };
 
-    const handleGenerateDoc = (e, item) => {
+    const handleGenerateDoc = async (e, item) => {
         e.stopPropagation();
+
+        let propertyData = null;
+        if (item.ref) {
+            try {
+                const res = await apiService.sheetsApi.getPropertyByRef(item.ref);
+                if (res.success && res.data) {
+                    propertyData = res.data;
+                }
+            } catch (err) {
+                console.error("Failed to fetch property for doc", err);
+            }
+        }
+
+        const lieu = propertyData
+            ? [propertyData.commune, propertyData.quartier, propertyData.zone].filter(Boolean).join(', ')
+            : item.address || '';
+
+        const pdfData = {
+            content: item.content || 'Visiteur',
+            property: propertyData
+                ? `${propertyData.typeBien || ''} ${propertyData.typeOffre || ''}`.trim()
+                : item.property || 'Bien immobilier',
+            address: lieu,
+            price: propertyData?.prixFormate ? `${propertyData.prixFormate} FCFA` : item.price || '',
+            date: item.date || '',
+            phone: item.phone || '',
+            ref: propertyData?.refBien || item.ref || ''
+        };
+
         if (item.status === 'negotiation') {
-            pdfService.generateOffer(item);
+            pdfService.generateOffer(pdfData);
         } else {
-            pdfService.generateVisitVoucher(item);
+            pdfService.generateVisitVoucher(pdfData);
         }
     };
 

@@ -6,9 +6,17 @@ import { ToastProvider } from './components/Toast';
 import Layout from './components/Layout';
 import { NotificationProvider } from './contexts/NotificationContext';
 import ErrorBoundary from './components/ErrorBoundary';
+import ScrollToTop from './components/ScrollToTop';
 import { whatsappGroupService } from './services/whatsappGroupService';
 
-// Lazy loading des pages
+// Lazy loading des pages (Publiques)
+const PublicHome = lazy(() => import('./pages/PublicHome'));
+const PublicProperties = lazy(() => import('./pages/PublicProperties'));
+const PublicServices = lazy(() => import('./pages/PublicServices'));
+const PublicContact = lazy(() => import('./pages/PublicContact'));
+const PublicLayout = lazy(() => import('./components/PublicLayout'));
+
+// Lazy loading des pages (Dashboard)
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Properties = lazy(() => import('./pages/Properties'));
 const Visits = lazy(() => import('./pages/Visits'));
@@ -46,110 +54,282 @@ const PageLoader = () => (
 
 const AppRoutes = () => {
     const location = useLocation();
+    const siteMode = import.meta.env.VITE_SITE_MODE || 'full'; // 'app', 'vitrine' or 'full'
+
     return (
         <ErrorBoundary resetKey={location.pathname}>
             <Routes>
-                <Route path="/" element={
-                    <Layout />
-                }>
-                    <Route index element={
-                        <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary resetKey={location.pathname}>
-                                <Dashboard />
-                            </ErrorBoundary>
-                        </Suspense>
-                    } />
+                {/* ---------- LOGIQUE MULTI-SITES ---------- */}
 
-                    <Route path="properties" element={
+                {/* Mode VITRINE : Uniquement le site public */}
+                {siteMode === 'vitrine' && (
+                    <Route path="/" element={
                         <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary resetKey={location.pathname}>
-                                <Properties />
-                            </ErrorBoundary>
+                            <PublicLayout />
                         </Suspense>
-                    } />
+                    }>
+                        <Route index element={
+                            <Suspense fallback={<PageLoader />}>
+                                <ErrorBoundary resetKey={location.pathname}>
+                                    <PublicHome />
+                                </ErrorBoundary>
+                            </Suspense>
+                        } />
+                        <Route path="proprietes" element={
+                            <Suspense fallback={<PageLoader />}>
+                                <ErrorBoundary resetKey={location.pathname}>
+                                    <PublicProperties />
+                                </ErrorBoundary>
+                            </Suspense>
+                        } />
+                        <Route path="services" element={
+                            <Suspense fallback={<PageLoader />}>
+                                <ErrorBoundary resetKey={location.pathname}>
+                                    <PublicServices />
+                                </ErrorBoundary>
+                            </Suspense>
+                        } />
+                        <Route path="contact" element={
+                            <Suspense fallback={<PageLoader />}>
+                                <ErrorBoundary resetKey={location.pathname}>
+                                    <PublicContact />
+                                </ErrorBoundary>
+                            </Suspense>
+                        } />
+                        {/* Redirection si on essaie d'aller sur le dashboard depuis la vitrine */}
+                        <Route path="dashboard/*" element={<Navigate to="/" replace />} />
+                    </Route>
+                )}
 
-                    <Route path="visits" element={
-                        <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary resetKey={location.pathname}>
-                                <Visits />
-                            </ErrorBoundary>
-                        </Suspense>
-                    } />
+                {/* Mode APP : Uniquement le dashboard */}
+                {siteMode === 'app' && (
+                    <>
+                        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                        <Route path="/dashboard" element={<Layout />}>
+                            <Route index element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <Dashboard />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                            <Route path="properties" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <Properties />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                            <Route path="visits" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <Visits />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                            <Route path="images" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <ImagesPage />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                            <Route path="gallery" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <ImageGallery />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                            <Route path="expiring" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <ExpiringProperties />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                            <Route path="clients" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <Clients />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                            <Route path="analytics" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <Analytics />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                            <Route path="settings" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <Settings />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                            <Route path="requests" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <RequestsPage />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                            <Route path="tools/ad-generator" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <AdGenerator />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                            <Route path="pipeline" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <Pipeline />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                        </Route>
+                    </>
+                )}
 
-                    <Route path="images" element={
-                        <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary resetKey={location.pathname}>
-                                <ImagesPage />
-                            </ErrorBoundary>
-                        </Suspense>
-                    } />
+                {/* Mode FULL (Dev ou par défaut) : Les deux sont disponibles */}
+                {(siteMode === 'full' || !['app', 'vitrine'].includes(siteMode)) && (
+                    <>
+                        <Route path="/" element={
+                            <Suspense fallback={<PageLoader />}>
+                                <PublicLayout />
+                            </Suspense>
+                        }>
+                            <Route index element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <PublicHome />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                            <Route path="proprietes" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <PublicProperties />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                            <Route path="services" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <PublicServices />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                            <Route path="contact" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <PublicContact />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                        </Route>
 
-                    <Route path="gallery" element={
-                        <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary resetKey={location.pathname}>
-                                <ImageGallery />
-                            </ErrorBoundary>
-                        </Suspense>
-                    } />
+                        <Route path="/dashboard" element={<Layout />}>
+                            <Route index element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <Dashboard />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                            <Route path="properties" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <Properties />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                            <Route path="visits" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <Visits />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                            <Route path="images" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <ImagesPage />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
 
-                    <Route path="expiring" element={
-                        <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary resetKey={location.pathname}>
-                                <ExpiringProperties />
-                            </ErrorBoundary>
-                        </Suspense>
-                    } />
+                            <Route path="gallery" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <ImageGallery />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
 
-                    <Route path="clients" element={
-                        <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary resetKey={location.pathname}>
-                                <Clients />
-                            </ErrorBoundary>
-                        </Suspense>
-                    } />
+                            <Route path="expiring" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <ExpiringProperties />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
 
-                    <Route path="analytics" element={
-                        <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary resetKey={location.pathname}>
-                                <Analytics />
-                            </ErrorBoundary>
-                        </Suspense>
-                    } />
+                            <Route path="clients" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <Clients />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
 
-                    <Route path="settings" element={
-                        <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary resetKey={location.pathname}>
-                                <Settings />
-                            </ErrorBoundary>
-                        </Suspense>
-                    } />
+                            <Route path="analytics" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <Analytics />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
 
-                    <Route path="requests" element={
-                        <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary resetKey={location.pathname}>
-                                <RequestsPage />
-                            </ErrorBoundary>
-                        </Suspense>
-                    } />
+                            <Route path="settings" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <Settings />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
 
-                    <Route path="tools/ad-generator" element={
-                        <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary resetKey={location.pathname}>
-                                <AdGenerator />
-                            </ErrorBoundary>
-                        </Suspense>
-                    } />
+                            <Route path="requests" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <RequestsPage />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
 
-                    <Route path="pipeline" element={
-                        <Suspense fallback={<PageLoader />}>
-                            <ErrorBoundary resetKey={location.pathname}>
-                                <Pipeline />
-                            </ErrorBoundary>
-                        </Suspense>
-                    } />
+                            <Route path="tools/ad-generator" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <AdGenerator />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
 
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                </Route>
+                            <Route path="pipeline" element={
+                                <Suspense fallback={<PageLoader />}>
+                                    <ErrorBoundary resetKey={location.pathname}>
+                                        <Pipeline />
+                                    </ErrorBoundary>
+                                </Suspense>
+                            } />
+                        </Route>
+                    </>
+                )}
+
+                <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
         </ErrorBoundary>
     );
@@ -169,6 +349,7 @@ function App() {
                 <ToastProvider>
                     <NotificationProvider>
                         <BrowserRouter>
+                            <ScrollToTop />
                             <AppRoutes />
                         </BrowserRouter>
                     </NotificationProvider>

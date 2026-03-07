@@ -1,5 +1,18 @@
 {
-  "projects": {},
-  "targets": {},
+  "projects": {
+    "default": "immo-dashboard-ci"
+  },
+  "targets": {
+    "immo-dashboard-ci": {
+      "hosting": {
+        "app": [
+          "immo-dashboard-ci"
+        ],
+        "vitrine": [
+          "immo-vitrine-ci"
+        ]
+      }
+    }
+  },
   "etags": {}
 }

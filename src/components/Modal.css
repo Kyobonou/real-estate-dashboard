@@ -18,7 +18,9 @@
 }
 
 .modal {
-    background: var(--bg-panel);
+    background: var(--glass-card);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
@@ -48,8 +50,21 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1.5rem;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
     border-bottom: 1px solid var(--glass-border);
+    position: sticky;
+    top: 0;
+    background: var(--glass-card);
+    z-index: 10;
+}
+
+/* Inline prev/next nav rendered in header */
+.modal-nav-inline {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
 }
 
 .modal-header h3 {
@@ -71,6 +86,52 @@
 .modal-close:hover {
     background: rgba(255, 255, 255, 0.05);
     color: var(--text-primary);
+}
+
+.dark .modal-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+/* SIDE PANEL VARIANT (Desktop Only) */
+@media (min-width: 769px) {
+    .modal-overlay.side-panel {
+        background: transparent;
+        backdrop-filter: none;
+        pointer-events: none;
+    }
+
+    .modal-wrapper.side-panel {
+        justify-content: flex-end;
+        align-items: stretch;
+        padding: 0;
+        pointer-events: none;
+        /* User can click the list behind */
+    }
+
+    .modal.modal-side-panel {
+        pointer-events: auto;
+        /* Re-enable clicks on the panel itself */
+        margin: 0;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+        border-top: none;
+        border-bottom: none;
+        border-right: none;
+        border-left: 1px solid var(--border-strong);
+        box-shadow: -10px 0 40px rgba(0, 0, 0, 0.08);
+        max-width: 500px;
+        width: 100%;
+        background: var(--bg-panel);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .modal.modal-side-panel .modal-body {
+        flex: 1;
+        overflow-y: auto;
+    }
 }
 
 .modal-body {

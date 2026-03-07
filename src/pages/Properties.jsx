@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     MapPin, Tag, Grid, List, Search, Filter, X, Phone, Eye,
     Download, Home, Key, Loader, Bed, Building, Map,
     ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Images,
-    User, MessageSquare, Copy, Check, RefreshCw, Lock, Unlock, Sparkles
+    User, MessageSquare, Copy, Check, RefreshCw, Lock, Unlock, Sparkles, Building2
 } from 'lucide-react';
 import * as XLSX from 'xlsx'; // Import bibliothèque Excel
 import apiService from '../services/api';
@@ -15,7 +16,285 @@ import Skeleton from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
 import geocodingService from '../services/geocodingService';
 import { debounce } from '../utils/performance';
-import { formatPhoneCI, extractBestPhone } from '../utils/phoneUtils';
+import { formatPhoneCI, extractBestPhone, displayPhone } from '../utils/phoneUtils';
+
+// ── Match scoring (Demandes → Biens) ─────────────────────────────────────────
+const normStr = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+// Aliases de communes pour le scoring (même logique que RequestsPage)
+const SCORE_COMMUNE_GROUPS = [
+    { names: ['cocody', 'coccody'], aliases: ['riviera', 'angre', 'palmeraie', 'bonoumin', 'bietry', 'blockhaus', 'ii plateaux', '2 plateaux', 'deux plateaux', 'riviera golf', 'riviera 3', 'riviera 4', 'danga', 'faya', 'mpouto', 'cite verte'] },
+    { names: ['yopougon', 'yopo'], aliases: ['niangon', 'toit rouge', 'maroc', 'selmer', 'wassakara', 'ananas', 'gesco', 'andokoi', 'locodjro', 'sideci'] },
+    { names: ['marcory', 'marcori'], aliases: ['zone 4', 'zone 3', 'zone4', 'zone3', 'remblais', 'anoumabo', 'hibiscus'] },
+    { names: ['koumassi'], aliases: ['remblai', 'prodomo', 'sopim'] },
+    { names: ['treichville', 'treich'], aliases: ['aragon', 'habitat', 'gare bassam'] },
+    { names: ['plateau'], aliases: ['cite administrative', 'le plateau'] },
+    { names: ['adjame'], aliases: ['220 logements', 'williamsville', 'liberte'] },
+    { names: ['abobo'], aliases: ['baoule', 'pk18', 'n dotsre', 'abobo nord', 'clouetcha'] },
+    { names: ['port-bouet', 'portbouet', 'port bouet'], aliases: ['vridi', 'gonza', 'gonzagueville', 'aeroport'] },
+    { names: ['bingerville'], aliases: ['febca', 'mpouto'] },
+    { names: ['grand-bassam', 'grand bassam', 'bassam'], aliases: ['moossou'] },
+    { names: ['attiecoube', 'attecoube', 'attécoubé'], aliases: ['agban'] },
+];
+
+// Synonymes de types de biens
+const TYPE_SYNONYM_GROUPS = [
+    ['villa', 'maison', 'duplex', 'triplex', 'residence'],
+    ['appartement', 'appart', 'appartment', 'flat'],
+    ['studio'],
+    ['bureau', 'bureaux', 'open space'],
+    ['magasin', 'boutique', 'commerce', 'commercial', 'local commercial'],
+    ['terrain', 'parcelle', 'lot'],
+    ['immeuble'],
+    ['chambre'],
+];
+
+// Quartiers connus pour bonus de matching textuel
+const QUARTIERS_CONNUS = [
+    'angre', 'riviera', 'bonoumin', 'niangon', 'zone 4', 'zone4', 'faya',
+    'palmeraie', 'mermoz', 'bel air', 'vallon', 'vridi', 'banco', 'gonzagueville',
+    'djibi', 'gesco', 'pk18', 'pk 18', 'attoban', 'aghien', 'wassakara',
+    '2 plateaux', 'deux plateaux', 'blockhaus', 'williamsville', 'toit rouge',
+    'remblais', 'anoumabo', 'aeroport', 'marcory', 'sopim', 'prodomo',
+    'niangon nord', 'niangon sud', 'ananas', 'locodjro', 'selmer',
+];
+
+function _getCommuneGroup(cn) {
+    const s = normStr(cn);
+    for (const g of SCORE_COMMUNE_GROUPS) {
+        if (g.names.some(n => s.includes(n) || n.includes(s))) return g;
+        if (g.aliases.some(a => s.includes(a) || a.includes(s))) return g;
+    }
+    return null;
+}
+
+function _communeScore(propCommune, critCommune) {
+    if (!propCommune || !critCommune) return 0;
+    const p = normStr(propCommune);
+    const c = normStr(critCommune);
+    // Correspondance exacte ou sous-chaîne directe
+    if (p === c || p.includes(c) || c.includes(p)) return 8;
+    // Même groupe (quartier → commune ou alias → commune)
+    const pg = _getCommuneGroup(p);
+    const cg = _getCommuneGroup(c);
+    if (pg && cg && pg === cg) return 6;
+    if (pg && pg.aliases.some(a => c.includes(a))) return 6;
+    if (cg && cg.aliases.some(a => p.includes(a))) return 6;
+    return 0;
+}
+
+function _typeScore(propType, critType) {
+    if (!propType || !critType) return 0;
+    const p = normStr(propType);
+    const c = normStr(critType);
+    if (p === c) return 8;
+    if (p.includes(c) || c.includes(p)) return 5;
+    // Synonymes
+    for (const grp of TYPE_SYNONYM_GROUPS) {
+        const inP = grp.some(s => p.includes(s));
+        const inC = grp.some(s => c.includes(s));
+        if (inP && inC) return 4;
+    }
+    return 0;
+}
+
+const MATCH_STOP_WORDS = new Set([
+    'cherche', 'besoin', 'client', 'contact', 'urgent', 'dispo',
+    'notre', 'votre', 'cette', 'celui', 'leurs', 'avec', 'pour',
+    'dans', 'chez', 'bien', 'tres', 'mais', 'plus', 'aussi',
+    'tout', 'comme', 'nous', 'vous', 'dont', 'leur', 'quil',
+    'elle', 'elles', 'etre', 'avoir', 'faire', 'sont',
+    'donne', 'sous', 'vers', 'autour', 'entre', 'pourrait',
+]);
+
+function scoreProperty(property, criteria, preNormalized = {}) {
+    if (!criteria) return 0;
+    let score = 0;
+
+    // Use pre-normalized values if provided (O(1) vs expensive normStr)
+    const pOffre = preNormalized.pOffre || normStr(property.typeOffre || property.typeTransaction || '');
+    const cOffre = preNormalized.cOffre || normStr(criteria.typeOffre || '');
+
+    // ── Offer Type Match (STRICT) ───────────────────────────────────────────
+    if (criteria.typeOffre) {
+        // Infer property type based on price if not explicitly stated
+        const price = property.rawPrice || 0;
+        const isLocByPrice = (price > 0 && price < 1_000_000);
+        const isLoc = pOffre.includes('location') || (isLocByPrice && !pOffre.includes('vente'));
+        const isVente = pOffre.includes('vente') || (!isLocByPrice && !pOffre.includes('location') && price > 1_000_000);
+
+        const cIsLoc = criteria.typeOffre === 'Location';
+        const cIsVente = criteria.typeOffre === 'Vente';
+
+        if (cIsLoc && isVente) return 0; // Strict mismatch
+        if (cIsVente && isLoc) return 0; // Strict mismatch
+
+        if ((cIsLoc && isLoc) || (cIsVente && isVente)) score += 12; // High priority match
+        // No penalty for ambiguous typeOffre — let other criteria decide
+    }
+
+    // Heuristic: if rent requested but price > 10M FCFA, likely NOT a match
+    if (cOffre.includes('loc') && (property.rawPrice || 0) > 10_000_000) {
+        const pType = preNormalized.pType || normStr(property.typeBien || '');
+        if (!pType.includes('immeu') && !pType.includes('batiment')) return 0;
+    }
+
+    // ── Commune (max 10 pts) ───────────────────────────────────────────────────
+    if (criteria.commune) {
+        const cs = _communeScore(property.commune, criteria.commune);
+        score += (cs / 8) * 10;
+        // Bonus if zone/quartier contains the searched commune
+        if (cs < 8) {
+            const pZone = preNormalized.pZone || normStr([property.zone, property.quartier].filter(Boolean).join(' '));
+            const cC = preNormalized.cCommune || normStr(criteria.commune);
+            if (pZone && cC && (pZone.includes(cC) || cC.includes(pZone))) {
+                score += (cs === 0 ? 6 : 3);
+            }
+        }
+    }
+
+    // ── Type de bien (max 10 pts) ──────────────────────────────────────────────
+    if (criteria.type) {
+        const ts = _typeScore(property.typeBien || property.typeDeBien, criteria.type);
+        score += (ts / 8) * 10;
+    }
+
+    // ── Bedrooms (max 8 pts) ──────────────────────────────────────────────────
+    if (criteria.chambres) {
+        const pCh = parseInt(property.chambres) || 0;
+        if (pCh > 0) {
+            const diff = Math.abs(pCh - criteria.chambres);
+            if (diff === 0) score += 8;
+            else if (diff === 1) score += 4;
+            else if (diff === 2) score += 1;
+        }
+    }
+
+    // ── Price / Budget (max 10 pts) ─────────────────────────────────────────────
+    const pIsLoc = pOffre.includes('loc') || pOffre.includes('men');
+    const price = property.rawPrice || 0;
+    if (criteria.loyer && price) {
+        if (pIsLoc || !pOffre) {
+            const ratio = price / criteria.loyer;
+            if (ratio >= 0.6 && ratio <= 1.05) score += 10;
+            else if (ratio <= 1.25) score += 5;
+            else if (ratio <= 1.6) score += 1;
+        }
+    } else if (criteria.budget && price) {
+        if (!pIsLoc || !pOffre) {
+            const prixM = price >= 1_000_000 ? price / 1_000_000 : price;
+            const ratio = prixM / criteria.budget;
+            if (ratio >= 0.5 && ratio <= 1.05) score += 10;
+            else if (ratio <= 1.3) score += 5;
+            else if (ratio <= 1.8) score += 1;
+        }
+    }
+
+    // ── Furnished (max 5 pts) ────────────────────────
+    if (criteria.meuble !== undefined) {
+        const pMeuble = property.meuble === true || pOffre.includes('oui');
+        if (Boolean(pMeuble) === Boolean(criteria.meuble)) score += 5;
+        else score -= 5;
+    }
+
+    // ── Rich Amenities match (max 12 pts) ──────────────────────────────────────
+    const fullPropText = preNormalized.fullPropText || normStr([
+        property.caracteristiques,
+        property.description,
+        property.titre,
+        property.zone,
+        property.quartier,
+        property.commune,
+        property.message_initial
+    ].filter(Boolean).join(' '));
+
+    if (criteria.amenities) {
+        let amenityMatches = 0;
+        criteria.amenities.forEach(a => {
+            if (fullPropText.includes(a)) {
+                score += 4;
+                amenityMatches++;
+            }
+        });
+        // Bonus for having all requested amenities
+        if (amenityMatches === criteria.amenities.length && amenityMatches > 0) score += 2;
+    }
+
+    // ── Deep textual matching in message/description (max 15 pts) ───────────
+    if (criteria.originalText) {
+        const textN = preNormalized.cOriginalText || normStr(criteria.originalText);
+
+        // Quality keywords
+        const qualityKeywords = [
+            { kw: ['piscine', 'pool'], pts: 3 },
+            { kw: ['jardin', 'garden', 'espace vert'], pts: 2 },
+            { kw: ['parking', 'garage'], pts: 2 },
+            { kw: ['neuf', 'finition', 'nouveau', 'refait'], pts: 3 },
+            { kw: ['ascenseur'], pts: 2 },
+            { kw: ['securite', 'gardien', 'cloture', 'portail'], pts: 2 },
+            { kw: ['clim', 'split', 'air conditionne'], pts: 2 },
+            { kw: ['marbre', 'staffe'], pts: 2 },
+        ];
+
+        qualityKeywords.forEach(({ kw, pts }) => {
+            if (kw.some(k => textN.includes(k)) && kw.some(k => fullPropText.includes(k))) {
+                score += pts;
+            }
+        });
+
+        // Quarter name bonus
+        for (const q of QUARTIERS_CONNUS) {
+            if (textN.includes(q) && fullPropText.includes(q)) { score += 5; break; }
+        }
+
+        // General word overlap match
+        score += getDeepMatchScore(property, criteria, preNormalized);
+    }
+
+    return Math.max(0, score);
+}
+
+// ── Deep Text Search Helper (v3 - High precision) ──
+function getDeepMatchScore(property, criteria, preNormalized = {}) {
+    if (!criteria.originalText) return 0;
+
+    let score = 0;
+    const fullDesc = preNormalized.fullDescBlob || normStr([
+        property.caracteristiques,
+        property.zone,
+        property.quartier,
+        property.description,
+        property.message_initial,
+        property.publiePar,
+    ].filter(Boolean).join(' '));
+
+    const words = preNormalized.cWords || normStr(criteria.originalText)
+        .split(/[\s,;.!?/()\[\]+*#@"\n\r]+/)
+        .filter(w => w.length > 3 && !MATCH_STOP_WORDS.has(w) && !/^\d+$/.test(w));
+
+    let matchCount = 0;
+    for (const w of words) {
+        if (fullDesc.includes(w)) matchCount++;
+    }
+
+    if (matchCount > 0) score += Math.min(Math.ceil(matchCount * 2.5), 15);
+
+    return Math.max(0, score);
+}
+
+// Calcule la fraîcheur d'un bien selon sa date de publication (shelf life = 30 jours)
+const getFreshness = (dateRaw) => {
+    if (!dateRaw) return null;
+    const pub = new Date(dateRaw);
+    if (isNaN(pub.getTime())) return null;
+    const days = Math.floor((Date.now() - pub.getTime()) / 86400000);
+    if (days <= 3) return { label: 'Nouveau', color: '#10b981', bg: 'rgba(16,185,129,0.15)', pct: 100, days };
+    if (days <= 7) return { label: 'Récent', color: '#3b82f6', bg: 'rgba(59,130,246,0.15)', pct: 82, days };
+    if (days <= 15) return { label: 'En cours', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', pct: 55, days };
+    if (days <= 25) return { label: 'Expire bientôt', color: '#f97316', bg: 'rgba(249,115,22,0.15)', pct: 25, days };
+    return { label: 'Expiré', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', pct: 5, days };
+};
+import PullToRefresh from '../components/PullToRefresh';
 import './Properties.css';
 
 const PropertiesSkeleton = ({ viewMode }) => (
@@ -78,7 +357,7 @@ const PropertiesSkeleton = ({ viewMode }) => (
 );
 
 
-const PropertyDetailsModal = ({ property, isOpen, onClose, onToggleDisponible }) => {
+const PropertyDetailsModal = ({ property, isOpen, onClose, onToggleDisponible, onPrev, onNext, currentIdx, totalCount, variant = "modal" }) => {
     const { addToast } = useToast();
     const [modalImages, setModalImages] = useState([]);
     const [activeImgIdx, setActiveImgIdx] = useState(0);
@@ -86,6 +365,17 @@ const PropertyDetailsModal = ({ property, isOpen, onClose, onToggleDisponible })
     const [msgCopied, setMsgCopied] = useState(false);
     const [toggling, setToggling] = useState(false);
     const [aiImproved, setAiImproved] = useState(false);
+
+    // Keyboard navigation: ← / → between properties, Escape closes
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKey = (e) => {
+            if (e.key === 'ArrowLeft') { e.preventDefault(); onPrev?.(); }
+            if (e.key === 'ArrowRight') { e.preventDefault(); onNext?.(); }
+        };
+        window.addEventListener('keydown', handleKey);
+        return () => window.removeEventListener('keydown', handleKey);
+    }, [isOpen, onPrev, onNext]);
 
     const handleToggleDisponible = async () => {
         if (!property?.id || toggling) return;
@@ -113,33 +403,33 @@ const PropertyDetailsModal = ({ property, isOpen, onClose, onToggleDisponible })
         });
     }, [isOpen, property?.publicationId]);
 
-    const contactPhone = extractBestPhone(property);
+    // Extract best phone using utility
+    const rawContact = extractBestPhone(property);
+    const contactPhone = rawContact; // extractBestPhone already returns a clean string or ''
 
     const handleContact = () => {
         if (!contactPhone) {
             addToast({ type: 'error', title: 'Erreur', message: 'Numéro de téléphone non disponible' });
             return;
         }
-        window.open(`tel:${contactPhone}`, '_self');
-        addToast({ type: 'success', title: 'Contact', message: `Appel vers ${contactPhone}` });
+        window.open(`tel:+${contactPhone}`, '_self');
+        addToast({ type: 'success', title: 'Contact', message: `Appel vers +${contactPhone}` });
     };
 
     const handleWhatsApp = () => {
-        const phone = formatPhoneCI(contactPhone);
-        if (!phone) {
+        if (!contactPhone) {
             addToast({ type: 'error', title: 'Erreur', message: 'Numéro de téléphone non disponible' });
             return;
         }
 
         const agentName = property.expediteur || property.publiePar || '';
         const lieu = [property.commune, property.quartier].filter(Boolean).join(', ') || property.zone || '';
-        const groupeRef = (property.groupName || property.groupeWhatsApp) ? `\nGroupe source : ${property.groupName || property.groupeWhatsApp}` : '';
         const msgOrigin = property.description
             ? `\n\n------- Message d'origine -------\n${property.description}\n---------------------------------`
             : '';
 
-        const text = `Bonjour${agentName ? ' ' + agentName : ''},\n\nJe suis intéressé(e) par votre bien : ${property.typeBien} à ${lieu} (${property.prixFormate} FCFA).${groupeRef}${msgOrigin}\n\nMerci de me recontacter.`;
-        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
+        const text = `Bonjour${agentName ? ' ' + agentName : ''},\n\nJe suis intéressé(e) par votre bien : ${property.typeBien} à ${lieu} (${property.prixFormate} FCFA).\n\nMerci de me recontacter.${msgOrigin}`;
+        window.open(`https://wa.me/${contactPhone}?text=${encodeURIComponent(text)}`, '_blank');
         addToast({ type: 'success', title: 'WhatsApp', message: 'Ouverture de WhatsApp...' });
     };
 
@@ -159,9 +449,34 @@ const PropertyDetailsModal = ({ property, isOpen, onClose, onToggleDisponible })
     const agentName = property.expediteur || property.publiePar || '';
     const messageOriginal = property.description || '';
 
+    const navStrip = totalCount > 1 ? (
+        <div className="modal-nav-strip">
+            <button
+                className="modal-nav-btn"
+                onClick={onPrev}
+                disabled={currentIdx <= 0}
+                title="Bien précédent (←)"
+            >
+                <ChevronLeft size={16} />
+            </button>
+            <span className="modal-nav-counter">
+                {currentIdx + 1} <span>/</span> {totalCount}
+            </span>
+            <button
+                className="modal-nav-btn"
+                onClick={onNext}
+                disabled={currentIdx >= totalCount - 1}
+                title="Bien suivant (→)"
+            >
+                <ChevronRight size={16} />
+            </button>
+        </div>
+    ) : null;
+
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Détails du Bien" size="lg">
+        <Modal isOpen={isOpen} onClose={onClose} title="Détails du Bien" size="lg" navContent={navStrip} variant={variant}>
             <div className="property-details-modal">
+
                 <div className="property-details-header">
                     {(() => {
                         const allUrls = modalImages.length > 0
@@ -311,10 +626,21 @@ const PropertyDetailsModal = ({ property, isOpen, onClose, onToggleDisponible })
                                 </div>
                             )}
                             <div className="info-item">
-                                <Phone size={18} style={{ color: '#16a34a', flexShrink: 0 }} />
+                                <Phone size={18} style={{ color: contactPhone ? '#16a34a' : '#94a3b8', flexShrink: 0 }} />
                                 <div>
                                     <span className="info-label">Téléphone</span>
-                                    <span className="info-value" style={{ fontWeight: 600, letterSpacing: '0.3px' }}>{contactPhone || '—'}</span>
+                                    {contactPhone ? (
+                                        <a
+                                            href={`tel:+${contactPhone}`}
+                                            style={{ fontWeight: 600, letterSpacing: '0.3px', color: '#16a34a', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                                        >
+                                            {displayPhone(contactPhone)}
+                                        </a>
+                                    ) : (
+                                        <span className="info-value" style={{ color: '#ef4444', fontSize: '0.8rem', fontStyle: 'italic' }}>
+                                            Non disponible — numéro non extrait du message
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                             {property.groupeWhatsApp && (
@@ -331,17 +657,28 @@ const PropertyDetailsModal = ({ property, isOpen, onClose, onToggleDisponible })
                                 </div>
                             )}
                         </div>
-                        {/* Bouton WhatsApp intégré dans la section contact */}
-                        <button
-                            className="btn btn-whatsapp"
-                            onClick={handleWhatsApp}
-                            style={{ marginTop: '0.75rem', width: '100%', justifyContent: 'center', gap: 8 }}
-                        >
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style={{ flexShrink: 0 }}>
-                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
-                            </svg>
-                            Envoyer un message WhatsApp
-                        </button>
+                        {/* Bouton WhatsApp — visible uniquement si un numéro est disponible */}
+                        {contactPhone ? (
+                            <button
+                                className="btn btn-whatsapp"
+                                onClick={handleWhatsApp}
+                                style={{ marginTop: '0.75rem', width: '100%', justifyContent: 'center', gap: 8 }}
+                            >
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style={{ flexShrink: 0 }}>
+                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+                                </svg>
+                                Envoyer un message WhatsApp
+                            </button>
+                        ) : (
+                            <div style={{ marginTop: '0.75rem', padding: '0.6rem 1rem', borderRadius: 8, background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: '0.8rem', textAlign: 'center' }}>
+                                ⚠️ Contact WhatsApp indisponible — le numéro de téléphone n'a pas été extrait du message original.
+                                {property.description && (
+                                    <span style={{ display: 'block', marginTop: '0.4rem', color: '#6b7280', fontSize: '0.75rem' }}>
+                                        Vérifiez le message original ci-dessous pour trouver le numéro manuellement.
+                                    </span>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     {/* ── MESSAGE ORIGINAL ── */}
@@ -392,6 +729,10 @@ const PropertyDetailsModal = ({ property, isOpen, onClose, onToggleDisponible })
                             <Phone size={18} />
                             Appeler
                         </button>
+                        <button className="btn btn-whatsapp" onClick={handleWhatsApp}>
+                            <MessageSquare size={18} />
+                            WhatsApp
+                        </button>
                         <button
                             className={`btn ${property?.disponible ? 'btn-danger' : 'btn-success'}`}
                             onClick={handleToggleDisponible}
@@ -434,10 +775,12 @@ const PropertyListView = React.memo(({ properties, onViewDetails, handleContact,
             <table className="biens-table">
                 <thead>
                     <tr>
+                        <th style={{ width: '60px' }}>Visuel</th>
                         <SortHeader colKey="datePublication" label="Date" />
                         <SortHeader colKey="typeBien" label="Type" />
                         <SortHeader colKey="commune" label="Commune" />
-                        <th>Quartier</th>
+                        <th>Quartier/Zone</th>
+                        <th>N° Téléphone</th>
                         <SortHeader colKey="rawPrice" label="Prix" align="right" />
                         <SortHeader colKey="status" label="Statut" align="center" />
                         <th className="text-center">Actions</th>
@@ -447,10 +790,33 @@ const PropertyListView = React.memo(({ properties, onViewDetails, handleContact,
                     {properties.map(property => {
                         const isLocation = property.typeOffre?.toLowerCase().includes('location');
                         const isVente = property.typeOffre?.toLowerCase().includes('vente');
+                        const hasImage = Boolean(property.imageUrl);
                         return (
                             <tr key={property.id} onClick={() => onViewDetails(property)} style={{ cursor: 'pointer' }}>
+                                <td style={{ padding: '8px' }}>
+                                    <div className="lv-thumbnail" style={{
+                                        width: '44px', height: '44px',
+                                        borderRadius: '8px', overflow: 'hidden',
+                                        background: hasImage ? '#1e293b' : 'linear-gradient(135deg, #1B4299, #4f46e5)',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                    }}>
+                                        {hasImage ? (
+                                            <img src={property.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        ) : (
+                                            <Building2 size={18} color="rgba(255,255,255,0.6)" />
+                                        )}
+                                    </div>
+                                </td>
                                 <td className="biens-td-date">
-                                    {property.datePublication || '—'}
+                                    {(() => {
+                                        const f = getFreshness(property.datePublicationRaw);
+                                        return (
+                                            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                                {f && <span style={{ width: 8, height: 8, borderRadius: '50%', background: f.color, flexShrink: 0, boxShadow: `0 0 4px ${f.color}` }} title={f.label} />}
+                                                {property.datePublication || '—'}
+                                            </span>
+                                        );
+                                    })()}
                                 </td>
                                 <td>
                                     <div className="biens-type-cell">
@@ -477,6 +843,30 @@ const PropertyListView = React.memo(({ properties, onViewDetails, handleContact,
                                 </td>
                                 <td>{property.commune || '—'}</td>
                                 <td className="biens-td-muted">{property.quartier || property.zone || '—'}</td>
+                                <td onClick={e => e.stopPropagation()}>
+                                    {(() => {
+                                        const phone = extractBestPhone(property);
+                                        if (!phone) return <span className="biens-td-muted">—</span>;
+                                        const waPhone = formatPhoneCI(phone);
+                                        const msg = encodeURIComponent(`Bonjour, je suis intéressé par: ${property.typeBien} à ${property.zone || property.commune || ''}`);
+                                        return (
+                                            <a
+                                                href={`https://wa.me/${waPhone}?text=${msg}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.82rem', fontWeight: 600, letterSpacing: '0.3px', color: '#15803d', textDecoration: 'none', padding: '3px 8px', borderRadius: 6, background: 'rgba(37,211,102,0.08)', border: '1px solid rgba(37,211,102,0.25)', transition: 'all 0.2s' }}
+                                                title="Contacter via WhatsApp"
+                                                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(37,211,102,0.18)'; }}
+                                                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(37,211,102,0.08)'; }}
+                                            >
+                                                <svg viewBox="0 0 24 24" width="14" height="14" fill="#25D366" style={{ flexShrink: 0 }}>
+                                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+                                                </svg>
+                                                {displayPhone(phone)}
+                                            </a>
+                                        );
+                                    })()}
+                                </td>
                                 <td style={{ textAlign: 'right' }}>
                                     {property.rawPrice > 0
                                         ? <strong>{property.prixFormate}</strong>
@@ -493,8 +883,11 @@ const PropertyListView = React.memo(({ properties, onViewDetails, handleContact,
                                         <button className="btn btn-secondary btn-sm" onClick={() => onViewDetails(property)} title="Voir les détails">
                                             <Eye size={14} />
                                         </button>
-                                        <button className="btn btn-whatsapp btn-sm" onClick={(e) => handleContact(property, e)} title="WhatsApp">
+                                        <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); const p = extractBestPhone(property); if (p) window.open(`tel:${p}`, '_self'); }} title="Appeler">
                                             <Phone size={14} />
+                                        </button>
+                                        <button className="btn btn-whatsapp btn-sm" onClick={(e) => handleContact(property, e)} title="WhatsApp">
+                                            <MessageSquare size={14} />
                                         </button>
                                     </div>
                                 </td>
@@ -510,90 +903,130 @@ const PropertyListView = React.memo(({ properties, onViewDetails, handleContact,
     );
 });
 
-const PropertyCard = ({ property, index, onViewDetails }) => {
+const PropertyCard = React.memo(React.forwardRef(({ property, index, onViewDetails, viewMode }, ref) => {
     const { addToast } = useToast();
+    const freshness = useMemo(() => getFreshness(property.datePublicationRaw), [property.datePublicationRaw]);
+    const contactPhone = useMemo(() => extractBestPhone(property), [property]);
+    const hasImage = Boolean(property.imageUrl);
 
-    const handleContact = (e) => {
-        e.stopPropagation();
-        const phone = extractBestPhone(property);
-        if (phone) {
-            const message = encodeURIComponent(`Bonjour, je suis intéressé par: ${property.typeBien} à ${property.zone}`);
-            window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
-            addToast({ type: 'success', title: 'Contact', message: `WhatsApp vers ${phone}` });
+    const handleContact = useCallback((e) => {
+        if (e && e.stopPropagation) e.stopPropagation();
+        if (contactPhone) {
+            const message = encodeURIComponent(`Bonjour, je suis intéressé par: ${property.typeBien} à ${property.zone || property.commune || ''}`);
+            window.open(`https://wa.me/${contactPhone}?text=${message}`, '_blank');
+            addToast({ type: 'success', title: 'Contact', message: `WhatsApp vers ${contactPhone}` });
         } else {
             addToast({ type: 'error', title: 'Erreur', message: 'Numéro de téléphone non disponible' });
         }
+    }, [contactPhone, property.typeBien, property.zone, property.commune, addToast]);
+
+    const itemVariants = {
+        hidden: { opacity: 0, y: 15 },
+        show: { opacity: 1, y: 0 }
     };
+
+    // Icône de placeholder selon le type de bien
+    const PlaceholderIcon = useCallback(() => {
+        const type = (property.typeBien || '').toLowerCase();
+        if (type.includes('villa') || type.includes('maison')) return <Home size={32} style={{ opacity: 0.6 }} />;
+        if (type.includes('appartement') || type.includes('studio')) return <Building size={32} style={{ opacity: 0.6 }} />;
+        if (type.includes('terrain')) return <MapPin size={32} style={{ opacity: 0.6 }} />;
+        return <Home size={32} style={{ opacity: 0.6 }} />;
+    }, [property.typeBien]);
 
     return (
         <motion.div
+            ref={ref}
+            layout={false} // Désactiver layout pour booster les perfs sur mobile si "rame"
             className="card property-card-v2"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: index * 0.1 }}
-            whileHover={{ y: -8 }}
+            variants={itemVariants}
+            whileHover={{ y: -4, transition: { duration: 0.2 } }}
             onClick={() => onViewDetails(property)}
         >
+            {/* ── IMAGE SECTION ── */}
             <div className="property-image-wrapper">
                 <div
                     className="property-image"
                     style={{
-                        position: 'relative', overflow: 'hidden',
-                        background: `linear-gradient(135deg, ${property.id % 2 === 0 ? '#4f46e5' : '#ec4899'} 0%, ${property.id % 2 === 0 ? '#7c3aed' : '#f97316'} 100%)`
+                        position: 'relative',
+                        overflow: 'hidden',
+                        background: hasImage
+                            ? '#0f172a'
+                            : `linear-gradient(135deg, ${property.id % 3 === 0 ? '#1B4299, #4f46e5' : property.id % 3 === 1 ? '#0e7490, #0891b2' : '#7c3aed, #a855f7'})`
                     }}
                 >
-                    {property.imageUrl && (
+                    {hasImage ? (
                         <img
                             src={property.imageUrl}
                             alt={property.typeBien}
                             loading="lazy"
                             decoding="async"
-                            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-                            onError={e => { e.target.style.display = 'none'; }}
+                            style={{
+                                position: 'absolute', inset: 0,
+                                width: '100%', height: '100%',
+                                objectFit: 'cover'
+                            }}
+                            onError={e => { e.target.style.display = 'none'; e.target.parentNode.style.background = 'linear-gradient(135deg, #1B4299, #4f46e5)'; }}
                         />
+                    ) : (
+                        /* Placeholder visuel quand pas d'image */
+                        <div style={{
+                            position: 'absolute', inset: 0,
+                            display: 'flex', flexDirection: 'column',
+                            alignItems: 'center', justifyContent: 'center',
+                            color: 'rgba(255,255,255,0.7)', gap: 8
+                        }}>
+                            <PlaceholderIcon />
+                        </div>
+                    )}
+
+                    {/* Overlay gradient au bas pour lisibilité */}
+                    {hasImage && (
+                        <div style={{
+                            position: 'absolute', bottom: 0, left: 0, right: 0,
+                            height: '55%',
+                            background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%)',
+                            pointerEvents: 'none'
+                        }} />
                     )}
                 </div>
+
+                {/* Freshness bar */}
+                {freshness && (
+                    <div className="freshness-bar-track">
+                        <motion.div
+                            className="freshness-bar-fill"
+                            style={{ background: freshness.color }}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${freshness.pct}%` }}
+                            transition={{ duration: 0.6, ease: 'easeOut' }}
+                        />
+                    </div>
+                )}
+
+                {/* Badges overlay */}
                 <div className="property-badges">
+                    {property._matchPct > 0 && (
+                        <span className={`match-score-badge ${property._matchPct >= 80 ? 'match-top' : property._matchPct >= 50 ? 'match-good' : 'match-low'}`}>
+                            <Sparkles size={10} />
+                            {property._matchPct}%
+                        </span>
+                    )}
                     <span className={`badge ${property.disponible ? 'badge-success' : 'badge-danger'}`}>
                         {property.status}
                     </span>
-                    {property.typeOffre && <span className="badge-offer">{property.typeOffre}</span>}
-                    {property.photoCount > 0 && (
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: 6, padding: '2px 6px', fontSize: '0.72rem', fontWeight: 600 }}>
-                            <Images size={11} /> {property.photoCount}
-                        </span>
-                    )}
-                    {property.photoCount > 0 && property.description && (
-                        <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#fff', background: 'linear-gradient(90deg,#d97706,#f59e0b)', borderRadius: 6, padding: '2px 7px', letterSpacing: '0.3px', boxShadow: '0 1px 4px rgba(217,119,6,0.5)' }}>
-                            📸 Photo&nbsp;+&nbsp;Texte
-                        </span>
-                    )}
                 </div>
             </div>
 
+            {/* ── CONTENT SECTION ── */}
             <div className="property-content">
                 <div className="property-header">
                     <h3 className="property-title">{property.typeBien}</h3>
                     <span className="property-price">{property.prixFormate}</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '6px 0 8px', flexWrap: 'wrap' }}>
-                    {property.refBien && (
-                        <span style={{ fontSize: '0.75rem', fontFamily: 'monospace', fontWeight: 800, color: '#fff', background: '#1B4299', borderRadius: 5, padding: '3px 9px', letterSpacing: '0.6px', flexShrink: 0 }}>
-                            # {property.refBien}
-                        </span>
-                    )}
-                    {property.groupeWhatsApp && (
-                        <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#15803d', background: 'rgba(37,211,102,0.12)', border: '1px solid rgba(37,211,102,0.35)', borderRadius: 5, padding: '2px 7px', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                            title={property.groupName || property.groupeWhatsApp}>
-                            {(property.groupName && !property.groupName.startsWith('Groupe '))
-                                ? property.groupName
-                                : property.groupeWhatsApp}
-                        </span>
-                    )}
-                </div>
 
                 <div className="property-location">
-                    <MapPin size={16} />
+                    <MapPin size={14} />
                     <span>{property.zone} {property.commune ? `- ${property.commune}` : ''}</span>
                 </div>
 
@@ -601,45 +1034,59 @@ const PropertyCard = ({ property, index, onViewDetails }) => {
 
                 <div className="property-features">
                     {property.chambres > 0 && (
-                        <motion.span className="feature-tag" initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }}>
+                        <span className="feature-tag">
                             <Bed size={12} /> {property.chambres} ch.
-                        </motion.span>
+                        </span>
                     )}
                     {property.meuble && (
-                        <motion.span className="feature-tag" initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}>
+                        <span className="feature-tag">
                             <Home size={12} /> Meublé
-                        </motion.span>
+                        </span>
                     )}
-                    <motion.span className="feature-tag" initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.5 }}>
+                    <span className="feature-tag">
                         <Tag size={12} /> {property.publiePar}
-                    </motion.span>
+                    </span>
                 </div>
 
-                <motion.div
+                <div
                     className="property-footer"
-                    initial={{ opacity: 1 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.2 }}
+                    style={{ display: 'flex', gap: '8px' }}
                 >
-                    <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); onViewDetails(property); }}>
+                    <button className="btn btn-secondary btn-sm" style={{ flex: 1, padding: '0.4rem 0.5rem' }} onClick={(e) => { e.stopPropagation(); onViewDetails(property); }} title="Voir les détails">
                         <Eye size={16} /> Détails
                     </button>
-                    <button className="btn btn-whatsapp btn-sm" onClick={handleContact}>
-                        <Phone size={16} /> WhatsApp
+                    <button className="btn btn-secondary btn-sm" style={{ padding: '0.4rem 0.5rem' }} onClick={(e) => { e.stopPropagation(); if (contactPhone) window.open(`tel:${contactPhone}`, '_self'); else addToast({ type: 'error', title: 'Erreur', message: 'Numéro non disponible' }); }} title="Appeler">
+                        <Phone size={16} />
                     </button>
-                </motion.div>
+                    <button className="btn btn-secondary btn-sm" style={{ padding: '0.4rem 0.5rem' }} onClick={(e) => {
+                        e.stopPropagation();
+                        const q = (property.coordinates?.lat && property.coordinates?.lng)
+                            ? `${property.coordinates.lat},${property.coordinates.lng}`
+                            : [property.quartier, property.commune, 'Abidjan', 'Côte d\'Ivoire'].filter(Boolean).join(' ');
+                        window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`, '_blank');
+                    }} title="Voir sur Google Maps">
+                        <Map size={16} />
+                    </button>
+                    <button className="btn btn-whatsapp btn-sm" style={{ padding: '0.4rem 0.5rem' }} onClick={handleContact} title="WhatsApp">
+                        <MessageSquare size={16} /> WA
+                    </button>
+                </div>
             </div>
         </motion.div>
     );
-};
+}));
 
 const Properties = () => {
+    const location = useLocation();
     const [properties, setProperties] = useState([]);
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState('list');
     const [searchTerm, setSearchTerm] = useState('');
+    const [searchInput, setSearchInput] = useState(''); // valeur affichée dans l'input (contrôlé)
+    const [matchBanner, setMatchBanner] = useState(null);
     const [filterOpen, setFilterOpen] = useState(false);
     const [selectedProperty, setSelectedProperty] = useState(null);
+    const [selectedIndex, setSelectedIndex] = useState(0);
     const [modalOpen, setModalOpen] = useState(false);
     const [geocodedProperties, setGeocodedProperties] = useState([]);
     const [geocoding, setGeocoding] = useState(false);
@@ -660,6 +1107,33 @@ const Properties = () => {
     });
     const [refreshing, setRefreshing] = useState(false);
 
+    // Lire les critères de matching depuis RequestsPage (navigation state)
+    useEffect(() => {
+        const state = location.state;
+        console.log('Properties Page State:', state);
+        if (state?.fromRequest && (state?.matchSearch || state?.matchCriteria)) {
+            const m = state.matchCriteria || state.matchSearch;
+            setSearchTerm(''); setSearchInput(''); // Laisser les filtres faire le travail
+            setMatchBanner({
+                snippet: state.requestSnippet || '',
+                commune: m.commune,
+                type: m.type,
+                typeOffre: m.typeOffre,
+                budget: m.budget,
+                loyer: m.loyer,
+                chambres: m.chambres,
+                meuble: m.meuble,
+                urgent: m.urgent,
+                criteria: m,
+            });
+            // En mode match, réinitialiser tous les filtres durs — le scoring gère tout
+            setFilters({ type: 'all', status: 'all', meuble: 'all', pieces: 'all', commune: 'all', quartier: 'all', minPrice: '', maxPrice: '' });
+            // Trier par score de matching
+            setSortConfig({ key: 'matchScore', direction: 'desc' });
+            setCurrentPage(1);
+        }
+    }, [location.state]);
+
     useEffect(() => {
         loadProperties();
 
@@ -668,12 +1142,30 @@ const Properties = () => {
             const arr = Array.isArray(p) ? p : p?.data;
             if (arr) {
                 setProperties(arr);
-                geocodePropertiesAsync(arr);
             }
         });
 
         return () => unsubscribe();
     }, []);
+
+    const loadProperties = async () => {
+        setLoading(true);
+        try {
+            const response = await apiService.getProperties(true);
+            if (response.success) {
+                setProperties(response.data);
+                // Pré-calculer géo
+                geocodingService.geocodeProperties(response.data).then(geocoded => {
+                    setGeocodedProperties(geocoded);
+                });
+            }
+        } catch (error) {
+            console.error('Error fetching properties:', error);
+            addToast({ type: 'error', title: 'Erreur', message: 'Impossible de charger les biens' });
+        } finally {
+            setLoading(false);
+        }
+    };
 
     // Géocoder les propriétés de manière asynchrone
     const geocodePropertiesAsync = async (props) => {
@@ -691,59 +1183,30 @@ const Properties = () => {
         }
     };
 
-    const loadProperties = async (forceRefresh = false) => {
-        try {
-            const response = await apiService.getProperties(forceRefresh);
-            if (response.success) {
-                setProperties(response.data);
-                geocodePropertiesAsync(response.data);
-                if (forceRefresh) {
-                    addToast({
-                        type: 'success',
-                        title: '✅ Données actualisées',
-                        message: `${response.data.length} bien${response.data.length !== 1 ? 's' : ''} chargé${response.data.length !== 1 ? 's' : ''}`
-                    });
-                }
-            } else {
-                // Handle API error response
-                const errorMsg = response.error || 'Impossible de charger les propriétés';
-                console.error('Properties API Error:', errorMsg);
-                addToast({
-                    type: 'error',
-                    title: '⚠️ Erreur de chargement',
-                    message: errorMsg === 'NetworkError'
-                        ? 'Vérifiez votre connexion internet'
-                        : errorMsg.includes('timeout')
-                            ? 'Le serveur met trop de temps. Réessayez.'
-                            : errorMsg
-                });
-            }
-        } catch (error) {
-            console.error('Error loading properties:', error);
-            addToast({
-                type: 'error',
-                title: '❌ Erreur système',
-                message: 'Une erreur inattendue s\'est produite. Veuillez réessayer.'
-            });
-        } finally {
-            setLoading(false);
-            setRefreshing(false);
-        }
-    };
-
     const handleRefresh = useCallback(async () => {
         setRefreshing(true);
-        await loadProperties(true);
-    }, []);
+        try {
+            // Force refresh skip cache
+            const response = await apiService.getProperties(true);
+            if (response.success) {
+                setProperties(response.data);
+                geocodePropertiesAsync(response.data); // Re-geocode after refresh
+                addToast({ type: 'success', title: 'Actualisé', message: 'Données mises à jour depuis le serveur' });
+            }
+        } catch (error) {
+            addToast({ type: 'error', title: 'Erreur', message: 'Échec de l\'actualisation' });
+        } finally {
+            setRefreshing(false);
+        }
+    }, [addToast]);
 
     // Fonction de tri
-    const handleSort = (key) => {
-        let direction = 'asc';
-        if (sortConfig.key === key && sortConfig.direction === 'asc') {
-            direction = 'desc';
-        }
-        setSortConfig({ key, direction });
-    };
+    const handleSort = useCallback((key) => {
+        setSortConfig(prev => ({
+            key,
+            direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
+        }));
+    }, []);
 
     const handleToggleDisponible = async (propertyId, currentDisponible) => {
         const result = await apiService.toggleDisponible(propertyId, currentDisponible);
@@ -758,8 +1221,10 @@ const Properties = () => {
         return result;
     };
 
-    const handleTableContact = (property) => {
+    const handleTableContact = (property, e) => {
+        if (e && e.stopPropagation) e.stopPropagation();
         const phone = extractBestPhone(property);
+
         if (phone) {
             const message = encodeURIComponent(`Bonjour, je suis intéressé par: ${property.typeBien} à ${property.zone}`);
             window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
@@ -769,19 +1234,24 @@ const Properties = () => {
         }
     };
 
-    // Extraire les options uniques depuis les données réelles (mémorisé)
-    const uniqueTypes = useMemo(() =>
-        [...new Set(properties.map(p => p.typeBien).filter(Boolean))].sort(),
-        [properties]
-    );
-
+    // Options pour les sélecteurs de filtres
     const uniqueCommunes = useMemo(() =>
         [...new Set(properties.map(p => p.commune).filter(Boolean))].sort(),
         [properties]
     );
 
-    const uniqueQuartiers = useMemo(() =>
-        [...new Set(properties.map(p => p.zone).filter(Boolean))].sort(),
+    const uniqueQuartiers = useMemo(() => {
+        if (filters.commune !== 'all') {
+            return [...new Set(properties
+                .filter(p => p.commune === filters.commune)
+                .map(p => p.zone)
+                .filter(Boolean))].sort();
+        }
+        return [...new Set(properties.map(p => p.zone).filter(Boolean))].sort();
+    }, [properties, filters.commune]);
+
+    const uniqueTypes = useMemo(() =>
+        [...new Set(properties.map(p => p.typeBien).filter(Boolean))].sort(),
         [properties]
     );
 
@@ -790,61 +1260,83 @@ const Properties = () => {
         [properties]
     );
 
+    // --- OPTIMISATION CRITIQUE: PRE-PROCESSING ---
+    // On normalise les données une seule fois quand elles arrivent, 
+    // pas à chaque fois que l'utilisateur tape une lettre ou change de page.
+    const preProcessedProperties = useMemo(() => {
+        return properties.map(p => ({
+            ...p,
+            _norm_search_blob: normStr([
+                p.refBien, p.commune, p.zone, p.typeBien, p.publiePar, p.name, p.groupeWhatsApp, p.caracteristiques, p.description
+            ].filter(Boolean).join(' ')),
+            _norm_full_prop_text: normStr([
+                p.caracteristiques, p.description, p.titre, p.zone, p.quartier, p.commune, p.messageInitial
+            ].filter(Boolean).join(' ')),
+            _norm_full_desc_blob: normStr([
+                p.caracteristiques, p.zone, p.quartier, p.description, p.messageInitial, p.publiePar,
+            ].filter(Boolean).join(' ')),
+            _norm_offre: normStr(p.typeOffre || p.typeTransaction || ''),
+            _norm_type: normStr(p.typeBien || p.typeDeBien || ''),
+            _norm_zone: normStr([p.zone, p.quartier].filter(Boolean).join(' ')),
+        }));
+    }, [properties]);
+
     // Filtrage et Tri mémorisé
     const filteredProperties = useMemo(() => {
-        let items = properties.filter(property => {
-            const matchesSearch =
-                (property.refBien || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (property.commune || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (property.zone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (property.typeBien || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (property.publiePar || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (property.name || property.groupeWhatsApp || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (property.caracteristiques || '').toLowerCase().includes(searchTerm.toLowerCase());
+        const isMatchMode = Boolean(matchBanner?.criteria);
+        const searchLower = searchTerm.toLowerCase();
 
-            const matchesType = filters.type === 'all' || property.typeBien === filters.type;
+        // Si on est en mode match, pré-calculer les vecteurs du criteria
+        const preNormalizedCriteria = isMatchMode ? {
+            cOffre: normStr(matchBanner.criteria.typeOffre || ''),
+            cCommune: normStr(matchBanner.criteria.commune || ''),
+            cOriginalText: normStr(matchBanner.criteria.originalText || ''),
+            cWords: normStr(matchBanner.criteria.originalText || '')
+                .split(/[\s,;.!?/()\[\]+*#@"\n\r]+/)
+                .filter(w => w.length > 3 && !MATCH_STOP_WORDS.has(w) && !/^\d+$/.test(w)),
+        } : {};
+
+        let items = preProcessedProperties.filter(property => {
+            const matchesSearch = !searchTerm || property._norm_search_blob.includes(searchLower);
 
             const matchesStatus = filters.status === 'all' ||
                 (filters.status === 'Disponible' && property.disponible) ||
                 (filters.status === 'Occupé' && !property.disponible);
 
+            let matchesPrice = true;
+            if (filters.minPrice && (property.rawPrice || 0) < parseFloat(filters.minPrice)) matchesPrice = false;
+            if (filters.maxPrice && (property.rawPrice || 0) > parseFloat(filters.maxPrice)) matchesPrice = false;
+
+            if (isMatchMode) return matchesSearch && matchesStatus && matchesPrice;
+
+            // Mode normal : tous les filtres durs
+            const matchesType = filters.type === 'all' || property.typeBien === filters.type;
             const matchesMeuble = filters.meuble === 'all' ||
                 (filters.meuble === 'oui' && property.meuble) ||
                 (filters.meuble === 'non' && !property.meuble);
-
             const matchesPieces = filters.pieces === 'all' || property.chambres === parseInt(filters.pieces);
-
             const matchesCommune = filters.commune === 'all' || property.commune === filters.commune;
-
             const matchesQuartier = filters.quartier === 'all' || property.zone === filters.quartier;
-
-            let matchesPrice = true;
-            if (filters.minPrice && property.rawPrice < parseFloat(filters.minPrice)) matchesPrice = false;
-            if (filters.maxPrice && property.rawPrice > parseFloat(filters.maxPrice)) matchesPrice = false;
 
             return matchesSearch && matchesType && matchesStatus && matchesMeuble && matchesPieces && matchesCommune && matchesQuartier && matchesPrice;
         });
 
-        // Appliquer le tri
-        if (sortConfig.key) {
+        // Tri (mode normal uniquement)
+        if (!isMatchMode && sortConfig.key && sortConfig.key !== 'matchScore') {
             items.sort((a, b) => {
                 let aValue = a[sortConfig.key];
                 let bValue = b[sortConfig.key];
 
-                // Spécial pour les nombres
                 if (sortConfig.key === 'rawPrice' || sortConfig.key === 'chambres') {
                     aValue = parseFloat(aValue) || 0;
                     bValue = parseFloat(bValue) || 0;
-                }
-                // Spécial pour les dates (format attendu: DD/MM/YYYY HH:MM)
-                else if (sortConfig.key === 'datePublication') {
+                } else if (sortConfig.key === 'datePublication') {
                     const parseDateStr = (d) => {
                         if (!d || typeof d !== 'string') return 0;
                         if (d.includes('/')) {
                             const cleanStr = d.replace(/le\s+/gi, '').trim();
                             const [datePart, timePart] = cleanStr.split(' ');
                             const [day, month, year] = datePart.split('/');
-
                             if (timePart) {
                                 const [hour, minute] = timePart.split(':');
                                 return new Date(year, month - 1, day, hour, minute || 0).getTime();
@@ -855,9 +1347,7 @@ const Properties = () => {
                     };
                     aValue = parseDateStr(aValue);
                     bValue = parseDateStr(bValue);
-                }
-                else {
-                    // String comparison
+                } else {
                     aValue = String(aValue || '').toLowerCase();
                     bValue = String(bValue || '').toLowerCase();
                 }
@@ -868,8 +1358,46 @@ const Properties = () => {
             });
         }
 
+        // ── Match scoring (O(N) avec pre-normalized data) ─────────────────────
+        if (isMatchMode) {
+            const crit = matchBanner.criteria;
+
+            let maxScore = 0;
+            if (crit.commune) maxScore += 10;
+            if (crit.type) maxScore += 10;
+            if (crit.typeOffre) maxScore += 12;
+            if (crit.chambres) maxScore += 8;
+            if (crit.budget || crit.loyer) maxScore += 10;
+            if (crit.meuble !== undefined) maxScore += 5;
+            if (crit.originalText) maxScore += 20;
+            if (crit.amenities) maxScore += (crit.amenities.length * 4) + 2;
+
+            if (maxScore === 0) maxScore = 1;
+
+            items = items.map(p => {
+                const s = scoreProperty(p, crit, {
+                    pOffre: p._norm_offre,
+                    pType: p._norm_type,
+                    pZone: p._norm_zone,
+                    fullPropText: p._norm_full_prop_text,
+                    fullDescBlob: p._norm_full_desc_blob,
+                    ...preNormalizedCriteria
+                });
+                return { ...p, _matchScore: s, _matchPct: Math.round((s / maxScore) * 100) };
+            });
+
+            // Seuil 70% → fallback 50% → fallback score > 0
+            const ok70 = items.filter(p => p._matchPct >= 70);
+            const ok50 = items.filter(p => p._matchPct >= 50);
+            const okPos = items.filter(p => p._matchScore > 0);
+
+            items = ok70.length > 0 ? ok70 : ok50.length > 0 ? ok50 : okPos;
+
+            items.sort((a, b) => b._matchScore - a._matchScore);
+        }
+
         return items;
-    }, [properties, searchTerm, filters, sortConfig]);
+    }, [preProcessedProperties, searchTerm, filters, sortConfig, matchBanner]);
 
     // Optimisation Vercel: Croisement efficace O(N) pour la carte au lieu de duplication O(N*M)
     const filteredGeocodedProperties = useMemo(() => {
@@ -897,11 +1425,20 @@ const Properties = () => {
         []
     );
 
+    // Navigate to a specific index in filteredProperties
+    const handleNavTo = useCallback((idx) => {
+        if (idx < 0 || idx >= filteredProperties.length) return;
+        setSelectedProperty(filteredProperties[idx]);
+        setSelectedIndex(idx);
+    }, [filteredProperties]);
+
     // Handlers optimisés avec useCallback
     const handleViewDetails = useCallback((property) => {
+        const idx = filteredProperties.findIndex(p => p.id === property.id);
         setSelectedProperty(property);
+        setSelectedIndex(idx >= 0 ? idx : 0);
         setModalOpen(true);
-    }, []);
+    }, [filteredProperties]);
 
     const handleExport = useCallback(() => {
         // Préparer les données pour le fichier Excel
@@ -911,7 +1448,7 @@ const Properties = () => {
             'Zone': p.zone,
             'Commune': p.commune || '',
             'Prix': p.prixFormate, // Ou p.rawPrice si on veut des nombres bruts
-            'Téléphone': p.telephone,
+            'Téléphone': extractBestPhone(p),
             'Caractéristiques': p.caracteristiques,
             'Publié par': p.publiePar,
             'Meublé': p.meuble ? 'Oui' : 'Non',
@@ -952,7 +1489,7 @@ const Properties = () => {
 
     const resetFilters = useCallback(() => {
         setFilters({ type: 'all', status: 'all', meuble: 'all', pieces: 'all', commune: 'all', quartier: 'all', minPrice: '', maxPrice: '' });
-        setSearchTerm('');
+        setSearchTerm(''); setSearchInput('');
         addToast({ type: 'info', title: 'Filtres réinitialisés', message: 'Tous les biens sont maintenant affichés' });
     }, [addToast]);
 
@@ -961,359 +1498,413 @@ const Properties = () => {
     }
 
     return (
-        <motion.div
-            className="properties-v2"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-        >
+        <PullToRefresh onRefresh={handleRefresh}>
+            <motion.div
+                className={`properties-v2 ${modalOpen ? 'has-side-panel' : ''}`}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+            >
 
-            <div className="properties-header">
-                <div className="header-left">
-                    <h2>Biens Immobiliers</h2>
-                    <span className="properties-count">{filteredProperties.length} bien(s) trouvé(s) sur {properties.length}</span>
-                </div>
-                <div className="header-actions">
-                    <button className="btn btn-secondary" onClick={handleExport}>
-                        <Download size={18} />
-                        Exporter Excel
-                    </button>
-                </div>
-            </div>
+                {matchBanner && (
+                    <div className="match-banner">
+                        <Sparkles size={15} />
+                        <div className="match-banner-content">
+                            <span className="match-banner-label">Biens trouvés pour la demande :</span>
+                            <div className="match-banner-chips">
+                                {matchBanner.type && <span className="mbchip mbchip-type">{matchBanner.type}</span>}
+                                {matchBanner.commune && <span className="mbchip mbchip-loc">📍 {matchBanner.commune}</span>}
+                                {matchBanner.typeOffre && <span className="mbchip mbchip-offre">{matchBanner.typeOffre}</span>}
+                                {matchBanner.chambres && <span className="mbchip mbchip-ch">{matchBanner.chambres} ch.</span>}
+                                {matchBanner.budget && <span className="mbchip mbchip-price">≤ {matchBanner.budget}M FCFA</span>}
+                                {matchBanner.loyer && <span className="mbchip mbchip-price">{Math.round(matchBanner.loyer / 1000)}k/mois</span>}
+                                {matchBanner.urgent && <span className="mbchip mbchip-urgent">🔴 Urgent</span>}
+                            </div>
+                            {matchBanner.snippet && <span className="match-banner-snippet">« {matchBanner.snippet.substring(0, 80)}{matchBanner.snippet.length > 80 ? '…' : ''} »</span>}
+                        </div>
+                        <button className="match-banner-close" onClick={() => {
+                            setMatchBanner(null);
+                            setSearchTerm('');
+                            setSearchInput('');
+                            setFilters(prev => ({ ...prev, commune: 'all', type: 'all', pieces: 'all', meuble: 'all' }));
+                            setSortConfig({ key: 'datePublication', direction: 'desc' });
+                        }}>×</button>
+                    </div>
+                )}
 
-            <div className="properties-toolbar">
-                <div className="search-filter-group">
-                    <div className="search-input" title="Recherchez par référence, commune, quartier, type de bien...">
-                        <Search size={18} />
-                        <input
-                            type="text"
-                            placeholder="Rechercher par Réf, commune, type, zone..."
-                            defaultValue={searchTerm}
-                            onChange={(e) => debouncedSearch(e.target.value)}
-                            title="Tapez pour chercher dans tous les biens"
-                        />
-                        {searchTerm && (
-                            <button onClick={() => { setSearchTerm(''); }}>
-                                <X size={16} />
+                <div className="properties-header">
+                    <div className="header-left">
+                        <h2>Biens Immobiliers</h2>
+                        <span className="properties-count">{filteredProperties.length} bien(s) trouvé(s) sur {properties.length}</span>
+                    </div>
+                    <div className="header-actions">
+                        <button className="btn btn-secondary" onClick={handleExport}>
+                            <Download size={18} />
+                            Exporter Excel
+                        </button>
+                    </div>
+                </div>
+
+                <div className="properties-toolbar">
+                    <div className="search-filter-group">
+                        <div className="search-input" title="Recherchez par référence, commune, quartier, type de bien...">
+                            <Search size={18} />
+                            <input
+                                type="text"
+                                placeholder="Rechercher par Réf, commune, type, zone..."
+                                value={searchInput}
+                                onChange={(e) => {
+                                    setSearchInput(e.target.value);
+                                    debouncedSearch(e.target.value);
+                                }}
+                                title="Tapez pour chercher dans tous les biens"
+                            />
+                            {searchInput && (
+                                <button onClick={() => { setSearchInput(''); setSearchTerm(''); }}>
+                                    <X size={16} />
+                                </button>
+                            )}
+                        </div>
+
+                        <button
+                            onClick={handleRefresh}
+                            disabled={refreshing}
+                            className="btn btn-secondary"
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                            title="Rafraîchir les données depuis la base de données"
+                        >
+                            <RefreshCw size={18} style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+                            {refreshing ? 'Chargement...' : 'Rafraîchir'}
+                        </button>
+
+                        <button
+                            className={`btn btn-secondary filter-btn ${filterOpen ? 'active' : ''}`}
+                            onClick={() => setFilterOpen(!filterOpen)}
+                            title="Filtrez par type, commune, prix, disponibilité, etc."
+                        >
+                            <Filter size={18} />
+                            Filtres
+                        </button>
+                    </div>
+
+                    <div className="view-toggle" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                        <select
+                            value={`${sortConfig.key}-${sortConfig.direction}`}
+                            onChange={(e) => {
+                                const [key, direction] = e.target.value.split('-');
+                                setSortConfig({ key, direction });
+                            }}
+                            className="sort-select"
+                            title="Triez les biens par date, prix ou type"
+                        >
+                            <option value="datePublication-desc">Date (Récent → Ancien)</option>
+                            <option value="datePublication-asc">Date (Ancien → Récent)</option>
+                            <option value="rawPrice-asc">Prix (Croissant)</option>
+                            <option value="rawPrice-desc">Prix (Décroissant)</option>
+                            <option value="typeBien-asc">Type (A-Z)</option>
+                            <option value="commune-asc">Commune (A-Z)</option>
+                        </select>
+
+                        <div className="view-toggle-inner" style={{ display: 'flex', gap: '2px', background: 'var(--bg-app)', padding: '4px', borderRadius: 'var(--radius-md)' }}>
+                            <button
+                                className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                                onClick={() => setViewMode('grid')}
+                                title="Afficher en grille - Vue compacte des biens"
+                                aria-label="Vue Grille"
+                            >
+                                <Grid size={18} />
                             </button>
+                            <button
+                                className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
+                                onClick={() => setViewMode('list')}
+                                title="Afficher en liste - Tableau détaillé de tous les biens"
+                                aria-label="Vue Liste"
+                            >
+                                <List size={18} />
+                            </button>
+                            <button
+                                className={`view-btn ${viewMode === 'map' ? 'active' : ''}`}
+                                onClick={() => setViewMode('map')}
+                                title="Afficher sur la carte - Visualisez les biens par localisation"
+                                aria-label="Vue Carte"
+                            >
+                                <Map size={18} />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <AnimatePresence>
+                    {filterOpen && (
+                        <motion.div className="filters-panel" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
+                            <div className="filter-group">
+                                <label>Type de bien</label>
+                                <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })}>
+                                    <option value="all">Tous</option>
+                                    {uniqueTypes.map(type => (
+                                        <option key={type} value={type}>{type}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>Commune</label>
+                                <select value={filters.commune} onChange={(e) => setFilters({ ...filters, commune: e.target.value })}>
+                                    <option value="all">Toutes</option>
+                                    {uniqueCommunes.map(commune => (
+                                        <option key={commune} value={commune}>{commune}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>Quartier</label>
+                                <select value={filters.quartier} onChange={(e) => setFilters({ ...filters, quartier: e.target.value })}>
+                                    <option value="all">Tous</option>
+                                    {uniqueQuartiers.map(quartier => (
+                                        <option key={quartier} value={quartier}>{quartier}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>Nombre de pièces</label>
+                                <select value={filters.pieces} onChange={(e) => setFilters({ ...filters, pieces: e.target.value })}>
+                                    <option value="all">Tous</option>
+                                    {uniquePieces.map(piece => (
+                                        <option key={piece} value={piece}>{piece} Pièce(s)</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>Prix Min</label>
+                                <input
+                                    type="number"
+                                    placeholder="Ex: 50000"
+                                    value={filters.minPrice}
+                                    onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
+                                    style={{
+                                        background: 'var(--bg-tertiary)',
+                                        border: '1px solid var(--glass-border)',
+                                        color: 'var(--text-primary)',
+                                        padding: '0.625rem',
+                                        borderRadius: 'var(--radius-sm)',
+                                        outline: 'none',
+                                        width: '100%',
+                                        fontFamily: 'inherit'
+                                    }}
+                                />
+                            </div>
+
+                            <div className="filter-group">
+                                <label>Prix Max</label>
+                                <input
+                                    type="number"
+                                    placeholder="Ex: 500000"
+                                    value={filters.maxPrice}
+                                    onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })}
+                                    style={{
+                                        background: 'var(--bg-tertiary)',
+                                        border: '1px solid var(--glass-border)',
+                                        color: 'var(--text-primary)',
+                                        padding: '0.625rem',
+                                        borderRadius: 'var(--radius-sm)',
+                                        outline: 'none',
+                                        width: '100%',
+                                        fontFamily: 'inherit'
+                                    }}
+                                />
+                            </div>
+
+                            <div className="filter-group">
+                                <label>Statut</label>
+                                <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
+                                    <option value="all">Tous</option>
+                                    <option value="Disponible">Disponible</option>
+                                    <option value="Occupé">Occupé</option>
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label>Meublé</label>
+                                <select value={filters.meuble} onChange={(e) => setFilters({ ...filters, meuble: e.target.value })}>
+                                    <option value="all">Tous</option>
+                                    <option value="oui">Meublé</option>
+                                    <option value="non">Non meublé</option>
+                                </select>
+                            </div>
+
+                            <button className="btn btn-ghost" onClick={resetFilters}>
+                                Réinitialiser
+                            </button>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {viewMode === 'map' ? (
+                    <div className="map-view-container">
+                        {geocoding && (
+                            <div className="map-loading-overlay">
+                                <Loader className="spinner" size={24} />
+                                <span>Géocodage des propriétés...</span>
+                            </div>
                         )}
+                        <PropertyMap
+                            properties={filteredGeocodedProperties}
+                            onPropertyClick={handleViewDetails}
+                        />
                     </div>
-
-                    <button
-                        onClick={handleRefresh}
-                        disabled={refreshing}
-                        className="btn btn-secondary"
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                        title="Rafraîchir les données depuis la base de données"
-                    >
-                        <RefreshCw size={18} style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
-                        {refreshing ? 'Chargement...' : 'Rafraîchir'}
-                    </button>
-
-                    <button
-                        className={`btn btn-secondary filter-btn ${filterOpen ? 'active' : ''}`}
-                        onClick={() => setFilterOpen(!filterOpen)}
-                        title="Filtrez par type, commune, prix, disponibilité, etc."
-                    >
-                        <Filter size={18} />
-                        Filtres
-                    </button>
-                </div>
-
-                <div className="view-toggle" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                    <select
-                        value={`${sortConfig.key}-${sortConfig.direction}`}
-                        onChange={(e) => {
-                            const [key, direction] = e.target.value.split('-');
-                            setSortConfig({ key, direction });
+                ) : viewMode === 'list' ? (
+                    <PropertyListView
+                        properties={paginatedProperties}
+                        onViewDetails={handleViewDetails}
+                        handleContact={handleTableContact}
+                        sortConfig={sortConfig}
+                        onSort={handleSort}
+                    />
+                ) : (
+                    <motion.div
+                        className={`properties-container ${viewMode}`}
+                        variants={{
+                            hidden: { opacity: 0 },
+                            show: { opacity: 1, transition: { staggerChildren: 0.04 } }
                         }}
-                        className="sort-select"
-                        title="Triez les biens par date, prix ou type"
+                        initial="hidden"
+                        animate="show"
                     >
-                        <option value="datePublication-desc">Date (Récent → Ancien)</option>
-                        <option value="datePublication-asc">Date (Ancien → Récent)</option>
-                        <option value="rawPrice-asc">Prix (Croissant)</option>
-                        <option value="rawPrice-desc">Prix (Décroissant)</option>
-                        <option value="typeBien-asc">Type (A-Z)</option>
-                        <option value="commune-asc">Commune (A-Z)</option>
-                    </select>
-
-                    <div className="view-toggle-inner" style={{ display: 'flex', gap: '2px', background: 'var(--bg-app)', padding: '4px', borderRadius: 'var(--radius-md)' }}>
-                        <button
-                            className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`}
-                            onClick={() => setViewMode('grid')}
-                            title="Afficher en grille - Vue compacte des biens"
-                            aria-label="Vue Grille"
-                        >
-                            <Grid size={18} />
-                        </button>
-                        <button
-                            className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
-                            onClick={() => setViewMode('list')}
-                            title="Afficher en liste - Tableau détaillé de tous les biens"
-                            aria-label="Vue Liste"
-                        >
-                            <List size={18} />
-                        </button>
-                        <button
-                            className={`view-btn ${viewMode === 'map' ? 'active' : ''}`}
-                            onClick={() => setViewMode('map')}
-                            title="Afficher sur la carte - Visualisez les biens par localisation"
-                            aria-label="Vue Carte"
-                        >
-                            <Map size={18} />
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <AnimatePresence>
-                {filterOpen && (
-                    <motion.div className="filters-panel" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
-                        <div className="filter-group">
-                            <label>Type de bien</label>
-                            <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })}>
-                                <option value="all">Tous</option>
-                                {uniqueTypes.map(type => (
-                                    <option key={type} value={type}>{type}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className="filter-group">
-                            <label>Commune</label>
-                            <select value={filters.commune} onChange={(e) => setFilters({ ...filters, commune: e.target.value })}>
-                                <option value="all">Toutes</option>
-                                {uniqueCommunes.map(commune => (
-                                    <option key={commune} value={commune}>{commune}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className="filter-group">
-                            <label>Quartier</label>
-                            <select value={filters.quartier} onChange={(e) => setFilters({ ...filters, quartier: e.target.value })}>
-                                <option value="all">Tous</option>
-                                {uniqueQuartiers.map(quartier => (
-                                    <option key={quartier} value={quartier}>{quartier}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className="filter-group">
-                            <label>Nombre de pièces</label>
-                            <select value={filters.pieces} onChange={(e) => setFilters({ ...filters, pieces: e.target.value })}>
-                                <option value="all">Tous</option>
-                                {uniquePieces.map(piece => (
-                                    <option key={piece} value={piece}>{piece} Pièce(s)</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className="filter-group">
-                            <label>Prix Min</label>
-                            <input
-                                type="number"
-                                placeholder="Ex: 50000"
-                                value={filters.minPrice}
-                                onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
-                                style={{
-                                    background: 'var(--bg-tertiary)',
-                                    border: '1px solid var(--glass-border)',
-                                    color: 'var(--text-primary)',
-                                    padding: '0.625rem',
-                                    borderRadius: 'var(--radius-sm)',
-                                    outline: 'none',
-                                    width: '100%',
-                                    fontFamily: 'inherit'
-                                }}
-                            />
-                        </div>
-
-                        <div className="filter-group">
-                            <label>Prix Max</label>
-                            <input
-                                type="number"
-                                placeholder="Ex: 500000"
-                                value={filters.maxPrice}
-                                onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })}
-                                style={{
-                                    background: 'var(--bg-tertiary)',
-                                    border: '1px solid var(--glass-border)',
-                                    color: 'var(--text-primary)',
-                                    padding: '0.625rem',
-                                    borderRadius: 'var(--radius-sm)',
-                                    outline: 'none',
-                                    width: '100%',
-                                    fontFamily: 'inherit'
-                                }}
-                            />
-                        </div>
-
-                        <div className="filter-group">
-                            <label>Statut</label>
-                            <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
-                                <option value="all">Tous</option>
-                                <option value="Disponible">Disponible</option>
-                                <option value="Occupé">Occupé</option>
-                            </select>
-                        </div>
-
-                        <div className="filter-group">
-                            <label>Meublé</label>
-                            <select value={filters.meuble} onChange={(e) => setFilters({ ...filters, meuble: e.target.value })}>
-                                <option value="all">Tous</option>
-                                <option value="oui">Meublé</option>
-                                <option value="non">Non meublé</option>
-                            </select>
-                        </div>
-
-                        <button className="btn btn-ghost" onClick={resetFilters}>
-                            Réinitialiser
-                        </button>
+                        <AnimatePresence mode="popLayout">
+                            {paginatedProperties.map((property, index) => (
+                                <PropertyCard
+                                    key={property.id}
+                                    property={property}
+                                    index={index}
+                                    viewMode={viewMode}
+                                    onViewDetails={handleViewDetails}
+                                />
+                            ))}
+                        </AnimatePresence>
                     </motion.div>
                 )}
-            </AnimatePresence>
 
-            {viewMode === 'map' ? (
-                <div className="map-view-container">
-                    {geocoding && (
-                        <div className="map-loading-overlay">
-                            <Loader className="spinner" size={24} />
-                            <span>Géocodage des propriétés...</span>
-                        </div>
-                    )}
-                    <PropertyMap
-                        properties={filteredGeocodedProperties}
-                        onPropertyClick={handleViewDetails}
-                    />
-                </div>
-            ) : viewMode === 'list' ? (
-                <PropertyListView
-                    properties={paginatedProperties}
-                    onViewDetails={handleViewDetails}
-                    handleContact={handleTableContact}
-                    sortConfig={sortConfig}
-                    onSort={handleSort}
-                />
-            ) : (
-                <div className={`properties-container ${viewMode}`}>
-                    <AnimatePresence mode="wait">
-                        {paginatedProperties.map((property, index) => (
-                            <PropertyCard
-                                key={property.id}
-                                property={property}
-                                index={index}
-                                viewMode={viewMode}
-                                onViewDetails={handleViewDetails}
-                            />
-                        ))}
-                    </AnimatePresence>
-                </div>
-            )}
+                {filteredProperties.length === 0 && !loading && (() => {
+                    const hasSearch = Boolean(searchTerm);
+                    const hasFilters = Object.values(filters).some(v => v !== 'all' && v !== '' && v !== false);
+                    const variant = hasSearch ? 'search' : hasFilters ? 'filter' : 'building';
+                    const title = hasSearch ? `Aucun résultat pour « ${searchTerm} »`
+                        : hasFilters ? 'Aucun bien correspond à vos filtres'
+                            : 'Aucun bien disponible';
+                    const desc = hasSearch ? 'Essayez un autre terme de recherche ou élargissez vos critères.'
+                        : hasFilters ? 'Modifiez ou réinitialisez les filtres pour voir plus de résultats.'
+                            : 'Les nouvelles annonces WhatsApp apparaîtront ici automatiquement.';
+                    return (
+                        <EmptyState
+                            variant={variant}
+                            title={title}
+                            description={desc}
+                            showTips={hasSearch}
+                            actionLabel={(hasSearch || hasFilters) ? 'Réinitialiser' : undefined}
+                            onAction={(hasSearch || hasFilters) ? resetFilters : undefined}
+                            size="medium"
+                        />
+                    );
+                })()}
 
-            {filteredProperties.length === 0 && !loading && (
-                <EmptyState
-                    icon={Building}
-                    title="Aucun bien trouvé"
-                    description={searchTerm || Object.values(filters).some(v => v !== 'all' && v !== '' && v !== false)
-                        ? "Essayez de modifier vos filtres ou votre recherche"
-                        : "Aucun bien disponible pour le moment"}
-                    actionLabel="Réinitialiser les filtres"
-                    onAction={resetFilters}
-                    size="medium"
-                />
-            )}
-
-            {/* Pagination Controls */}
-            {viewMode !== 'map' && filteredProperties.length > ITEMS_PER_PAGE && (
-                <div className="pagination-controls" style={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    padding: '2rem 0',
-                    marginTop: '2rem',
-                    borderTop: '1px solid var(--border-color)'
-                }}>
-                    <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                        disabled={currentPage === 1}
-                        style={{
-                            opacity: currentPage === 1 ? 0.5 : 1,
-                            cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
-                        }}
-                    >
-                        Précédent
-                    </button>
-
-                    <div style={{
+                {/* Pagination Controls */}
+                {viewMode !== 'map' && filteredProperties.length > ITEMS_PER_PAGE && (
+                    <div className="pagination-controls" style={{
                         display: 'flex',
-                        gap: '0.25rem',
-                        alignItems: 'center'
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        padding: '2rem 0',
+                        marginTop: '2rem',
+                        borderTop: '1px solid var(--border-color)'
                     }}>
-                        {Array.from({ length: totalPages }, (_, i) => i + 1)
-                            .filter(page => {
-                                // Afficher les 3 premières, les 3 dernières, et 2 autour de la page actuelle
-                                return page <= 3 ||
-                                    page > totalPages - 3 ||
-                                    Math.abs(page - currentPage) <= 1;
-                            })
-                            .map((page, index, array) => {
-                                // Ajouter des "..." entre les groupes
-                                const prevPage = array[index - 1];
-                                const showEllipsis = prevPage && page - prevPage > 1;
+                        <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                            disabled={currentPage === 1}
+                            style={{
+                                opacity: currentPage === 1 ? 0.5 : 1,
+                                cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
+                            }}
+                        >
+                            Précédent
+                        </button>
 
-                                return (
-                                    <React.Fragment key={page}>
-                                        {showEllipsis && (
-                                            <span style={{ padding: '0 0.5rem', color: 'var(--text-secondary)' }}>...</span>
-                                        )}
-                                        <button
-                                            className={`btn ${currentPage === page ? 'btn-primary' : 'btn-ghost'} btn-sm`}
-                                            onClick={() => setCurrentPage(page)}
-                                            style={{
-                                                minWidth: '2.5rem',
-                                                fontWeight: currentPage === page ? 'bold' : 'normal'
-                                            }}
-                                        >
-                                            {page}
-                                        </button>
-                                    </React.Fragment>
-                                );
-                            })}
+                        <div style={{
+                            display: 'flex',
+                            gap: '0.25rem',
+                            alignItems: 'center'
+                        }}>
+                            {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                .filter(page => {
+                                    // Afficher les 3 premières, les 3 dernières, et 2 autour de la page actuelle
+                                    return page <= 3 ||
+                                        page > totalPages - 3 ||
+                                        Math.abs(page - currentPage) <= 1;
+                                })
+                                .map((page, index, array) => {
+                                    // Ajouter des "..." entre les groupes
+                                    const prevPage = array[index - 1];
+                                    const showEllipsis = prevPage && page - prevPage > 1;
+
+                                    return (
+                                        <React.Fragment key={page}>
+                                            {showEllipsis && (
+                                                <span style={{ padding: '0 0.5rem', color: 'var(--text-secondary)' }}>...</span>
+                                            )}
+                                            <button
+                                                className={`btn ${currentPage === page ? 'btn-primary' : 'btn-ghost'} btn-sm`}
+                                                onClick={() => setCurrentPage(page)}
+                                                style={{
+                                                    minWidth: '2.5rem',
+                                                    fontWeight: currentPage === page ? 'bold' : 'normal'
+                                                }}
+                                            >
+                                                {page}
+                                            </button>
+                                        </React.Fragment>
+                                    );
+                                })}
+                        </div>
+
+                        <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                            disabled={currentPage === totalPages}
+                            style={{
+                                opacity: currentPage === totalPages ? 0.5 : 1,
+                                cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'
+                            }}
+                        >
+                            Suivant
+                        </button>
+
+                        <span style={{
+                            marginLeft: '1rem',
+                            color: 'var(--text-secondary)',
+                            fontSize: '0.875rem'
+                        }}>
+                            Page {currentPage} sur {totalPages} ({filteredProperties.length} biens)
+                        </span>
                     </div>
+                )}
 
-                    <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                        disabled={currentPage === totalPages}
-                        style={{
-                            opacity: currentPage === totalPages ? 0.5 : 1,
-                            cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'
-                        }}
-                    >
-                        Suivant
-                    </button>
-
-                    <span style={{
-                        marginLeft: '1rem',
-                        color: 'var(--text-secondary)',
-                        fontSize: '0.875rem'
-                    }}>
-                        Page {currentPage} sur {totalPages} ({filteredProperties.length} biens)
-                    </span>
-                </div>
-            )}
-
-            <PropertyDetailsModal
-                property={selectedProperty}
-                isOpen={modalOpen}
-                onClose={() => setModalOpen(false)}
-                onToggleDisponible={handleToggleDisponible}
-            />
-        </motion.div>
+                <PropertyDetailsModal
+                    property={selectedProperty}
+                    isOpen={modalOpen}
+                    onClose={() => setModalOpen(false)}
+                    onToggleDisponible={handleToggleDisponible}
+                    currentIdx={selectedIndex}
+                    totalCount={filteredProperties.length}
+                    onPrev={() => handleNavTo(selectedIndex - 1)}
+                    onNext={() => handleNavTo(selectedIndex + 1)}
+                    variant="side-panel"
+                />
+            </motion.div>
+        </PullToRefresh>
     );
 };
 

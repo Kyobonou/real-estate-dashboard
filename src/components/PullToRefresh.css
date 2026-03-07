@@ -1,0 +1,44 @@
+.pull-to-refresh-container {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+}
+
+.pull-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.refresh-circle {
+    width: 40px;
+    height: 40px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--brand-primary);
+    box-shadow: var(--shadow-md);
+}
+
+.refresh-circle.refreshing svg {
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.pull-content {
+    will-change: transform;
+}

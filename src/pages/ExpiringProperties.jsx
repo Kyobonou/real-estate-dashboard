@@ -6,7 +6,7 @@ import {
 import apiService from '../services/api';
 import { useToast } from '../components/Toast';
 import Skeleton from '../components/Skeleton';
-import { whatsappLink, formatPhoneCI } from '../utils/phoneUtils';
+import { whatsappLink, extractBestPhone } from '../utils/phoneUtils';
 import './Properties.css';
 
 const ExpiringProperties = () => {
@@ -212,7 +212,7 @@ const ExpiringProperties = () => {
                 <div className="expiring-properties-list">
                     {filtered.map((property, index) => {
                         const statusClass = getStatusClass(property.daysUntilExpiration);
-                        const phone = formatPhoneCI(property.telephoneExpediteur || property.telephoneBien);
+                        const phone = extractBestPhone(property);
                         const isRenewing = actionLoading[property.id];
                         const isArchiving = actionLoading[property.id + '-archive'];
 

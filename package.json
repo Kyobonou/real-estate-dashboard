@@ -6,21 +6,26 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:app": "vite build --mode app",
+    "build:vitrine": "vite build --mode vitrine",
     "analyze": "vite build && open dist/stats.html",
     "lint": "eslint .",
     "preview": "vite preview",
     "check-login": "firebase login:list",
-    "deploy": "vite build && firebase deploy --only hosting --project immo-dashboard-ci"
+    "deploy": "npm run deploy:app && npm run deploy:vitrine",
+    "deploy:app": "npm run build:app && firebase deploy --only hosting:app --project immo-dashboard-ci",
+    "deploy:vitrine": "npm run build:vitrine && firebase deploy --only hosting:vitrine --project immo-dashboard-ci"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
     "@supabase/supabase-js": "^2.95.3",
     "date-fns": "^4.1.0",
     "firebase": "^12.9.0",
-    "framer-motion": "^12.34.0",
+    "framer-motion": "^12.35.0",
     "jspdf": "^4.1.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.563.0",
+    "playwright": "^1.58.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-leaflet": "^5.0.0",

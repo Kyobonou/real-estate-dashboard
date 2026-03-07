@@ -30,7 +30,8 @@ class SupabaseService {
         this.listeners = new Map();
         // In-memory cache with 90s TTL — avoids duplicate Supabase calls across pages
         this._cache = {};
-        this._cacheTTL = 90000;
+        this._pendingRequests = {}; // Prévenir les appels parallèles dupliqués
+        this._cacheTTL = 300000; // 5 minutes TTL pour améliorer la fluidité de la navigation
     }
 
     _getCached(key) {
@@ -121,7 +122,14 @@ class SupabaseService {
     formatPrice(amount, messageText = '') {
         if (!amount) return '0';
         const num = typeof amount === 'number' ? amount : this.parsePrice(amount);
-        const formatted = num.toLocaleString('fr-FR');
+
+        let formatted = num.toLocaleString('fr-FR');
+        if (num >= 1000000) {
+            const millions = num / 1000000;
+            formatted = Number.isInteger(millions)
+                ? millions + ' Millions'
+                : millions.toLocaleString('fr-FR') + ' Millions';
+        }
 
         // Check BOTH conditions:
         // 1. Message contains "m²" or "m2" or "M2"
@@ -143,6 +151,18 @@ class SupabaseService {
 
             if (hasMeterSquare && hasPrice) {
                 return `${formatted} FCFA/m²`;
+            }
+
+            // Patterns relaxés : prix par m2 sans slash explicite
+            // "en vente à 35 milles m2", "35 000 le m2", "à partir de 35 000 FCFA m2"
+            const relaxedPatterns = [
+                /\d[\d\s.,]*\s*(mille|million)s?\s*(m²|m2)/i,     // "35 milles m2"
+                /(?:à\s+partir\s+de|vente\s+à|vendu\s+à|proposé\s+à)\s+\d[\d\s.,]*(mille|million)s?\s*(m²|m2)/i,
+                /\d[\d\s.,]*(frs?|fcfa)?\s+le\s+(m²|m2)/i,
+            ];
+            const hasRelaxedPrice = relaxedPatterns.some(pattern => pattern.test(messageText));
+            if (hasMeterSquare && hasRelaxedPrice) {
+                return `à partir de ${formatted} FCFA/m²`;
             }
         }
 
@@ -225,7 +245,7 @@ class SupabaseService {
             const { data, error } = await supabase
                 .from('images')
                 .select('id, publication_id, lien_image, lien_thumb, horodatage, image_order, message_id')
-                .eq('publication_id', publicationId)
+                .or(`publication_id.eq.${publicationId},message_id.eq.${publicationId}`)
                 .order('image_order', { ascending: true });
             if (error) return [];
             return data || [];
@@ -236,16 +256,39 @@ class SupabaseService {
     async getImagesForPublications(publicationIds) {
         if (!publicationIds || publicationIds.length === 0) return {};
         try {
-            const { data, error } = await supabase
+            // First try with message_id as it contains the id in the current db state
+            const { data: dataMsg, error: errMsg } = await supabase
+                .from('images')
+                .select('id, publication_id, lien_image, lien_thumb, horodatage, image_order, message_id')
+                .in('message_id', publicationIds)
+                .order('image_order', { ascending: true });
+
+            // Then try with publication_id for backward compatibility
+            const { data: dataPub, error: errPub } = await supabase
                 .from('images')
                 .select('id, publication_id, lien_image, lien_thumb, horodatage, image_order, message_id')
                 .in('publication_id', publicationIds)
                 .order('image_order', { ascending: true });
-            if (error) return {};
+
             const grouped = {};
-            (data || []).forEach(img => {
-                if (!grouped[img.publication_id]) grouped[img.publication_id] = [];
-                grouped[img.publication_id].push(img);
+            const allData = [...(dataMsg || []), ...(dataPub || [])];
+
+            // Filter duplicates if any
+            const uniqueData = Array.from(new Map(allData.map(item => [item.id, item])).values());
+
+            uniqueData.forEach(img => {
+                const pubKey = img.publication_id;
+                const msgKey = img.message_id;
+
+                if (pubKey) {
+                    if (!grouped[pubKey]) grouped[pubKey] = [];
+                    grouped[pubKey].push(img);
+                }
+                // If message_id is different, add it there too to ensure mapping
+                if (msgKey && msgKey !== pubKey) {
+                    if (!grouped[msgKey]) grouped[msgKey] = [];
+                    grouped[msgKey].push(img);
+                }
             });
             return grouped;
         } catch (e) { return {}; }
@@ -310,139 +353,192 @@ class SupabaseService {
             const cached = this._getCached('properties');
             if (cached) return cached;
         }
-        try {
-            // Add LIMIT to prevent loading ALL records - fetch in batches if needed
-            const { data, error } = await supabase.from('locaux').select('*').limit(1000);
-            if (error) throw error;
 
-            const transformed = data.map(p => {
-                // Default to Disponible (true) unless explicitly set to 'Non'/false
-                const isDispo = p.disponible !== false && !(typeof p.disponible === 'string' && p.disponible.toLowerCase() === 'non');
-                const isMeuble = (p.meubles && typeof p.meubles === 'string' && p.meubles.toLowerCase() === 'oui') || p.meubles === true;
-
-                // Parse Price (handle text with shorthand M, k, FCFA)
-                const priceStr = p.prix || '0';
-                const rawPrice = this.parsePrice(priceStr);
-
-                return {
-                    id: p.id,
-                    refBien: p.ref_bien || '',
-                    publicationId: p.publication_id || '',
-                    contentHash: p.content_hash || '',  // NEW: deduplication hash
-                    messageHash: p.message_hash || '',
-                    typeBien: this.normalizePropertyType(p.type_de_bien),
-                    typeOffre: p.type_offre || '',
-                    zone: p.zone_geographique || '',
-                    commune: p.commune || '',
-                    quartier: p.quartier || '',
-                    locationLabel: [p.commune, p.quartier].filter(Boolean).join(' - ') || p.zone_geographique || '',
-                    prix: priceStr,
-                    rawPrice: rawPrice,
-                    telephoneBien: p.telephone_bien || p.telephone || '',  // Contact number for the property
-                    telephoneExpediteur: p.telephone_expediteur || p.telephone || '',  // Sharer's phone number
-                    caracteristiques: p.caracteristiques || '',
-                    description: p.message_initial || p.caracteristiques || '',
-                    features: p.caracteristiques ? p.caracteristiques.split(/,|\||\n/).map(s => s.trim()) : [],
-                    publiePar: p.publie_par || '',
-                    expediteur: p.expediteur || '',  // NEW: name of sharer
-                    meubles: p.meubles || 'Non',
-                    meuble: isMeuble,
-                    chambre: p.chambre || 0,
-                    chambres: parseInt(p.chambre) || 0,
-                    disponible: isDispo,
-                    groupeWhatsApp: p.groupe_whatsapp_origine || '',
-                    imageUrl: p.lien_image || '',
-                    datePublication: this.formatDateShort(p.date_publication),
-                    shares: (() => { try { return p.shares ? (typeof p.shares === 'string' ? JSON.parse(p.shares) : p.shares) : []; } catch { return []; } })(),
-                    status: isDispo ? 'Disponible' : 'Occupé',
-                    prixFormate: this.formatPrice(rawPrice, p.message_initial || p.caracteristiques),
-                    dateExpiration: p.date_expiration || null,
-                    renewalStatus: p.status || 'active',
-                    relanceCount: p.relance_count || 0,
-                    lastRelanceDate: p.last_relance_date || null
-                };
-            });
-
-            // Optimized single-pass deduplication
-            // Combines: publication_id, content_hash, and text fingerprint checks
-            const seenPubIds = new Set();
-            const seenHashes = new Set();
-            const seenTextFp = new Set();
-            const deduped = [];
-
-            for (const p of transformed) {
-                // Skip if demand (misclassified)
-                if (_isDemand(p.description)) continue;
-
-                // Check publication_id (same message processed multiple times)
-                const pubKey = p.publicationId || ('id:' + p.id);
-                if (seenPubIds.has(pubKey)) continue;
-                seenPubIds.add(pubKey);
-
-                // Check content_hash (same property shared in multiple groups)
-                if (p.contentHash && seenHashes.has(p.contentHash)) continue;
-                if (p.contentHash) seenHashes.add(p.contentHash);
-
-                // Check text fingerprint (copied messages with same content)
-                // Include commune in key: same message can contain multiple distinct properties
-                // from different communes — they are NOT duplicates
-                let isDupText = false;
-                if (p.description && p.description.length > 20) {
-                    const textPart = p.description
-                        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-                        .toLowerCase()
-                        .replace(/[^a-z0-9]/g, '')
-                        .substring(0, 250);
-                    const fp = (p.commune || '') + '|' + textPart;
-                    if (textPart.length > 20) {
-                        if (seenTextFp.has(fp)) isDupText = true;
-                        else seenTextFp.add(fp);
-                    }
-                }
-                if (isDupText) continue;
-
-                deduped.push(p);
-            }
-
-            console.debug(`[Dédup] DB:${transformed.length} → deduplicated:${deduped.length}`);
-            const trueProperties = deduped;
-
-            // Enrich with WhatsApp group names
-            const enriched = await whatsappGroupService.enrichWithGroupNames(trueProperties, 'groupeWhatsApp');
-
-            const result = { success: true, data: enriched, source: 'supabase' };
-            this._setCache('properties', result);
-            return result;
-        } catch (error) {
-            console.error('Supabase Properties Error:', error);
-            const errorMessage = this._getErrorMessage(error);
-            return { success: false, error: errorMessage, data: [] };
+        if (this._pendingRequests['properties']) {
+            return this._pendingRequests['properties'];
         }
+
+        const fetchPromise = (async () => {
+            try {
+                // Supabase REST API is capped at 1000 rows per request.
+                // We paginate to fetch ALL records from locaux.
+                const PAGE_SIZE = 1000;
+                let allData = [];
+                let page = 0;
+                let keepGoing = true;
+
+                while (keepGoing) {
+                    const from = page * PAGE_SIZE;
+                    const to = from + PAGE_SIZE - 1;
+                    const { data: pageData, error: pageError } = await supabase
+                        .from('locaux')
+                        .select('*')
+                        .order('date_publication', { ascending: false })
+                        .range(from, to);
+
+                    if (pageError) throw pageError;
+                    if (!pageData || pageData.length === 0) break;
+
+                    allData = allData.concat(pageData);
+                    keepGoing = pageData.length === PAGE_SIZE; // continue if full page returned
+                    page++;
+                }
+
+                const data = allData;
+                console.debug(`[locaux] Fetched ${data.length} rows in ${page} page(s)`);
+                if (!data) throw new Error('No data');
+
+
+                const transformed = data.map(p => {
+                    // Default to Disponible (true) unless explicitly set to 'Non'/false
+                    const isDispo = p.disponible !== false && !(typeof p.disponible === 'string' && p.disponible.toLowerCase() === 'non');
+                    const isMeuble = (p.meubles && typeof p.meubles === 'string' && p.meubles.toLowerCase() === 'oui') || p.meubles === true;
+
+                    // Parse Price (handle text with shorthand M, k, FCFA)
+                    const priceStr = p.prix || '0';
+                    const rawPrice = this.parsePrice(priceStr);
+
+                    // Attempt to extract salle d'eau count from text if 0
+                    let sallesEau = 0;
+                    const textForSde = (p.caracteristiques || p.message_initial || '').toLowerCase();
+                    const sdeMatch = textForSde.match(/(\d+)\s*(salle[s]?\s*d'eau|douche[s]?|sdb|salle[s]?\s*de\s*bain)/i);
+                    if (sdeMatch) {
+                        sallesEau = parseInt(sdeMatch[1]);
+                    }
+
+                    return {
+                        id: p.id,
+                        refBien: p.ref_bien || '',
+                        publicationId: p.publication_id || '',
+                        contentHash: p.content_hash || '',
+                        messageHash: p.message_hash || '',
+                        typeBien: this.normalizePropertyType(p.type_de_bien),
+                        typeOffre: p.type_offre || '',
+                        zone: p.zone_geographique || '',
+                        commune: p.commune || '',
+                        quartier: p.quartier || '',
+                        locationLabel: [p.commune, p.quartier].filter(Boolean).join(' - ') || p.zone_geographique || '',
+                        prix: priceStr,
+                        rawPrice: rawPrice,
+                        telephoneBien: p.telephone_bien || p.telephone || p.numero || '',
+                        telephoneExpediteur: p.telephone_expediteur || p.telephone || p.numero || '',
+                        telephone: p.telephone || '',
+                        contact: p.contact || p.numero || p.numero_agent || '',
+                        cleanedSenderPn: p.cleanedSenderPn || p.cleaned_sender_pn || '',
+                        // Source pour l'extraction textuelle
+                        message_initial: p.message_initial || '',
+                        caracteristiques: p.caracteristiques || '',
+                        description: p.message_initial || p.caracteristiques || '',
+                        features: p.caracteristiques ? p.caracteristiques.split(/,|\||\n/).map(s => s.trim()) : [],
+                        publiePar: p.publie_par || '',
+                        expediteur: p.expediteur || '',
+                        surface: p.surface || '',
+                        superficie: (p.surface && typeof p.surface === 'string') ? p.surface.replace(/m2|m²/gi, '').trim() : (p.surface || ''),
+                        groupeWhatsAppJid: p.groupe_whatsapp_jid || p.groupe_whatsapp_origine || '',
+                        meubles: p.meubles || 'Non',
+                        meuble: isMeuble,
+                        chambre: p.chambre || 0,
+                        chambres: parseInt(p.chambre) || 0,
+                        salles_eau: sallesEau,
+                        disponible: isDispo,
+                        groupeWhatsApp: p.groupe_whatsapp_origine || '',
+                        imageUrl: p.lien_image || '',
+                        datePublication: this.formatDateShort(p.date_publication),
+                        datePublicationRaw: p.date_publication || null,
+                        shares: (() => { try { return p.shares ? (typeof p.shares === 'string' ? JSON.parse(p.shares) : p.shares) : []; } catch { return []; } })(),
+                        status: isDispo ? 'Disponible' : 'Occupé',
+                        prixFormate: this.formatPrice(rawPrice, p.message_initial || p.caracteristiques),
+                        dateExpiration: p.date_expiration || null,
+                        renewalStatus: p.status || 'active',
+                        relanceCount: p.relance_count || 0,
+                        lastRelanceDate: p.date_derniere_relance || null
+                    };
+                });
+
+                // Optimized single-pass deduplication
+                // Combines: publication_id, content_hash, and text fingerprint checks
+                const seenPubIds = new Set();
+                const seenHashes = new Set();
+                const seenTextFp = new Set();
+                const deduped = [];
+
+                for (const p of transformed) {
+                    // Skip if demand (misclassified)
+                    if (_isDemand(p.description)) continue;
+
+                    // Check publication_id (same message processed multiple times)
+                    const pubKey = p.publicationId || ('id:' + p.id);
+                    if (seenPubIds.has(pubKey)) continue;
+                    seenPubIds.add(pubKey);
+
+                    // Check content_hash (same property shared in multiple groups)
+                    if (p.contentHash && seenHashes.has(p.contentHash)) continue;
+                    if (p.contentHash) seenHashes.add(p.contentHash);
+
+                    // Check text fingerprint (copied messages with same content)
+                    // Include commune in key: same message can contain multiple distinct properties
+                    // from different communes — they are NOT duplicates
+                    let isDupText = false;
+                    if (p.description && p.description.length > 20) {
+                        const textPart = p.description
+                            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                            .toLowerCase()
+                            .replace(/[^a-z0-9]/g, '')
+                            .substring(0, 250);
+                        const fp = (p.commune || '') + '|' + textPart;
+                        if (textPart.length > 20) {
+                            if (seenTextFp.has(fp)) isDupText = true;
+                            else seenTextFp.add(fp);
+                        }
+                    }
+                    if (isDupText) continue;
+
+                    deduped.push(p);
+                }
+
+                console.debug(`[Dédup] DB:${transformed.length} → deduplicated:${deduped.length}`);
+                const trueProperties = deduped;
+
+                // Enrich with WhatsApp group names
+                const enriched = await whatsappGroupService.enrichWithGroupNames(trueProperties, 'groupeWhatsApp');
+
+                // Enrich with images from the `images` table (batch fetch, single query)
+                const pubIds = enriched.filter(p => p.publicationId).map(p => p.publicationId);
+                const imagesMap = pubIds.length > 0 ? await this.getImagesForPublications(pubIds) : {};
+                const enrichedWithImages = enriched.map(p => {
+                    const linkedImages = imagesMap[p.publicationId] || [];
+                    const extraUrls = linkedImages.map(i => i.lien_image).filter(Boolean);
+                    return {
+                        ...p,
+                        images: linkedImages,
+                        imageUrls: extraUrls,
+                        // locaux.lien_image (set by Uploader node) takes priority, then images table
+                        imageUrl: p.imageUrl || extraUrls[0] || '',
+                        photoCount: linkedImages.length || (p.imageUrl ? 1 : 0),
+                    };
+                });
+
+                const result = { success: true, data: enrichedWithImages, source: 'supabase' };
+                this._setCache('properties', result);
+                return result;
+            } catch (error) {
+                console.error('Supabase Properties Error:', error);
+                const errorMessage = this._getErrorMessage(error);
+                return { success: false, error: errorMessage, data: [] };
+            } finally {
+                delete this._pendingRequests['properties'];
+            }
+        })();
+
+        this._pendingRequests['properties'] = fetchPromise;
+        return fetchPromise;
     }
 
     async getImagesProperties(forceRefresh = false) {
         const response = await this.getProperties(forceRefresh);
         if (!response.success) return response;
-
-        // Batch-fetch all images for all properties in one query
-        const pubIds = response.data.filter(p => p.publicationId).map(p => p.publicationId);
-        const imagesMap = await this.getImagesForPublications(pubIds);
-
-        // Enrich each property with its linked images
-        const enriched = response.data.map(p => {
-            const linkedImages = imagesMap[p.publicationId] || [];
-            const extraUrls = linkedImages.map(i => i.lien_image).filter(Boolean);
-            return {
-                ...p,
-                images: linkedImages,
-                imageUrls: extraUrls,
-                // Primary image: lien_image from locaux first, then first from images table
-                imageUrl: p.imageUrl || extraUrls[0] || '',
-                photoCount: linkedImages.length
-            };
-        });
-
-        const withImages = enriched.filter(p => p.imageUrl || p.images.length > 0);
+        // getProperties() already enriches with images — just filter to those that have any
+        const withImages = response.data.filter(p => p.imageUrl || (p.images && p.images.length > 0));
         return { success: true, data: withImages, source: response.source };
     }
 
@@ -489,55 +585,69 @@ class SupabaseService {
             const cached = this._getCached('visits');
             if (cached) return cached;
         }
-        try {
-            const { data, error } = await supabase.from('visite_programmee').select('*').limit(500);
-            if (error) throw error;
 
-            const transformed = data.map(v => {
-                // Parse date
-                let dateRv = null;
-                if (v.date_rv) {
-                    dateRv = new Date(v.date_rv);
-                    // Fallback for custom formats if JS Date fails or simple ISO check
-                    if (isNaN(dateRv.getTime()) && typeof v.date_rv === 'string') {
-                        // Try DD/MM/YYYY or DD/MM/YYYY HH:MM
-                        // Or try stripping " le " etc.
-                        // Simplest fallback for now if standard parsing fails
-                    }
-                }
-
-                const isScheduled = (v.visite_prog && typeof v.visite_prog === 'string' && v.visite_prog.toLowerCase() === 'oui') || v.visite_prog === true;
-
-                return {
-                    id: v.id,
-                    nomPrenom: v.nom_prenom || 'Client Inconnu',
-                    numero: v.numero || '',
-                    dateRv: v.date_rv, // keep raw text
-                    localInteresse: v.local_interesse || '',
-                    refBien: v.ref_bien || '',  // NEW: property reference code from workflow
-                    visiteProg: isScheduled,
-                    // Calculated
-                    parsedDate: (dateRv && !isNaN(dateRv.getTime())) ? dateRv : null,
-                    status: this.getVisitStatus(dateRv, isScheduled)
-                };
-            });
-
-            const result = { success: true, data: transformed, source: 'supabase' };
-            this._setCache('visits', result);
-            return result;
-        } catch (error) {
-            console.error('Supabase Visits Error:', error);
-            const errorMessage = this._getErrorMessage(error);
-            return { success: false, error: errorMessage, data: [] };
+        if (this._pendingRequests['visits']) {
+            return this._pendingRequests['visits'];
         }
+
+        const fetchPromise = (async () => {
+            try {
+                const { data, error } = await supabase.from('visite_programmee').select('*').order('id', { ascending: false }).limit(5000);
+                if (error) throw error;
+
+                const transformed = data.map(v => {
+                    // Parse date
+                    let dateRv = null;
+                    if (v.date_rv) {
+                        dateRv = new Date(v.date_rv);
+                        // Fallback for custom formats if JS Date fails or simple ISO check
+                        if (isNaN(dateRv.getTime()) && typeof v.date_rv === 'string') {
+                            // Try DD/MM/YYYY or DD/MM/YYYY HH:MM
+                            // Or try stripping " le " etc.
+                            // Simplest fallback for now if standard parsing fails
+                        }
+                    }
+
+                    const isScheduled = (v.visite_prog && typeof v.visite_prog === 'string' && v.visite_prog.toLowerCase() === 'oui') || v.visite_prog === true;
+
+                    return {
+                        id: v.id,
+                        nomPrenom: v.nom_prenom || 'Client Inconnu',
+                        numero: v.numero || '',
+                        dateRv: v.date_rv, // keep raw text
+                        localInteresse: v.bien_description || v.local_interesse || '',
+                        refBien: v.ref_bien || '',  // NEW: property reference code from workflow
+                        agence_nom: v.agence_nom || v.publie_par || '',
+                        agence_tel: v.agence_tel || v.contact_proprietaire || '',
+                        visiteProg: isScheduled,
+                        // Calculated
+                        parsedDate: (dateRv && !isNaN(dateRv.getTime())) ? dateRv : null,
+                        status: this.getVisitStatus(dateRv, isScheduled)
+                    };
+                });
+
+                const result = { success: true, data: transformed, source: 'supabase' };
+                this._setCache('visits', result);
+                return result;
+            } catch (error) {
+                console.error('Supabase Visits Error:', error);
+                const errorMessage = this._getErrorMessage(error);
+                return { success: false, error: errorMessage, data: [] };
+            } finally {
+                delete this._pendingRequests['visits'];
+            }
+        })();
+
+        this._pendingRequests['visits'] = fetchPromise;
+        return fetchPromise;
     }
 
     async getStats(forceRefresh = false) {
         try {
             // Fetch both in parallel
             const [propsRes, visitsRes] = await Promise.all([
-                this.getProperties(),
-                this.getVisits()
+                this.getProperties(forceRefresh),
+                this.getVisits(forceRefresh)
             ]);
 
             const properties = propsRes.data || [];
@@ -621,8 +731,11 @@ class SupabaseService {
                 id: v.id.toString(),
                 content: v.nomPrenom || "Client Inconnu",
                 property: v.localInteresse || "Bien non spécifié",
+                address: v.localInteresse || "",
                 date: v.dateRv ? new Date(v.dateRv).toLocaleDateString() : "Date inconnue",
                 price: "Budget N/A",
+                phone: v.numero || '',
+                ref: v.refBien || '',
                 tags: v.visiteProg ? ["Programmée"] : ["À planifier"],
                 status: this.mapVisitToPipelineStatus(v),
                 originalData: v
@@ -800,7 +913,7 @@ class SupabaseService {
                     .from('locaux')
                     .select('*')
                     .eq('disponible', 'Oui')
-                    .or('status.eq.active,status.is.null')
+                    .or('status.eq.active,status.eq.pending_confirm,status.is.null')
                     .not('date_expiration', 'is', null)
                     .lte('date_expiration', thresholdDate.toISOString())
                     .order('date_expiration', { ascending: true })
@@ -809,7 +922,7 @@ class SupabaseService {
                     .from('locaux')
                     .select('*')
                     .eq('disponible', 'Oui')
-                    .or('status.eq.active,status.is.null')
+                    .or('status.eq.active,status.eq.pending_confirm,status.is.null')
                     .is('date_expiration', null)
                     .not('date_publication', 'is', null)
                     .lte('date_publication', fallbackDate.toISOString())
@@ -858,6 +971,7 @@ class SupabaseService {
                     telephoneBien: p.telephone_bien || p.telephone || '',
                     telephoneExpediteur: p.telephone_expediteur || p.telephone || '',
                     expediteur: p.expediteur || '',
+                    surface: p.surface || '',
                     caracteristiques: p.caracteristiques || '',
                     description: p.message_initial || p.caracteristiques || '',
                     disponible: isDispo,
@@ -865,8 +979,10 @@ class SupabaseService {
                     chambres: parseInt(p.chambre) || 0,
                     groupeWhatsApp: p.groupe_whatsapp_origine || '',
                     groupeWhatsAppOrigine: p.groupe_whatsapp_origine || '',
+                    groupeWhatsAppJid: p.groupe_whatsapp_jid || '',
                     imageUrl: p.lien_image || '',
                     datePublication: this.formatDateShort(p.date_publication),
+                    datePublicationRaw: p.date_publication || null,
                     dateExpiration: p.date_expiration || null,
                     renewalStatus: p.status || 'active',
                     relanceCount: p.relance_count || 0,

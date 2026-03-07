@@ -76,26 +76,89 @@ const DashboardSkeleton = () => (
 );
 
 
-// Components internal optimized for Dashboard V2
-const StatCardV3 = ({ title, value, icon: Icon, trend, trendValue, color }) => (
-    <div className="stat-card-v3">
-        <div className="stat-icon-wrapper" style={{ backgroundColor: color, boxShadow: `0 4px 12px ${color}40` }}>
-            <Icon size={24} color="white" />
-        </div>
-        <div className="stat-content">
-            <span className="stat-label">{title}</span>
-            <div className="stat-value">{value}</div>
-            <div className="stat-footer">
-                {trend && (
-                    <div className={`stat-trend ${trend === 'up' ? 'positive' : trend === 'down' ? 'negative' : 'neutral'}`}>
-                        {trend === 'up' ? <TrendingUp size={14} /> : trend === 'down' ? <TrendingDown size={14} /> : null}
-                        <span>{trendValue}</span>
-                    </div>
-                )}
-            </div>
-        </div>
-    </div>
+// ─── Animated Counter Hook ──────────────────────────────────────────────────
+function useAnimatedCounter(target, duration = 1200) {
+    const [count, setCount] = React.useState(0);
+    const prevTarget = React.useRef(0);
+    React.useEffect(() => {
+        const numTarget = parseFloat(String(target).replace(/[^0-9.]/g, '')) || 0;
+        if (numTarget === prevTarget.current) return;
+        const start = prevTarget.current;
+        prevTarget.current = numTarget;
+        const startTime = performance.now();
+        const step = (now) => {
+            const elapsed = now - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            // ease-out cubic
+            const eased = 1 - Math.pow(1 - progress, 3);
+            setCount(Math.round(start + (numTarget - start) * eased));
+            if (progress < 1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+    }, [target, duration]);
+    return count;
+}
+
+// ─── Pulsing Status Dot ──────────────────────────────────────────────────────
+const PulseDot = ({ color = '#10b981' }) => (
+    <span style={{ position: 'relative', display: 'inline-flex', width: 10, height: 10, marginRight: 4, flexShrink: 0 }}>
+        <span style={{
+            position: 'absolute', inset: 0, borderRadius: '50%',
+            background: color, opacity: 0.4,
+            animation: 'pulse-ring 1.8s cubic-bezier(0.4,0,0.6,1) infinite'
+        }} />
+        <span style={{ borderRadius: '50%', background: color, width: '100%', height: '100%', display: 'block' }} />
+    </span>
 );
+
+// Components internal optimized for Dashboard V2
+const StatCardV3 = ({ title, value, icon: Icon, trend, trendValue, color }) => {
+    // Determine if value is a plain number or a percentage string
+    const isPercent = typeof value === 'string' && value.endsWith('%');
+    const numericValue = isPercent
+        ? parseFloat(value)
+        : (typeof value === 'number' ? value : parseInt(value) || 0);
+    const animatedVal = useAnimatedCounter(numericValue);
+    const displayValue = isPercent ? `${animatedVal}%` : animatedVal;
+
+    return (
+        <motion.div
+            className="stat-card-v3"
+            whileHover={{ y: -6, boxShadow: `0 16px 40px ${color}30` }}
+            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+        >
+            <motion.div
+                className="stat-icon-wrapper"
+                style={{ backgroundColor: color, boxShadow: `0 4px 12px ${color}40` }}
+                whileHover={{ rotate: [0, -10, 10, 0], scale: 1.1 }}
+                transition={{ duration: 0.4 }}
+            >
+                <Icon size={24} color="white" />
+            </motion.div>
+            <div className="stat-content">
+                <span className="stat-label">{title}</span>
+                <motion.div
+                    className="stat-value"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.1 }}
+                >
+                    {displayValue}
+                </motion.div>
+                <div className="stat-footer">
+                    {trend && (
+                        <div className={`stat-trend ${trend === 'up' ? 'positive' : trend === 'down' ? 'negative' : 'neutral'}`}>
+                            {trend === 'up' ? (
+                                <><PulseDot color={color} /><TrendingUp size={12} /></>
+                            ) : trend === 'down' ? <TrendingDown size={14} /> : null}
+                            <span>{trendValue}</span>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </motion.div>
+    );
+};
 
 const ListItem = ({ title, subtitle, meta, icon: Icon, color, metaColor }) => (
     <div className="list-item">
@@ -166,12 +229,20 @@ const Dashboard = () => {
 
     useEffect(() => {
         loadData();
-        const interval = setInterval(() => loadData(false), 30000);
+
+        // Écouter les mises à jour globales au lieu de faire son propre polling
+        const unsubscribe = apiService.subscribe('dataUpdate', ({ stats: s, properties: p, visits: v }) => {
+            if (s) setStats(s);
+            if (p) setProperties(p);
+            if (v) setVisits(v);
+        });
 
         const bannerDismissed = localStorage.getItem('welcome_dismissed');
         if (bannerDismissed) setShowWelcome(false);
 
-        return () => clearInterval(interval);
+        return () => {
+            unsubscribe();
+        };
     }, [loadData]);
 
     const handleRefresh = () => loadData(true);
@@ -327,7 +398,7 @@ const Dashboard = () => {
                 </section>
 
                 {/* 2. CHARTS SECTION */}
-                <section className="charts-section">
+                <section className="charts-section horizontal-swiper-mobile">
                     {/* Commune Chart */}
                     <div className="card-panel">
                         <div className="panel-header">
@@ -438,7 +509,7 @@ const Dashboard = () => {
                     <div className="card-panel">
                         <div className="panel-header">
                             <h3>Derniers Ajouts</h3>
-                            <button className="btn-icon-link" onClick={() => navigate('/properties')} title="Voir tout">
+                            <button className="btn-icon-link" onClick={() => navigate('/dashboard/properties')} title="Voir tout">
                                 <ArrowRight size={16} />
                             </button>
                         </div>
@@ -462,7 +533,7 @@ const Dashboard = () => {
                     <div className="card-panel">
                         <div className="panel-header">
                             <h3>Prochaines Visites</h3>
-                            <button className="btn-icon-link" onClick={() => navigate('/visits')} title="Voir tout">
+                            <button className="btn-icon-link" onClick={() => navigate('/dashboard/visits')} title="Voir tout">
                                 <ArrowRight size={16} />
                             </button>
                         </div>

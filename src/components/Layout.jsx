@@ -28,18 +28,53 @@ import apiService from '../services/api';
 import { useNotifications } from '../contexts/NotificationContext';
 import NotificationPanel from './NotificationPanel';
 import ChatAssistant from './ChatAssistant';
+import GlobalSearch from './GlobalSearch';
 import Logo from './Logo';
+import { hapticLight, hapticMedium } from '../utils/haptics';
 import './Layout.css';
 
 const Layout = () => {
     const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
     const [showNotifications, setShowNotifications] = useState(false);
+    const [showSearch, setShowSearch] = useState(false);
     const [isOnline, setIsOnline] = useState(true);
     const location = useLocation();
     const navigate = useNavigate();
     const { user, logout } = useAuth();
     const { unreadCount } = useNotifications();
     const { theme, toggleTheme } = useTheme();
+    const [scrolledDown, setScrolledDown] = useState(false);
+
+    /* Track scroll for dynamic header */
+    useEffect(() => {
+        let lastScrollY = window.scrollY;
+        const handleScroll = () => {
+            if (window.innerWidth > 768) return; // Only on mobile
+
+            const currentScrollY = window.scrollY;
+            if (currentScrollY > lastScrollY && currentScrollY > 60) {
+                setScrolledDown(true);
+            } else {
+                setScrolledDown(false);
+            }
+            lastScrollY = currentScrollY;
+        };
+
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
+
+    /* Ctrl+K  or  Cmd+K  →  open spotlight */
+    useEffect(() => {
+        const handler = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+                setShowSearch(s => !s);
+            }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, []);
 
     useEffect(() => {
         const unsub = apiService.subscribe('connectionChange', ({ online }) => {
@@ -47,7 +82,7 @@ const Layout = () => {
         });
 
         // Start polling for real-time data
-        apiService.startPolling(30000);
+        apiService.startPolling(300000); // 5 minutes au lieu de 30s pour réduire la charge
 
         return () => {
             unsub();
@@ -63,21 +98,21 @@ const Layout = () => {
     }, [location]);
 
     const navItems = [
-        { path: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'agent', 'viewer'] },
-        { path: '/pipeline', icon: Trello, label: 'Pipeline', roles: ['admin', 'agent'] },
-        { path: '/properties', icon: Building, label: 'Biens', roles: ['admin', 'agent', 'viewer'] },
-        { path: '/gallery', icon: Building, label: 'Catalogue', roles: ['admin', 'agent', 'viewer'] },
-        { path: '/expiring', icon: AlertCircle, label: 'À Renouveler', roles: ['admin', 'agent'] },
-        { path: '/visits', icon: Calendar, label: 'Visites', roles: ['admin', 'agent'] },
-        { path: '/requests', icon: MessageCircle, label: 'Demandes', roles: ['admin', 'agent'] },
-        { path: '/clients', icon: Users, label: 'Clients', roles: ['admin', 'agent'] },
-        { path: '/tools/ad-generator', icon: Wand2, label: 'Rédaction IA', roles: ['admin', 'agent'] },
-        { path: '/analytics', icon: TrendingUp, label: 'Analytiques', roles: ['admin'] },
+        { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'agent', 'viewer'] },
+        { path: '/dashboard/pipeline', icon: Trello, label: 'Pipeline', roles: ['admin', 'agent'] },
+        { path: '/dashboard/properties', icon: Building, label: 'Biens', roles: ['admin', 'agent', 'viewer'] },
+        { path: '/dashboard/gallery', icon: Building, label: 'Catalogue', roles: ['admin', 'agent', 'viewer'] },
+        { path: '/dashboard/expiring', icon: AlertCircle, label: 'À Renouveler', roles: ['admin', 'agent'] },
+        { path: '/dashboard/visits', icon: Calendar, label: 'Visites', roles: ['admin', 'agent'] },
+        { path: '/dashboard/requests', icon: MessageCircle, label: 'Demandes', roles: ['admin', 'agent'] },
+        { path: '/dashboard/clients', icon: Users, label: 'Clients', roles: ['admin', 'agent'] },
+        { path: '/dashboard/tools/ad-generator', icon: Wand2, label: 'Rédaction IA', roles: ['admin', 'agent'] },
+        { path: '/dashboard/analytics', icon: TrendingUp, label: 'Analytiques', roles: ['admin'] },
     ].filter(item => !item.roles || item.roles.includes(user?.role || 'admin'));
 
     const allPages = [
         ...navItems,
-        { path: '/settings', label: 'Paramètres', roles: ['admin', 'agent', 'viewer'] }
+        { path: '/dashboard/settings', label: 'Paramètres', roles: ['admin', 'agent', 'viewer'] }
     ].filter(item => !item.roles || item.roles.includes(user?.role || 'admin'));
 
     const handleLogout = () => {
@@ -109,7 +144,7 @@ const Layout = () => {
                         className="logo-container"
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        onClick={() => navigate('/')}
+                        onClick={() => navigate('/dashboard')}
                         style={{ cursor: 'pointer' }}
                     >
                         <Logo collapsed={!sidebarOpen} />
@@ -117,7 +152,7 @@ const Layout = () => {
 
                     <button
                         className="toggle-btn"
-                        onClick={() => setSidebarOpen(!sidebarOpen)}
+                        onClick={() => { hapticLight(); setSidebarOpen(!sidebarOpen); }}
                     >
                         {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
                     </button>
@@ -136,10 +171,27 @@ const Layout = () => {
                 )}
 
                 <nav className="sidebar-nav">
+                    {/* Lien vers la Vitrine externe en mode App */}
+                    {import.meta.env.VITE_SITE_MODE === 'app' && (
+                        <a
+                            href={import.meta.env.VITE_SITE_URL_VITRINE || '/'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="nav-item showcase-link"
+                            style={{ marginBottom: '1rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1rem' }}
+                        >
+                            <motion.div className="nav-item-content" whileHover={{ x: 5 }}>
+                                <MessageCircle size={20} style={{ color: 'var(--brand-primary)' }} />
+                                {sidebarOpen && <span style={{ fontWeight: '600' }}>Voir la Vitrine</span>}
+                            </motion.div>
+                        </a>
+                    )}
+
                     {navItems.map((item, index) => (
                         <NavLink
                             key={item.path}
                             to={item.path}
+                            onClick={() => hapticLight()}
                             className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
                         >
                             <motion.div
@@ -165,7 +217,7 @@ const Layout = () => {
                 </nav>
 
                 <div className="sidebar-footer">
-                    <NavLink to="/settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                    <NavLink to="/dashboard/settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                         <motion.div
                             className="nav-item-content"
                             whileHover={{ x: 5 }}
@@ -190,7 +242,7 @@ const Layout = () => {
 
             {/* Main Content */}
             <div className="main-content">
-                <header className="top-header">
+                <header className={`top-header ${scrolledDown ? 'header-hidden' : ''}`}>
                     <div className="header-left">
                         <button
                             className="mobile-menu-btn"
@@ -198,6 +250,9 @@ const Layout = () => {
                         >
                             <Menu size={24} />
                         </button>
+                        <div className="mobile-logo-wrapper">
+                            <Logo collapsed={true} />
+                        </div>
                         <motion.h2
                             className="page-title"
                             initial={{ opacity: 0, y: -20 }}
@@ -209,13 +264,16 @@ const Layout = () => {
                     </div>
 
                     <div className="header-right">
-                        <motion.div
+                        <motion.button
                             className="search-box"
                             whileHover={{ scale: 1.02 }}
+                            onClick={() => setShowSearch(true)}
+                            title="Recherche globale (Ctrl+K)"
                         >
                             <Search size={18} />
-                            <input type="text" placeholder="Rechercher..." />
-                        </motion.div>
+                            <span className="search-box-placeholder">Rechercher…</span>
+                            <kbd className="search-box-kbd">Ctrl K</kbd>
+                        </motion.button>
 
                         <motion.button
                             className="icon-btn"
@@ -249,7 +307,22 @@ const Layout = () => {
                             </motion.button>
                             <AnimatePresence>
                                 {showNotifications && (
-                                    <NotificationPanel onClose={() => setShowNotifications(false)} />
+                                    <>
+                                        <div
+                                            className="notification-overlay"
+                                            onClick={() => setShowNotifications(false)}
+                                            style={{
+                                                position: 'fixed',
+                                                top: 0,
+                                                left: 0,
+                                                right: 0,
+                                                bottom: 0,
+                                                zIndex: 999,
+                                                background: 'transparent',
+                                            }}
+                                        />
+                                        <NotificationPanel onClose={() => setShowNotifications(false)} />
+                                    </>
                                 )}
                             </AnimatePresence>
                         </div>
@@ -257,7 +330,7 @@ const Layout = () => {
                         <motion.div
                             className="user-profile"
                             whileHover={{ scale: 1.05 }}
-                            onClick={() => navigate('/settings')}
+                            onClick={() => navigate('/dashboard/settings')}
                             style={{ cursor: 'pointer' }}
                         >
                             <div className="avatar">{user?.avatar || user?.name?.charAt(0) || 'U'}</div>
@@ -270,11 +343,61 @@ const Layout = () => {
                 </header>
 
                 <main className="page-content">
-                    <Outlet />
+                    <AnimatePresence mode="wait" initial={false}>
+                        <motion.div
+                            key={location.pathname}
+                            initial={{ opacity: 0, y: 12, scale: 0.99 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -8, scale: 0.99 }}
+                            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                            style={{ height: '100%' }}
+                        >
+                            <Outlet />
+                        </motion.div>
+                    </AnimatePresence>
                 </main>
             </div>
 
+            <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
             <ChatAssistant />
+
+            {/* ── Mobile Bottom Navigation ── */}
+            <nav className="mobile-bottom-nav">
+                {[
+                    { path: '/dashboard', icon: LayoutDashboard, label: 'Accueil' },
+                    { path: '/dashboard/pipeline', icon: Trello, label: 'Pipeline' },
+                    { path: '/dashboard/properties', icon: Building, label: 'Biens' },
+                    { path: '/dashboard/requests', icon: MessageCircle, label: 'Demandes' },
+                ].filter(item => {
+                    const allowed = navItems.find(n => n.path === item.path);
+                    return allowed;
+                }).map(item => (
+                    <NavLink
+                        key={item.path}
+                        to={item.path}
+                        onClick={() => hapticLight()}
+                        className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
+                    >
+                        <item.icon size={22} />
+                        <span>{item.label}</span>
+                    </NavLink>
+                ))}
+
+                {/* Custom "Plus" to open sidebar */}
+                <button
+                    className="bottom-nav-item"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        hapticMedium();
+                        setSidebarOpen(true);
+                    }}
+                    style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}
+                >
+                    <Menu size={22} />
+                    <span>Plus</span>
+                </button>
+            </nav>
         </div>
     );
 };

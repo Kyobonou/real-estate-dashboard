@@ -263,168 +263,182 @@ const AdGenerator = () => {
     );
 };
 
-// --- LOGIQUE DE GÉNÉRATION (MOCK IA) ---
+// --- LOGIQUE DE GÉNÉRATION — Copywriting Immobilier Pro ---
 
+// Normalise et formate le prix saisi
+const smartFormatPrice = (p) => {
+    if (!p) return null;
+    let str = String(p).replace(/FCFA|CFA|F/gi, '').trim();
+    const lower = str.toLowerCase();
+    let mult = 1;
+
+    if (lower.endsWith('m') || lower.includes('mill')) {
+        mult = 1_000_000;
+        str = str.replace(/m|millions?|mill/gi, '').trim();
+    } else if (lower.endsWith('k')) {
+        mult = 1_000;
+        str = str.replace(/k/gi, '').trim();
+    }
+
+    const cleaned = mult > 1
+        ? str.replace(',', '.').replace(/\./g, (m, o, s) => s.indexOf('.') !== o ? '' : '.')
+        : str.replace(/[\s.,]/g, '');
+
+    const num = parseFloat(cleaned) * mult;
+    return isNaN(num) ? null : Math.floor(num).toLocaleString('fr-FR');
+};
+
+// ── FORMAT 1 : ANNONCE PORTAIL (Structurée, complète, professionnelle) ───────
 const generateProfessionalAd = (data) => {
-    const isVente = data.status === 'Vente';
-    const featuresList = data.features.length > 0 ? `\n\n✅ ATOUTS :\n- ${data.features.join('\n- ')}` : '';
-    const quartier = data.quartier ? `(${data.quartier})` : '';
-    const standing = data.standing === 'Luxe' ? 'DE GRAND LUXE' : data.standing === 'Haut Standing' ? 'HAUT STANDING' : '';
+    const isVente   = data.status === 'Vente';
+    const lieu      = data.quartier ? `${data.commune} – ${data.quartier}` : data.commune;
+    const standingMap = { Luxe: 'GRAND LUXE', 'Haut Standing': 'HAUT STANDING', Standard: '' };
+    const standingTag = standingMap[data.standing] || '';
+    const prixFmt   = smartFormatPrice(data.prix);
 
-    let text = `Ref: #IMMO-${Math.floor(Math.random() * 1000)}\n\n`;
-    text += `🏢 ${isVente ? 'A VENDRE' : 'A LOUER'} - ${data.type.toUpperCase()} ${data.pieces} PIÈCES ${standing} - ${data.commune.toUpperCase()} ${quartier.toUpperCase()}\n\n`;
-    text += `Nous mettons en ${isVente ? 'vente' : 'location'} ce magnifique ${data.type.toLowerCase()} de ${data.pieces} pièces, idéalement situé à ${data.commune} ${data.quartier || ''}.`;
-    text += `\nIl offre de beaux volumes et une luminosité naturelle exceptionnelle. Bâti avec des matériaux de qualité, ce bien saura vous séduire par son agencement optimisé.\n`;
-
-    if (data.meuble) text += `\n🛋️ Le bien est loué ENTIÈREMENT MEUBLÉ et ÉQUIPÉ.`;
-
-    text += featuresList;
-
-    // Intelligent Price Normalization
-    const smartFormatPrice = (p) => {
-        if (!p) return null;
-        let str = String(p).replace(/FCFA|CFA|F/gi, '').trim();
-        let lowerStr = str.toLowerCase();
-        let mult = 1;
-        let hasShorthand = false;
-
-        if (lowerStr.endsWith('m') || lowerStr.includes('mill')) {
-            mult = 1000000;
-            str = str.replace(/m|millions?|mill/gi, '').trim();
-            hasShorthand = true;
-        } else if (lowerStr.endsWith('k')) {
-            mult = 1000;
-            str = str.replace(/k/gi, '').trim();
-            hasShorthand = true;
-        }
-
-        let cleaned;
-        if (hasShorthand) {
-            cleaned = str.replace(',', '.');
-            const parts = cleaned.split('.');
-            if (parts.length > 2) cleaned = cleaned.replace(/\./g, '');
-        } else {
-            cleaned = str.replace(/[\s.,]/g, '');
-        }
-
-        const num = parseFloat(cleaned) * mult;
-        return isNaN(num) ? null : Math.floor(num).toLocaleString('fr-FR');
+    // Hook d'accroche contextuel selon standing
+    const hooks = {
+        Luxe:          `Une adresse d'exception qui redéfinit l'art de vivre à ${data.commune}.`,
+        'Haut Standing': `Confort supérieur, emplacement stratégique : ce bien coche toutes les cases.`,
+        Standard:      `Un bien soigné, bien situé, à un prix cohérent avec le marché de ${data.commune}.`,
     };
+    const hook = hooks[data.standing] || hooks['Standard'];
 
-    const formattedPrice = smartFormatPrice(data.prix) || 'Nous consulter';
+    // Descriptif chambre
+    const chambreStr = data.pieces > 1 ? `${Number(data.pieces) - 1} chambre${Number(data.pieces) - 1 > 1 ? 's' : ''}` : 'chambre et salon';
 
-    text += `\n\n💰 PRIX : ${formattedPrice}`;
-    text += `\n\n📞 INFOLINE & VISITE :\nContactez-nous dès maintenant pour une visite !`;
+    // Atouts formatés
+    const atoutsBlock = data.features.length > 0
+        ? `\n\n✅ CE QUE VOUS OBTENEZ :\n${data.features.map(f => `   • ${f}`).join('\n')}`
+        : '';
+
+    // Surface
+    const surfaceStr = data.surface ? ` sur ${data.surface} m²` : '';
+
+    let text = '';
+    text += `${isVente ? '🔵 VENTE' : '🟢 LOCATION'} — ${data.type.toUpperCase()}${standingTag ? ' ' + standingTag : ''} | ${lieu.toUpperCase()}\n`;
+    text += `${'─'.repeat(45)}\n\n`;
+    text += `${hook}\n\n`;
+    text += `Nous proposons à ${isVente ? 'la vente' : 'la location'} un${data.type === 'Appartement' || data.type === 'Studio' ? ' ' : 'e '}`;
+    text += `${data.type.toLowerCase()}${surfaceStr} de ${data.pieces} pièces (${chambreStr}), `;
+    text += `idéalement positionné${data.quartier ? ` au cœur du quartier ${data.quartier}` : ` à ${data.commune}`}.\n\n`;
+
+    // Points forts selon standing
+    if (data.standing === 'Luxe') {
+        text += `Conçu pour une clientèle exigeante, il allie matériaux nobles, architecture soignée et prestations `;
+        text += `au-dessus du marché. Chaque détail a été pensé pour offrir un confort de vie sans compromis.\n`;
+    } else if (data.standing === 'Haut Standing') {
+        text += `Ses finitions de qualité, son espace bien distribué et sa localisation premium en font un choix `;
+        text += `particulièrement judicieux — que ce soit pour y habiter ou pour investir.\n`;
+    } else {
+        text += `Fonctionnel, bien entretenu et facile d'accès, il répond aux besoins d'un locataire ou acquéreur `;
+        text += `en quête de praticité et de sérénité dans un quartier à fort potentiel.\n`;
+    }
+
+    if (data.meuble) text += `\n🛋️ Livré entièrement meublé et équipé — prêt à vivre dès la signature.`;
+
+    text += atoutsBlock;
+
+    text += `\n\n${'─'.repeat(45)}\n`;
+    text += `💰 PRIX : ${prixFmt ? prixFmt + ' FCFA' : 'Nous consulter'}\n`;
+    text += `📋 Visites organisées sur rendez-vous.\n`;
+    text += `📞 Pour plus d'informations ou pour planifier une visite, contactez-nous directement.`;
 
     return { type: 'pro', text };
 };
 
+// ── FORMAT 2 : STORYTELLING RÉSEAUX SOCIAUX (Facebook / Instagram) ───────────
 const generateEmotionalAd = (data) => {
     const isVente = data.status === 'Vente';
-    const emotionWords = ['Coup de cœur assuré', 'Véritable havre de paix', 'Perle rare', 'Cadre de vie exceptionnel'];
-    const catchPhrase = emotionWords[Math.floor(Math.random() * emotionWords.length)];
+    const lieu    = data.quartier ? `${data.quartier}, ${data.commune}` : data.commune;
+    const prixFmt = smartFormatPrice(data.prix);
 
-    let text = `✨ ${catchPhrase.toUpperCase()} À ${data.commune.toUpperCase()} ! ✨\n\n`;
-    text += `Vous rêvez d'un ${data.type.toLowerCase()} alliant confort, modernité et sécurité ? Ne cherchez plus !\n\n`;
-    text += `Niché au cœur de ${data.commune} ${data.quartier ? 'à ' + data.quartier : ''}, découvrez ce bijou architectural de ${data.pieces} pièces qui n'attend que vous. `;
-    text += `Dès l'entrée, vous serez séduit par ses finitions ${data.standing === 'Standard' ? 'soignées' : 'impeccables'} et son atmosphère chaleureuse.\n`;
+    // Accroche émotionnelle selon type de bien et standing
+    const accrochesVente = {
+        Luxe:          `Votre futur chez-vous vous attend à ${data.commune}. Et il dépasse tout ce que vous imaginiez.`,
+        'Haut Standing': `Imaginez ouvrir votre porte chaque matin sur ce cadre. C'est possible — et c'est maintenant.`,
+        Standard:      `Vous cherchez. Vous comparez. Arrêtez : ce bien est ce que vous attendiez.`,
+    };
+    const accrochesLocation = {
+        Luxe:          `Ce n'est pas juste un logement — c'est le style de vie que vous méritez.`,
+        'Haut Standing': `Nouveau départ, nouveau cadre. Bienvenue dans votre prochain chez-vous.`,
+        Standard:      `Fini les compromis. Ce ${data.type.toLowerCase()} à ${data.commune} coche toutes les cases.`,
+    };
+    const accroches = isVente ? accrochesVente : accrochesLocation;
+    const accroche = accroches[data.standing] || accroches['Standard'];
 
-    if (data.features.includes('Piscine')) text += `\n💦 Profitez de moments de détentes inoubliables au bord de la piscine.`;
-    if (data.features.includes('Vue Lagune')) text += `\n🌅 Laissez-vous bercer par une vue imprenable sur la lagune.`;
-    if (data.features.includes('Sécurité 24/7')) text += `\n🛡️ Dormez sur vos deux oreilles grâce à un service de sécurité optimal.`;
-
-    text += `\n\nCe bien est une opportunité unique ${isVente ? "d'investir dans votre bonheur" : "de poser vos valises dans un cadre idyllique"}.`;
-    // Intelligent Price Normalization
-    const smartFormatPriceE = (p) => {
-        if (!p) return null;
-        let str = String(p).replace(/FCFA|CFA|F/gi, '').trim();
-        let lowerStr = str.toLowerCase();
-        let mult = 1;
-        let hasShorthand = false;
-
-        if (lowerStr.endsWith('m') || lowerStr.includes('mill')) {
-            mult = 1000000;
-            str = str.replace(/m|millions?|mill/gi, '').trim();
-            hasShorthand = true;
-        } else if (lowerStr.endsWith('k')) {
-            mult = 1000;
-            str = str.replace(/k/gi, '').trim();
-            hasShorthand = true;
-        }
-
-        let cleaned;
-        if (hasShorthand) {
-            cleaned = str.replace(',', '.');
-            const parts = cleaned.split('.');
-            if (parts.length > 2) cleaned = cleaned.replace(/\./g, '');
-        } else {
-            cleaned = str.replace(/[\s.,]/g, '');
-        }
-
-        const num = parseFloat(cleaned) * mult;
-        return isNaN(num) ? null : Math.floor(num).toLocaleString('fr-FR');
+    // Corps du message
+    const standingDesc = {
+        Luxe:          `un écrin d'exception — matériaux premium, volumes généreux, finitions irréprochables`,
+        'Haut Standing': `un bien soigné aux standards élevés, pensé pour votre confort quotidien`,
+        Standard:      `un espace pratique et chaleureux, parfaitement adapté à la vie moderne`,
     };
 
-    const formattedPriceE = smartFormatPriceE(data.prix) || 'Prix sur demande';
+    let text = `✨ ${accroche}\n\n`;
+    text += `📍 ${lieu}\n`;
+    text += `🏠 ${data.type} · ${data.pieces} pièces`;
+    if (data.surface) text += ` · ${data.surface} m²`;
+    if (data.meuble)  text += ` · Meublé`;
+    text += `\n\n`;
 
-    text += `\n\n🏷️ ${formattedPriceE}`;
-    text += `\n📅 Visites sur rendez-vous uniquement.`;
+    text += `C'est ${standingDesc[data.standing] || standingDesc['Standard']}. `;
+
+    // Détails émotionnels selon features
+    const featureLines = [];
+    if (data.features.includes('Piscine'))     featureLines.push(`Une piscine pour décompresser après vos journées`);
+    if (data.features.includes('Vue Lagune'))  featureLines.push(`Une vue lagune qui vous coupe le souffle chaque matin`);
+    if (data.features.includes('Jardin'))      featureLines.push(`Un jardin pour les moments de paix en famille`);
+    if (data.features.includes('Sécurité 24/7')) featureLines.push(`Une sécurité 24h/24 pour vivre l'esprit léger`);
+    if (data.features.includes('Garage'))      featureLines.push(`Un garage pour protéger votre véhicule`);
+    if (data.features.includes('Groupe Électrogène')) featureLines.push(`Un groupe électrogène — plus jamais de coupure qui perturbe votre confort`);
+    if (data.features.includes('Cuisine Équipée')) featureLines.push(`Une cuisine entièrement équipée, prête à l'emploi`);
+    if (data.features.includes('Balcon'))      featureLines.push(`Un balcon pour vos matins café et vos soirées détente`);
+
+    if (featureLines.length > 0) {
+        text += `\n\nCe qui fait la différence ici :\n`;
+        text += featureLines.slice(0, 4).map(l => `   ↗ ${l}`).join('\n');
+    }
+
+    const cta = isVente
+        ? `\n\n${prixFmt ? `💵 ${prixFmt} FCFA` : '💵 Prix sur demande'} — des biens comme celui-ci ne restent pas longtemps sur le marché.\nContactez-nous aujourd'hui. Les visites sont sur rendez-vous.`
+        : `\n\n${prixFmt ? `💵 ${prixFmt} FCFA / mois` : '💵 Prix sur demande'} — disponibilité limitée.\n📩 Envoyez-nous un message pour réserver votre visite.`;
+
+    text += cta;
 
     return { type: 'emo', text };
 };
 
+// ── FORMAT 3 : IMPACT DIRECT (WhatsApp / groupes immobiliers) ────────────────
 const generateConciseAd = (data) => {
     const isVente = data.status === 'Vente';
+    const prixFmt = smartFormatPrice(data.prix);
+    const lieu    = data.quartier ? `${data.commune} / ${data.quartier}` : data.commune;
 
-    let text = `🔴 ${isVente ? 'VENTE' : 'LOCATION'} | ${data.commune.toUpperCase()}\n`;
-    text += `TYPE: ${data.type} ${data.pieces} Pièces\n`;
-    if (data.quartier) text += `QUARTIER: ${data.quartier}\n`;
-    // Intelligent Price Normalization
-    const smartFormatPriceC = (p) => {
-        if (!p) return null;
-        let str = String(p).replace(/FCFA|CFA|F/gi, '').trim();
-        let lowerStr = str.toLowerCase();
-        let mult = 1;
-        let hasShorthand = false;
+    // Headline percutante
+    const standingEmoji = data.standing === 'Luxe' ? '💎' : data.standing === 'Haut Standing' ? '⭐' : '✅';
+    const transactionEmoji = isVente ? '🔵' : '🟢';
 
-        if (lowerStr.endsWith('m') || lowerStr.includes('mill')) {
-            mult = 1000000;
-            str = str.replace(/m|millions?|mill/gi, '').trim();
-            hasShorthand = true;
-        } else if (lowerStr.endsWith('k')) {
-            mult = 1000;
-            str = str.replace(/k/gi, '').trim();
-            hasShorthand = true;
-        }
+    let text = `${transactionEmoji} ${isVente ? 'À VENDRE' : 'À LOUER'} ${standingEmoji}\n`;
+    text += `${data.type.toUpperCase()} • ${data.pieces} PIÈCES • ${lieu.toUpperCase()}\n`;
+    text += `${'━'.repeat(30)}\n`;
 
-        let cleaned;
-        if (hasShorthand) {
-            cleaned = str.replace(',', '.');
-            const parts = cleaned.split('.');
-            if (parts.length > 2) cleaned = cleaned.replace(/\./g, '');
-        } else {
-            cleaned = str.replace(/[\s.,]/g, '');
-        }
+    // Détails clés — concis, lisibles
+    const lines = [];
+    if (data.surface)          lines.push(`📐 Surface : ${data.surface} m²`);
+    if (data.meuble)           lines.push(`🛋️ Meublé : OUI`);
+    if (data.standing !== 'Standard') lines.push(`🏅 Standing : ${data.standing}`);
 
-        const num = parseFloat(cleaned) * mult;
-        return isNaN(num) ? null : Math.floor(num).toLocaleString('fr-FR');
-    };
+    lines.push(...data.features.map(f => `✔️ ${f}`));
 
-    const formattedPriceC = smartFormatPriceC(data.prix);
-    if (formattedPriceC) {
-        text += `PRIX: ${formattedPriceC}\n`;
-    } else {
-        text += `PRIX: Sur demande\n`;
-    }
-    text += `STANDING: ${data.standing}\n\n`;
+    if (lines.length > 0) text += lines.join('\n') + '\n';
 
-    text += `DETAILS:\n`;
-    text += `- ${data.pieces} Pièces\n`;
-    if (data.surface) text += `- Superficie: ${data.surface} m²\n`;
-    if (data.meuble) text += `- Meublé: OUI\n`;
-    data.features.forEach(f => text += `- ${f}\n`);
+    text += `${'━'.repeat(30)}\n`;
+    text += prixFmt
+        ? `💰 ${prixFmt} FCFA${!isVente ? '/mois' : ''}\n`
+        : `💰 Prix : Nous contacter\n`;
 
-    text += `\ninteressé(e) ? Inbox ou appel direct 📞`;
+    // CTA direct
+    text += `\n👉 Intéressé(e) ? Inbox ou appel direct — les visites sont rapides à organiser. ✅`;
 
     return { type: 'short', text };
 };

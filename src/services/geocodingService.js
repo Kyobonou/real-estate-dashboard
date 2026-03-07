@@ -70,79 +70,73 @@ class GeocodingService {
 
         console.log(`🚀 Géocodage optimisé de ${properties.length} propriétés...`);
 
-        // Promesse résolue rapidement (simule un process async mais très court)
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                const results = properties.map(property => {
-                    // 1. Si déjà des coordonnées valides, on garde
-                    if (property.latitude && property.longitude &&
-                        !isNaN(parseFloat(property.latitude)) &&
-                        !isNaN(parseFloat(property.longitude))) {
-                        return {
-                            ...property,
-                            coordinates: {
-                                lat: parseFloat(property.latitude),
-                                lng: parseFloat(property.longitude)
-                            }
-                        };
+        const results = properties.map(property => {
+            // 1. Si déjà des coordonnées valides, on garde
+            if (property.latitude && property.longitude &&
+                !isNaN(parseFloat(property.latitude)) &&
+                !isNaN(parseFloat(property.longitude))) {
+                return {
+                    ...property,
+                    coordinates: {
+                        lat: parseFloat(property.latitude),
+                        lng: parseFloat(property.longitude)
                     }
+                };
+            }
 
-                    // 2. Recherche par Zone puis Commune
-                    const searchTerms = [
-                        (property.zone || '').toLowerCase().trim(),
-                        (property.commune || '').toLowerCase().trim()
-                    ];
+            // 2. Recherche par Zone puis Commune
+            const searchTerms = [
+                (property.zone || '').toLowerCase().trim(),
+                (property.commune || '').toLowerCase().trim()
+            ];
 
-                    let baseCoords = null;
-                    let matchType = 'none';
+            let baseCoords = null;
+            let matchType = 'none';
 
-                    // Recherche
-                    for (const term of searchTerms) {
-                        if (!term) continue;
+            // Recherche
+            for (const term of searchTerms) {
+                if (!term) continue;
 
-                        // Exact match
-                        if (ABIDJAN_COORDS[term]) {
-                            baseCoords = ABIDJAN_COORDS[term];
-                            matchType = 'exact';
-                            break;
-                        }
+                // Exact match
+                if (ABIDJAN_COORDS[term]) {
+                    baseCoords = ABIDJAN_COORDS[term];
+                    matchType = 'exact';
+                    break;
+                }
 
-                        // Partial match (si le terme contient une clé connue)
-                        // Ex: "Cocody Riviera" -> match "riviera"
-                        const foundKey = Object.keys(ABIDJAN_COORDS).find(k => term.includes(k) && k.length > 3);
-                        if (foundKey) {
-                            baseCoords = ABIDJAN_COORDS[foundKey];
-                            matchType = 'partial';
-                            break;
-                        }
-                    }
+                // Partial match (si le terme contient une clé connue)
+                // Ex: "Cocody Riviera" -> match "riviera"
+                const foundKey = Object.keys(ABIDJAN_COORDS).find(k => term.includes(k) && k.length > 3);
+                if (foundKey) {
+                    baseCoords = ABIDJAN_COORDS[foundKey];
+                    matchType = 'partial';
+                    break;
+                }
+            }
 
-                    // Fallback
-                    if (!baseCoords) {
-                        baseCoords = ABIDJAN_COORDS['abidjan'];
-                        matchType = 'fallback';
-                    }
+            // Fallback
+            if (!baseCoords) {
+                baseCoords = ABIDJAN_COORDS['abidjan'];
+                matchType = 'fallback';
+            }
 
-                    // 3. Ajouter un "bruit" aléatoire pour disperser les points
-                    // +/- 0.003 degrés (~300m) pour éviter les superpositions parfaites
-                    const noiseLat = (Math.random() - 0.5) * 0.006;
-                    const noiseLng = (Math.random() - 0.5) * 0.006;
+            // 3. Ajouter un "bruit" aléatoire pour disperser les points
+            // +/- 0.003 degrés (~300m) pour éviter les superpositions parfaites
+            const noiseLat = (Math.random() - 0.5) * 0.006;
+            const noiseLng = (Math.random() - 0.5) * 0.006;
 
-                    return {
-                        ...property,
-                        coordinates: {
-                            lat: baseCoords.lat + noiseLat,
-                            lng: baseCoords.lng + noiseLng
-                        },
-                        _geocoded: true,
-                        _matchType: matchType
-                    };
-                });
-
-                console.log('✅ Géocodage terminé.');
-                resolve(results);
-            }, 50); // 50ms délai imperceptible
+            return {
+                ...property,
+                coordinates: {
+                    lat: baseCoords.lat + noiseLat,
+                    lng: baseCoords.lng + noiseLng
+                },
+                _geocoded: true,
+                _matchType: matchType
+            };
         });
+
+        return results;
     }
 
     // Calculer les bornes pour centrer la carte

@@ -2,9 +2,9 @@ import React from 'react';
 import './Logo.css';
 import bogbesLogo from '../assets/bogbes-logo.jpg';
 
-const Logo = ({ collapsed = false }) => {
+const Logo = ({ collapsed = false, variant = '' }) => {
     return (
-        <div className={`app-logo ${collapsed ? 'collapsed' : ''}`}>
+        <div className={`app-logo ${collapsed ? 'collapsed' : ''} ${variant}`}>
             <div className="logo-icon-wrapper">
                 <img
                     src={bogbesLogo}

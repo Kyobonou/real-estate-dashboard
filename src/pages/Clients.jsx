@@ -722,13 +722,14 @@ const Clients = () => {
             {/* Empty State */}
             {filteredClients.length === 0 && !loading && (
                 <EmptyState
-                    icon={Users}
-                    title="Aucun client trouvé"
+                    variant={searchTerm ? 'search' : filter !== 'all' ? 'filter' : 'users'}
+                    title={searchTerm ? `Aucun résultat pour « ${searchTerm} »` : filter !== 'all' ? 'Aucun client correspond au filtre' : 'Aucun client pour le moment'}
                     description={searchTerm || filter !== 'all'
-                        ? "Essayez de modifier vos filtres ou votre recherche"
-                        : "Aucun client pour le moment. Créez des visites pour commencer"}
-                    actionLabel="Effacer les filtres"
-                    onAction={() => { setFilter('all'); setSearchTerm(''); }}
+                        ? "Modifiez vos critères pour voir d'autres résultats."
+                        : "Les clients apparaissent automatiquement à la création des visites."}
+                    showTips={Boolean(searchTerm)}
+                    actionLabel={searchTerm || filter !== 'all' ? 'Effacer les filtres' : undefined}
+                    onAction={searchTerm || filter !== 'all' ? () => { setFilter('all'); setSearchTerm(''); } : undefined}
                     size="medium"
                 />
             )}

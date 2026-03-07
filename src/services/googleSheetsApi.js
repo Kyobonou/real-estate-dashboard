@@ -297,6 +297,9 @@ class GoogleSheetsService {
             numero: raw['Numero'] || '',
             dateRv: dateStr,
             localInteresse: raw['Local interesse'] || '',
+            refBien: raw['Ref bien'] || '',
+            agence_nom: raw['Agence nom'] || '',
+            agence_tel: raw['Agence tel'] || '',
             visiteProg: isScheduled,
             // Champs calculés
             parsedDate,

@@ -473,30 +473,7 @@
     height: 32px;
 }
 
-.btn-whatsapp {
-    background-color: #25D366;
-    color: white;
-    border: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
 
-.btn-whatsapp:hover {
-    background-color: #1faf54;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(37, 211, 102, 0.2);
-}
-
-.btn-whatsapp:disabled,
-.btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none;
-}
 
 /* LIST VIEW - MATCHING VISITS STYLE */
 .clients-list-container {

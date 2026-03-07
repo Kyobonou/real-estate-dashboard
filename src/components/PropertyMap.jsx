@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Tooltip, useMap, Circle } from 
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { MapPin, Phone, Eye, Home, Bed, Layers, Navigation } from 'lucide-react';
+import { extractBestPhone } from '../utils/phoneUtils';
 import './PropertyMap.css';
 
 // Fix pour les icônes Leaflet qui ne s'affichent pas correctement avec Webpack/Vite
@@ -69,9 +70,8 @@ const PropertyMap = ({ properties, onPropertyClick }) => {
 
     const handleWhatsApp = (e, property) => {
         e.stopPropagation();
-        if (!property.telephoneBien) return;
-        let phone = property.telephoneBien.replace(/\D/g, '');
-        if (!phone.startsWith('225')) phone = '225' + phone;
+        const phone = extractBestPhone(property);
+        if (!phone) return;
         const message = encodeURIComponent(
             `Bonjour, je suis intéressé par votre bien: ${property.typeBien} à ${property.zone} (${property.prixFormate} FCFA)`
         );
@@ -280,7 +280,7 @@ const PropertyMap = ({ properties, onPropertyClick }) => {
                                             >
                                                 <Navigation size={14} />
                                             </button>
-                                            {property.telephoneBien && (
+                                            {extractBestPhone(property) && (
                                                 <button
                                                     className="btn btn-whatsapp btn-sm"
                                                     onClick={(e) => handleWhatsApp(e, property)}
