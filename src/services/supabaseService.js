@@ -388,17 +388,36 @@ class SupabaseService {
 
         const fetchPromise = (async () => {
             try {
-                // Fetch the most recent 3000 rows for client-side display.
-                // Older or filtered data is handled by the server-side filter path (_getPropertiesFiltered).
-                const { data, error: pageError } = await supabase
+                // Fetch ALL rows via parallel batch pagination (1000 rows/batch).
+                // Avoids missing older properties when DB grows beyond a fixed limit.
+                const BATCH = 1000;
+                // First batch to get total count
+                const firstRes = await supabase
                     .from('locaux')
-                    .select('*')
+                    .select('*', { count: 'exact' })
                     .order('date_publication', { ascending: false })
-                    .limit(3000);
-
-                if (pageError) throw pageError;
-                console.debug(`[locaux] Fetched ${data?.length ?? 0} rows`);
-                if (!data) throw new Error('No data');
+                    .range(0, BATCH - 1);
+                if (firstRes.error) throw firstRes.error;
+                const totalCount = firstRes.count ?? 0;
+                let data = firstRes.data || [];
+                // Fetch remaining batches in parallel if needed
+                if (totalCount > BATCH) {
+                    const batchCount = Math.ceil((totalCount - BATCH) / BATCH);
+                    const batchPromises = Array.from({ length: batchCount }, (_, i) => {
+                        const from = BATCH + i * BATCH;
+                        const to = from + BATCH - 1;
+                        return supabase
+                            .from('locaux')
+                            .select('*')
+                            .order('date_publication', { ascending: false })
+                            .range(from, to);
+                    });
+                    const results = await Promise.all(batchPromises);
+                    for (const res of results) {
+                        if (!res.error && res.data) data = data.concat(res.data);
+                    }
+                }
+                console.debug(`[locaux] Fetched ${data.length} / ${totalCount} rows`);
 
 
                 const transformed = data.map(p => {
