@@ -1152,7 +1152,7 @@ const Properties = () => {
     const [geocoding, setGeocoding] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [sortConfig, setSortConfig] = useState({ key: 'datePublication', direction: 'desc' });
-    const ITEMS_PER_PAGE = 20;
+    const ITEMS_PER_PAGE = 40;
     const { addToast } = useToast();
 
     const [filters, setFilters] = useState({
