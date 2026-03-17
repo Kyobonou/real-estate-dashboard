@@ -14,7 +14,9 @@ const ConfettiEffect = ({ isActive, onComplete }) => {
                 x: Math.random() * 100 - 50,
                 y: Math.random() * 100 - 50,
                 color: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][Math.floor(Math.random() * 5)],
-                size: Math.random() * 8 + 4
+                size: Math.random() * 8 + 4,
+                rotate: Math.random() * 360,
+                isRound: Math.random() > 0.5
             }));
             setParticles(newParticles);
 
@@ -50,14 +52,14 @@ const ConfettiEffect = ({ isActive, onComplete }) => {
                                 y: p.y * 4 - 100,
                                 opacity: 0,
                                 scale: 0,
-                                rotate: Math.random() * 360
+                                rotate: p.rotate
                             }}
                             transition={{ duration: 1.5, ease: "easeOut" }}
                             style={{
                                 backgroundColor: p.color,
                                 width: p.size,
                                 height: p.size,
-                                borderRadius: Math.random() > 0.5 ? '50%' : '2px'
+                                borderRadius: p.isRound ? '50%' : '2px'
                             }}
                         />
                     ))}

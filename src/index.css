@@ -1,5 +1,5 @@
 /* === IMMODASH DESIGN SYSTEM V4.0 (RESTORED) === */
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+/* Google Fonts chargées via index.html (non-bloquant) */
 
 :root {
     /* --- PALETTE NEUTRE (Slate) --- */
@@ -61,12 +61,31 @@
     /* Slate 300 - Visible border */
     --border-strong: #94a3b8;
     /* Slate 400 - Stronger separation */
+    --border-color: #e2e8f0;
 
     /* --- OMBRES --- */
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
     --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
     --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.08);
+
+    /* --- GLASS SYSTEM (Light Mode) --- */
+    /* FIX CRITIQUE: --glass-card était indéfini en mode clair → cartes transparentes */
+    --glass-bg: rgba(255, 255, 255, 0.92);
+    --glass-border: rgba(0, 0, 0, 0.08);
+    --glass-card: #ffffff;
+    /* Cartes opaques en mode clair pour lisibilité maximale */
+
+    /* --- ELEVATION (Light Mode) --- */
+    --el-1: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.05);
+    --el-2: 0 4px 14px rgba(0, 0, 0, 0.10), 0 2px 6px rgba(0, 0, 0, 0.06);
+    --el-3: 0 14px 36px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.07);
+    --el-hover: 0 8px 24px rgba(27, 66, 153, 0.18), 0 4px 10px rgba(0, 0, 0, 0.08);
+
+    /* --- GLOW EFFECTS --- */
+    --glow-primary: 0 4px 16px rgba(27, 66, 153, 0.25);
+    --glow-success: 0 4px 16px rgba(16, 185, 129, 0.25);
+    --glow-danger: 0 4px 16px rgba(239, 68, 68, 0.25);
 
     /* --- RADIUS (SQUIRCLE) --- */
     --radius-sm: 0.75rem;
@@ -119,6 +138,25 @@
     --t-fast: 120ms;
     --t-base: 220ms;
     --t-slow: 380ms;
+
+    /* --- EASING CURVES (référencées partout mais jamais définies) --- */
+    --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+    /* --- SHADOWS PREMIUM --- */
+    --shadow-card:
+        0 0 0 1px rgba(0,0,0,0.04),
+        0 2px 4px rgba(0,0,0,0.04),
+        0 8px 16px rgba(0,0,0,0.06);
+    --shadow-card-hover:
+        0 0 0 1px rgba(27, 66, 153, 0.12),
+        0 4px 12px rgba(0,0,0,0.06),
+        0 16px 32px rgba(27, 66, 153, 0.12);
+    --shadow-float:
+        0 8px 24px rgba(0,0,0,0.08),
+        0 2px 8px rgba(0,0,0,0.04);
 }
 
 /* === SELECTION COLOR === */
@@ -232,35 +270,45 @@ body {
 }
 
 /* === BACKGROUND GLOW (Animated Blobs) === */
-body::before,
-body::after {
-    content: '';
-    position: fixed;
-    border-radius: 50%;
-    filter: blur(120px);
-    z-index: -1;
-    pointer-events: none;
-    animation: blob-float 20s infinite alternate var(--ease-smooth);
-    opacity: 0.12;
-}
+/* PERF: Désactivé sur mobile - filter:blur est très coûteux sur GPU mobile */
+@media (min-width: 769px) {
 
-body::before {
-    width: 600px;
-    height: 600px;
-    background: var(--brand-primary);
-    top: -200px;
-    left: -200px;
-    animation-delay: 0s;
-}
+    body::before,
+    body::after {
+        content: '';
+        position: fixed;
+        border-radius: 50%;
+        filter: blur(100px);
+        z-index: -1;
+        pointer-events: none;
+        animation: blob-float 25s infinite alternate ease-in-out;
+        opacity: 0.10;
+        /* réduit de 0.12 à 0.10 */
+        will-change: transform;
+    }
 
-body::after {
-    width: 500px;
-    height: 500px;
-    background: #F29202;
-    /* brand-secondary */
-    bottom: -150px;
-    right: -150px;
-    animation-delay: -10s;
+    body::before {
+        width: 500px;
+        height: 500px;
+        background: var(--brand-primary);
+        top: -200px;
+        left: -200px;
+        animation-delay: 0s;
+    }
+
+    body::after {
+        width: 400px;
+        height: 400px;
+        background: #F29202;
+        bottom: -150px;
+        right: -150px;
+        animation-delay: -10s;
+    }
+
+    body.dark::before,
+    body.dark::after {
+        opacity: 0.06;
+    }
 }
 
 @keyframes blob-float {
@@ -268,22 +316,13 @@ body::after {
         transform: translate(0, 0) scale(1);
     }
 
-    33% {
-        transform: translate(15vw, 10vh) scale(1.1);
-    }
-
-    66% {
-        transform: translate(-10vw, 15vh) scale(0.9);
+    50% {
+        transform: translate(8vw, 5vh) scale(1.05);
     }
 
     100% {
-        transform: translate(0, 0) scale(1);
+        transform: translate(-5vw, 8vh) scale(0.97);
     }
-}
-
-body.dark::before,
-body.dark::after {
-    opacity: 0.08;
 }
 
 /* ANTI-ZOOM iOS */
@@ -341,28 +380,37 @@ h6 {
 }
 
 /* === CARD SYSTEM (VISIBLE CONTOURS) === */
+/* FIX: Suppression de backdrop-filter sur les cartes — coûteux + transparence en mode clair */
 .card {
     background-color: var(--glass-card);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid var(--glass-border);
-    /* Strict Border */
+    border: 1px solid rgba(0, 0, 0, 0.07);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--shadow-card);
     padding: 1.5rem;
-    /* Espace généreux */
-    transition: transform 0.25s var(--ease-smooth), box-shadow 0.25s var(--ease-smooth), border-color 0.2s;
+    transition:
+        transform 0.28s var(--ease-out-expo),
+        box-shadow 0.28s var(--ease-out-expo),
+        border-color 0.2s ease;
     position: relative;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
+    will-change: transform;
 }
 
 .card:hover {
-    transform: translateY(-5px);
-    box-shadow: var(--el-hover);
-    border-color: rgba(27, 66, 153, 0.3);
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-card-hover);
+    border-color: rgba(27, 66, 153, 0.18);
+}
+
+body.dark .card {
+    border-color: rgba(255,255,255,0.07);
+}
+
+body.dark .card:hover {
+    border-color: rgba(96, 165, 250, 0.2);
 }
 
 /* Card avec accent top - ajouter cette classe pour identifier une section */

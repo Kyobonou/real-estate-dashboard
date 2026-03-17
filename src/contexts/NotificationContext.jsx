@@ -11,36 +11,16 @@ export const NotificationProvider = ({ children }) => {
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
 
-    // Initial load from storage + generate dynamic ones
-    useEffect(() => {
-        loadNotifications();
+    // Helpers
+    const isSameDay = (d1, d2) => {
+        return d1.getDate() === d2.getDate() &&
+            d1.getMonth() === d2.getMonth() &&
+            d1.getFullYear() === d2.getFullYear();
+    };
 
-        // Listen for data updates to regenerate notifications
-        const unsubscribe = apiService.subscribe('dataUpdate', (data) => {
-            if (data.visits) {
-                generateVisitNotifications(data.visits);
-            }
-            if (data.stats) {
-                // Example system notification
-                addSystemNotification({
-                    id: `sys-update-${Date.now()}`,
-                    title: 'Données mises à jour',
-                    message: 'Les données du tableau de bord ont été actualisées.',
-                    type: 'system',
-                    date: new Date().toISOString()
-                });
-            }
-        });
-
-        return () => unsubscribe();
-    }, []);
-
-    // Recalculate unread count whenever notifications change
-    useEffect(() => {
-        const count = notifications.filter(n => !n.read).length;
-        setUnreadCount(count);
-        saveNotifications(notifications);
-    }, [notifications]);
+    const formatTime = (date) => {
+        return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    };
 
     const loadNotifications = () => {
         try {
@@ -63,6 +43,10 @@ export const NotificationProvider = ({ children }) => {
         }
     };
 
+    const hasNotification = (id) => {
+        return notifications.some(n => n.id === id);
+    };
+
     const generateVisitNotifications = (visits) => {
         const today = new Date();
         const tomorrow = new Date(today);
@@ -74,10 +58,10 @@ export const NotificationProvider = ({ children }) => {
             if (!visit.parsedDate) return;
 
             const visitDate = new Date(visit.parsedDate);
-            const isToday = isSameDay(visitDate, today);
-            const isTomorrow = isSameDay(visitDate, tomorrow);
+            const today_is = isSameDay(visitDate, today);
+            const tomorrow_is = isSameDay(visitDate, tomorrow);
 
-            if (isToday) {
+            if (today_is) {
                 const id = `visit-today-${visit.id}`;
                 if (!hasNotification(id)) {
                     newAlerts.push({
@@ -90,7 +74,7 @@ export const NotificationProvider = ({ children }) => {
                         link: '/visits'
                     });
                 }
-            } else if (isTomorrow) {
+            } else if (tomorrow_is) {
                 const id = `visit-tomorrow-${visit.id}`;
                 if (!hasNotification(id)) {
                     newAlerts.push({
@@ -112,11 +96,6 @@ export const NotificationProvider = ({ children }) => {
     };
 
     const addSystemNotification = (note) => {
-        // Prevent duplicate system messages within short timeframe (e.g. 5s)
-        /* 
-           Simple dedupe logic: check 5 most recent notifications 
-           for same title & type within 5 seconds 
-        */
         setNotifications(prev => {
             const isDuplicate = prev.slice(0, 5).some(n =>
                 n.title === note.title &&
@@ -129,6 +108,38 @@ export const NotificationProvider = ({ children }) => {
         });
     };
 
+    // Initial load from storage + generate dynamic ones
+    useEffect(() => {
+        loadNotifications();
+
+        // Listen for data updates to regenerate notifications
+        const unsubscribe = apiService.subscribe('dataUpdate', (data) => {
+            if (data.visits) {
+                generateVisitNotifications(data.visits);
+            }
+            if (data.stats) {
+                // Example system notification
+                addSystemNotification({
+                    id: `sys-update-${Date.now()}`,
+                    title: 'Données mises à jour',
+                    message: 'Les données du tableau de bord ont été actualisées.',
+                    type: 'system',
+                    date: new Date().toISOString()
+                });
+            }
+        });
+
+        return () => unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Recalculate unread count whenever notifications change
+    useEffect(() => {
+        const count = notifications.filter(n => !n.read).length;
+        setUnreadCount(count);
+        saveNotifications(notifications);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [notifications]);
     const markAsRead = (id) => {
         setNotifications(prev => prev.map(n =>
             n.id === id ? { ...n, read: true } : n
@@ -141,21 +152,6 @@ export const NotificationProvider = ({ children }) => {
 
     const clearAll = () => {
         setNotifications([]);
-    };
-
-    // Helpers
-    const hasNotification = (id) => {
-        return notifications.some(n => n.id === id);
-    };
-
-    const isSameDay = (d1, d2) => {
-        return d1.getDate() === d2.getDate() &&
-            d1.getMonth() === d2.getMonth() &&
-            d1.getFullYear() === d2.getFullYear();
-    };
-
-    const formatTime = (date) => {
-        return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     };
 
     const value = {

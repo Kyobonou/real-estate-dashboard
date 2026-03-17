@@ -1,0 +1,50 @@
+{
+  "operations": [
+    {
+      "type": "updateNode",
+      "nodeName": "Post Traitement Agent",
+      "updates": {
+        "parameters": {
+          "jsCode": "const envoi = $('Preparer Envoi').first().json;\nconst norm = $('Normaliser Filtrer Anti-Boucle').first().json;\n\nlet ref_bien = '';\nlet contact_proprietaire = '';\n\nif (envoi.bien_description && envoi.bien_description !== 'Non précisé') {\n  try {\n    const SUPABASE_URL = 'https://udyfhzyvalansmhkynnc.supabase.co';\n    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk';\n    const descLow = envoi.bien_description.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n    const TYPES = ['villa','appartement','studio','maison','duplex','triplex','chambre','terrain','bureau','magasin'];\n    const COMMUNES = {'cocody':'Cocody','angre':'Cocody','riviera':'Cocody','bonoumin':'Cocody','faya':'Cocody','palmeraie':'Cocody','djibi':'Cocody','yopougon':'Yopougon','niangon':'Yopougon','marcory':'Marcory','zone 4':'Marcory','koumassi':'Koumassi','treichville':'Treichville','plateau':'Plateau','adjame':'Adjamé','abobo':'Abobo','bingerville':'Bingerville','bassam':'Grand-Bassam','assinie':'Assinie','songon':'Songon'};\n    const typeDetecte = TYPES.find(t => descLow.includes(t)) || '';\n    let communeDetectee = '';\n    for (const [k, v] of Object.entries(COMMUNES)) { if (descLow.includes(k)) { communeDetectee = v; break; } }\n    if (typeDetecte && communeDetectee) {\n      const biens = await this.helpers.httpRequest({ method: 'GET', url: SUPABASE_URL + '/rest/v1/locaux?type_de_bien=ilike.*' + encodeURIComponent(typeDetecte) + '*&commune=ilike.*' + encodeURIComponent(communeDetectee) + '*&status=eq.active&order=date_publication.desc&limit=1&select=ref_bien,telephone_bien,telephone_expediteur', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } });\n      if (Array.isArray(biens) && biens.length > 0 && biens[0].ref_bien) { \n  ref_bien = biens[0].ref_bien; \n  contact_proprietaire = biens[0].telephone_bien || biens[0].telephone_expediteur || '';\n}\n    }\n  } catch(e) { console.log('Erreur résolution REF:', e.message); }\n}\n\nreturn [{ json: { cleanOutput: envoi.text, hasVisite: envoi.hasVisite, hasPhotoRequest: envoi.hasPhotoRequest, demandeImages: envoi.demandeImages, ref_bien, contact_proprietaire, bien_description: envoi.bien_description || '', prospect_numero: envoi.prospect_numero || norm.cleanNumber || norm.replyTo, prospect_nom: envoi.prospect_nom || norm.pushName || '', logEntry: { numero_prospect: envoi.prospect_numero || norm.cleanNumber || norm.replyTo, nom_prospect: envoi.prospect_nom || norm.pushName || '', message_entrant: (norm.messageBody || '').substring(0, 500), reponse_agent: (envoi.text || '').substring(0, 500), ref_mentionne: ref_bien, visite_detectee: envoi.hasVisite, photo_request: envoi.hasPhotoRequest, horodatage: new Date().toISOString() } } }];"
+        }
+      }
+    },
+    {
+      "type": "updateNode",
+      "nodeName": "Sauvegarder Visite",
+      "updates": {
+        "parameters": {
+          "method": "POST",
+          "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/visite_programmee",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "resolution=ignore-duplicates,return=minimal"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ numero:$json.prospect_numero, nom_prenom:$json.prospect_nom, ref_bien:$json.ref_bien, local_interesse:$json.bien_description, contact_proprietaire:$json.contact_proprietaire, date_visite:'A planifier', visite_prog:'Oui', created_at:new Date().toISOString() }) }}",
+          "options": {
+            "timeout": 10000
+          }
+        }
+      }
+    }
+  ]
+}

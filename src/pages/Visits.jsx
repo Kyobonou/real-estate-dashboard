@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { FixedSizeList as VirtualList, FixedSizeGrid as VirtualGrid } from 'react-window';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Calendar as CalendarIcon, Clock, Phone, MapPin, CheckCircle,
@@ -456,75 +457,152 @@ const VisitActions = React.memo(({ visit, addToast, onOpenSheet }) => {
     );
 });
 
-// ─── GRID VIEW ───────────────────────────────────────────────────────────────
+// ─── VISIT CARD (extracted for reuse in virtualized grid) ────────────────────
 
-const GridView = React.memo(({ visits, addToast, onOpenSheet }) => (
-    <div className="visits-grid">
-        {visits.map((visit) => (
-            <div
-                key={visit.id}
-                className={`card visit-card-v2 ${visit.visiteProg ? 'programmed' : 'tentative'} fade-in`}
-                onClick={() => { hapticLight(); onOpenSheet(visit); }}
-                style={{ cursor: 'pointer' }}
-            >
-                <div className={`badge ${visit.visiteProg ? 'badge-success' : 'badge-warning'}`}>
-                    {visit.visiteProg ? <CheckCircle size={14} /> : <Clock size={14} />}
-                    <span>{visit.visiteProg ? 'Confirmée' : 'Tentative'}</span>
+const VisitCard = React.memo(({ visit, addToast, onOpenSheet }) => (
+    <div
+        className={`card visit-card-v2 ${visit.visiteProg ? 'programmed' : 'tentative'} fade-in`}
+        onClick={() => { hapticLight(); onOpenSheet(visit); }}
+        style={{ cursor: 'pointer', height: '100%', boxSizing: 'border-box' }}
+    >
+        <div className={`badge ${visit.visiteProg ? 'badge-success' : 'badge-warning'}`}>
+            {visit.visiteProg ? <CheckCircle size={14} /> : <Clock size={14} />}
+            <span>{visit.visiteProg ? 'Confirmée' : 'Tentative'}</span>
+        </div>
+
+        <div className="visit-main-info">
+            <div className="visit-user">
+                <div className="user-avatar" style={{ background: visit.visiteProg ? 'var(--gradient-success)' : 'var(--gradient-primary)' }}>
+                    {(visit.nomPrenom || '?').charAt(0)}
                 </div>
-
-                <div className="visit-main-info">
-                    <div className="visit-user">
-                        <div className="user-avatar" style={{ background: visit.visiteProg ? 'var(--gradient-success)' : 'var(--gradient-primary)' }}>
-                            {(visit.nomPrenom || '?').charAt(0)}
-                        </div>
-                        <div className="user-text">
-                            <h3>{visit.nomPrenom || 'Client Inconnu'}</h3>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                <span style={{ fontSize: '0.85rem', opacity: 0.8 }}>{visit.numero || '-'}</span>
-                                {visit.refBien && <span className="ref-badge-mini">{visit.refBien}</span>}
-                            </div>
-                        </div>
+                <div className="user-text">
+                    <h3>{visit.nomPrenom || 'Client Inconnu'}</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span style={{ fontSize: '0.85rem', opacity: 0.8 }}>{visit.numero || '-'}</span>
+                        {visit.refBien && <span className="ref-badge-mini">{visit.refBien}</span>}
                     </div>
-                </div>
-
-                <div className="visit-details-grid">
-                    <div className="detail-item">
-                        <MapPin size={16} />
-                        <div>
-                            <span className="label">Bien concerné</span>
-                            <span className="value">{visit.localInteresse || 'Non spécifié'}</span>
-                        </div>
-                    </div>
-                    <div className="detail-item">
-                        <CalendarIcon size={16} />
-                        <div>
-                            <span className="label">Date Prévue</span>
-                            <span className="value">{visit.dateRv}</span>
-                        </div>
-                    </div>
-                    <div className="detail-item" style={{ gridColumn: '1 / -1' }}>
-                        <Clock size={16} />
-                        <div>
-                            <span className="label">Enregistré le</span>
-                            <span className="value">
-                                {visit.created_at ? new Date(visit.created_at).toLocaleString('fr-FR', {
-                                    day: '2-digit', month: '2-digit', year: '2-digit',
-                                    hour: '2-digit', minute: '2-digit'
-                                }) : '-'}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="visit-footer" onClick={e => e.stopPropagation()}>
-                    <VisitActions visit={visit} addToast={addToast} onOpenSheet={onOpenSheet} />
                 </div>
             </div>
-        ))}
+        </div>
+
+        <div className="visit-details-grid">
+            <div className="detail-item">
+                <MapPin size={16} />
+                <div>
+                    <span className="label">Bien concerné</span>
+                    <span className="value">{visit.localInteresse || 'Non spécifié'}</span>
+                </div>
+            </div>
+            <div className="detail-item">
+                <CalendarIcon size={16} />
+                <div>
+                    <span className="label">Date Prévue</span>
+                    <span className="value">{visit.dateRv}</span>
+                </div>
+            </div>
+            <div className="detail-item" style={{ gridColumn: '1 / -1' }}>
+                <Clock size={16} />
+                <div>
+                    <span className="label">Enregistré le</span>
+                    <span className="value">
+                        {visit.created_at ? new Date(visit.created_at).toLocaleString('fr-FR', {
+                            day: '2-digit', month: '2-digit', year: '2-digit',
+                            hour: '2-digit', minute: '2-digit'
+                        }) : '-'}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div className="visit-footer" onClick={e => e.stopPropagation()}>
+            <VisitActions visit={visit} addToast={addToast} onOpenSheet={onOpenSheet} />
+        </div>
     </div>
 ));
 
+// ─── GRID VIEW ───────────────────────────────────────────────────────────────
+
+// Card height in px for the virtual grid rows
+const GRID_CARD_HEIGHT = 280;
+const GRID_COL_WIDTH = 340; // min column width
+const GRID_GAP = 24;
+
+const GridView = React.memo(({ visits, addToast, onOpenSheet }) => {
+    const containerRef = useRef(null);
+    const [containerWidth, setContainerWidth] = useState(0);
+
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const ro = new ResizeObserver(entries => {
+            const w = entries[0].contentRect.width;
+            setContainerWidth(w);
+        });
+        ro.observe(el);
+        setContainerWidth(el.clientWidth);
+        return () => ro.disconnect();
+    }, []);
+
+    // Fallback: if fewer than 20 items, skip virtualization entirely
+    if (visits.length < 20) {
+        return (
+            <div className="visits-grid">
+                {visits.map((visit) => (
+                    <VisitCard key={visit.id} visit={visit} addToast={addToast} onOpenSheet={onOpenSheet} />
+                ))}
+            </div>
+        );
+    }
+
+    const colCount = containerWidth > 0
+        ? Math.max(1, Math.floor((containerWidth + GRID_GAP) / (GRID_COL_WIDTH + GRID_GAP)))
+        : 1;
+    const rowCount = Math.ceil(visits.length / colCount);
+    const colWidth = containerWidth > 0
+        ? Math.floor((containerWidth - (colCount - 1) * GRID_GAP) / colCount)
+        : GRID_COL_WIDTH;
+
+    const Cell = useCallback(({ columnIndex, rowIndex, style }) => {
+        const index = rowIndex * colCount + columnIndex;
+        if (index >= visits.length) return null;
+        const visit = visits[index];
+        const cellStyle = {
+            ...style,
+            left: Number(style.left) + columnIndex * GRID_GAP,
+            top: Number(style.top) + rowIndex * GRID_GAP,
+            width: colWidth,
+            height: GRID_CARD_HEIGHT,
+            padding: 0,
+        };
+        return (
+            <div style={cellStyle}>
+                <VisitCard visit={visit} addToast={addToast} onOpenSheet={onOpenSheet} />
+            </div>
+        );
+    }, [visits, addToast, onOpenSheet, colCount, colWidth]);
+
+    return (
+        <div ref={containerRef} style={{ width: '100%' }}>
+            {containerWidth > 0 && (
+                <VirtualGrid
+                    columnCount={colCount}
+                    columnWidth={colWidth + GRID_GAP}
+                    height={Math.min(700, rowCount * (GRID_CARD_HEIGHT + GRID_GAP))}
+                    rowCount={rowCount}
+                    rowHeight={GRID_CARD_HEIGHT + GRID_GAP}
+                    width={containerWidth}
+                    style={{ overflow: 'auto' }}
+                >
+                    {Cell}
+                </VirtualGrid>
+            )}
+        </div>
+    );
+});
+
 // ─── LIST VIEW ───────────────────────────────────────────────────────────────
+
+const LIST_ROW_HEIGHT = 72; // px per row
 
 const ListView = React.memo(({ visits, addToast, sortConfig, onSort, onOpenSheet }) => {
     const getSortIcon = (key) => {
@@ -532,65 +610,158 @@ const ListView = React.memo(({ visits, addToast, sortConfig, onSort, onOpenSheet
         return sortConfig.direction === 'asc' ? <ArrowUp size={14} className="sort-icon-active" /> : <ArrowDown size={14} className="sort-icon-active" />;
     };
 
+    // Column flex-basis percentages to mimic the table layout
+    const COL_WIDTHS = ['22%', '20%', '14%', '16%', '13%', '15%'];
+
+    const Row = useCallback(({ index, style }) => {
+        const visit = visits[index];
+        return (
+            <div
+                style={{
+                    ...style,
+                    display: 'flex',
+                    alignItems: 'center',
+                    borderBottom: '1px solid var(--border-color, #e2e8f0)',
+                    cursor: 'pointer',
+                    background: index % 2 === 0 ? 'transparent' : 'var(--bg-secondary, rgba(0,0,0,0.02))',
+                    boxSizing: 'border-box',
+                    padding: '0 1rem',
+                    transition: 'background 0.15s',
+                }}
+                onClick={() => { hapticLight(); onOpenSheet(visit); }}
+            >
+                <div style={{ flex: COL_WIDTHS[0], minWidth: 0 }}>
+                    <div className="list-user-cell">
+                        <div className="list-user-avatar" style={{ background: visit.visiteProg ? 'var(--gradient-success)' : 'var(--gradient-primary)', flexShrink: 0 }}>
+                            {(visit.nomPrenom || '?').charAt(0)}
+                        </div>
+                        <div className="user-text" style={{ minWidth: 0 }}>
+                            <h3 style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{visit.nomPrenom || 'Client Inconnu'}</h3>
+                            <span style={{ fontSize: '0.8rem', opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{visit.numero || '-'}</span>
+                        </div>
+                    </div>
+                </div>
+                <div style={{ flex: COL_WIDTHS[1], minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
+                    {visit.localInteresse || '-'}
+                </div>
+                <div style={{ flex: COL_WIDTHS[2], fontSize: '0.875rem' }}>{visit.dateRv}</div>
+                <div style={{ flex: COL_WIDTHS[3] }}>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                        {visit.created_at ? new Date(visit.created_at).toLocaleString('fr-FR', {
+                            day: '2-digit', month: '2-digit', year: '2-digit',
+                            hour: '2-digit', minute: '2-digit'
+                        }) : '-'}
+                    </span>
+                </div>
+                <div style={{ flex: COL_WIDTHS[4] }}>
+                    <span className={`badge ${visit.visiteProg ? 'badge-success' : 'badge-warning'}`}>
+                        {visit.visiteProg ? 'Confirmée' : 'Tentative'}
+                    </span>
+                </div>
+                <div style={{ flex: COL_WIDTHS[5], textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                    <VisitActions visit={visit} addToast={addToast} onOpenSheet={onOpenSheet} />
+                </div>
+            </div>
+        );
+    }, [visits, addToast, onOpenSheet]);
+
+    const listHeight = Math.min(600, visits.length * LIST_ROW_HEIGHT);
+
     return (
         <div className="visits-list-container">
-            <table className="visits-table">
-                <thead>
-                    <tr>
-                        <th onClick={() => onSort('nomPrenom')} className="sortable-header">
-                            <div className="header-cell-content">Client {getSortIcon('nomPrenom')}</div>
-                        </th>
-                        <th onClick={() => onSort('localInteresse')} className="sortable-header">
-                            <div className="header-cell-content">Zone {getSortIcon('localInteresse')}</div>
-                        </th>
-                        <th onClick={() => onSort('dateRv')} className="sortable-header">
-                            <div className="header-cell-content">Date Prévue {getSortIcon('dateRv')}</div>
-                        </th>
-                        <th onClick={() => onSort('created_at')} className="sortable-header">
-                            <div className="header-cell-content">Enregistré le {getSortIcon('created_at')}</div>
-                        </th>
-                        <th onClick={() => onSort('visiteProg')} className="sortable-header">
-                            <div className="header-cell-content">Statut {getSortIcon('visiteProg')}</div>
-                        </th>
-                        <th className="text-center">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {visits.map((visit) => (
-                        <tr key={visit.id} onClick={() => { hapticLight(); onOpenSheet(visit); }} style={{ cursor: 'pointer' }}>
-                            <td>
+            {/* Sticky header row */}
+            <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0 1rem',
+                borderBottom: '2px solid var(--border-color, #e2e8f0)',
+                background: 'var(--bg-primary, #fff)',
+                fontWeight: 600,
+                fontSize: '0.8rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                height: 44,
+            }}>
+                <div style={{ flex: COL_WIDTHS[0] }} onClick={() => onSort('nomPrenom')} className="sortable-header">
+                    <div className="header-cell-content">Client {getSortIcon('nomPrenom')}</div>
+                </div>
+                <div style={{ flex: COL_WIDTHS[1] }} onClick={() => onSort('localInteresse')} className="sortable-header">
+                    <div className="header-cell-content">Zone {getSortIcon('localInteresse')}</div>
+                </div>
+                <div style={{ flex: COL_WIDTHS[2] }} onClick={() => onSort('dateRv')} className="sortable-header">
+                    <div className="header-cell-content">Date Prévue {getSortIcon('dateRv')}</div>
+                </div>
+                <div style={{ flex: COL_WIDTHS[3] }} onClick={() => onSort('created_at')} className="sortable-header">
+                    <div className="header-cell-content">Enregistré le {getSortIcon('created_at')}</div>
+                </div>
+                <div style={{ flex: COL_WIDTHS[4] }} onClick={() => onSort('visiteProg')} className="sortable-header">
+                    <div className="header-cell-content">Statut {getSortIcon('visiteProg')}</div>
+                </div>
+                <div style={{ flex: COL_WIDTHS[5], textAlign: 'center' }}>Actions</div>
+            </div>
+
+            {/* Virtualized rows — only active when > 20 items */}
+            {visits.length < 20 ? (
+                <div>
+                    {visits.map((visit, index) => (
+                        <div
+                            key={visit.id}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                height: LIST_ROW_HEIGHT,
+                                borderBottom: '1px solid var(--border-color, #e2e8f0)',
+                                cursor: 'pointer',
+                                background: index % 2 === 0 ? 'transparent' : 'var(--bg-secondary, rgba(0,0,0,0.02))',
+                                boxSizing: 'border-box',
+                                padding: '0 1rem',
+                            }}
+                            onClick={() => { hapticLight(); onOpenSheet(visit); }}
+                        >
+                            <div style={{ flex: COL_WIDTHS[0], minWidth: 0 }}>
                                 <div className="list-user-cell">
-                                    <div className="list-user-avatar" style={{ background: visit.visiteProg ? 'var(--gradient-success)' : 'var(--gradient-primary)' }}>
+                                    <div className="list-user-avatar" style={{ background: visit.visiteProg ? 'var(--gradient-success)' : 'var(--gradient-primary)', flexShrink: 0 }}>
                                         {(visit.nomPrenom || '?').charAt(0)}
                                     </div>
-                                    <div className="user-text">
-                                        <h3>{visit.nomPrenom || 'Client Inconnu'}</h3>
-                                        <span>{visit.numero || '-'}</span>
+                                    <div className="user-text" style={{ minWidth: 0 }}>
+                                        <h3 style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{visit.nomPrenom || 'Client Inconnu'}</h3>
+                                        <span style={{ fontSize: '0.8rem', opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{visit.numero || '-'}</span>
                                     </div>
                                 </div>
-                            </td>
-                            <td>{visit.localInteresse || '-'}</td>
-                            <td>{visit.dateRv}</td>
-                            <td>
+                            </div>
+                            <div style={{ flex: COL_WIDTHS[1], minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
+                                {visit.localInteresse || '-'}
+                            </div>
+                            <div style={{ flex: COL_WIDTHS[2], fontSize: '0.875rem' }}>{visit.dateRv}</div>
+                            <div style={{ flex: COL_WIDTHS[3] }}>
                                 <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                                     {visit.created_at ? new Date(visit.created_at).toLocaleString('fr-FR', {
                                         day: '2-digit', month: '2-digit', year: '2-digit',
                                         hour: '2-digit', minute: '2-digit'
                                     }) : '-'}
                                 </span>
-                            </td>
-                            <td>
+                            </div>
+                            <div style={{ flex: COL_WIDTHS[4] }}>
                                 <span className={`badge ${visit.visiteProg ? 'badge-success' : 'badge-warning'}`}>
                                     {visit.visiteProg ? 'Confirmée' : 'Tentative'}
                                 </span>
-                            </td>
-                            <td className="text-center" onClick={e => e.stopPropagation()}>
+                            </div>
+                            <div style={{ flex: COL_WIDTHS[5], textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                                 <VisitActions visit={visit} addToast={addToast} onOpenSheet={onOpenSheet} />
-                            </td>
-                        </tr>
+                            </div>
+                        </div>
                     ))}
-                </tbody>
-            </table>
+                </div>
+            ) : (
+                <VirtualList
+                    height={listHeight}
+                    itemCount={visits.length}
+                    itemSize={LIST_ROW_HEIGHT}
+                    width="100%"
+                >
+                    {Row}
+                </VirtualList>
+            )}
         </div>
     );
 });

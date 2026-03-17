@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Connexion Google Sheets</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status.success {
+            background: #10b981;
+        }
+        .status.error {
+            background: #ef4444;
+        }
+        .status.loading {
+            background: #f59e0b;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 10px 5px;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        pre {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .data-count {
+            font-size: 24px;
+            font-weight: bold;
+            color: #10b981;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test Connexion Google Sheets</h1>
+        
+        <div class="test-section">
+            <h2>📊 Feuille "Locaux" (Biens Immobiliers)</h2>
+            <button onclick="testLocaux()">Tester Connexion</button>
+            <div id="locaux-status"></div>
+            <div id="locaux-data"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📅 Feuille "Visite programmé"</h2>
+            <button onclick="testVisites()">Tester Connexion</button>
+            <div id="visites-status"></div>
+            <div id="visites-data"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📈 Statistiques Globales</h2>
+            <button onclick="testStats()">Calculer Stats</button>
+            <div id="stats-status"></div>
+            <div id="stats-data"></div>
+        </div>
+    </div>
+
+    <script>
+        const LOCAUX_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRqwrLIv6E-PjF4mA6qj9EdGqJPbnnzl-g53KXsUYHC_TB9nyMDIQK75MYp7H5z06aLT4b98jOhLSXQ/pub?gid=0&single=true&output=csv';
+        const VISITES_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRqwrLIv6E-PjF4mA6qj9EdGqJPbnnzl-g53KXsUYHC_TB9nyMDIQK75MYp7H5z06aLT4b98jOhLSXQ/pub?gid=50684091&single=true&output=csv';
+
+        async function testLocaux() {
+            const statusDiv = document.getElementById('locaux-status');
+            const dataDiv = document.getElementById('locaux-data');
+            
+            statusDiv.innerHTML = '<span class="status loading">⏳ Chargement...</span>';
+            dataDiv.innerHTML = '';
+
+            try {
+                const response = await fetch(LOCAUX_URL);
+                const csvText = await response.text();
+                const data = parseCSV(csvText);
+                
+                statusDiv.innerHTML = `<span class="status success">✅ Succès</span> <span class="data-count">${data.length} biens</span>`;
+                dataDiv.innerHTML = `<pre>${JSON.stringify(data.slice(0, 3), null, 2)}</pre>`;
+            } catch (error) {
+                statusDiv.innerHTML = `<span class="status error">❌ Erreur: ${error.message}</span>`;
+            }
+        }
+
+        async function testVisites() {
+            const statusDiv = document.getElementById('visites-status');
+            const dataDiv = document.getElementById('visites-data');
+            
+            statusDiv.innerHTML = '<span class="status loading">⏳ Chargement...</span>';
+            dataDiv.innerHTML = '';
+
+            try {
+                const response = await fetch(VISITES_URL);
+                const csvText = await response.text();
+                const data = parseCSV(csvText);
+                
+                statusDiv.innerHTML = `<span class="status success">✅ Succès</span> <span class="data-count">${data.length} visites</span>`;
+                dataDiv.innerHTML = `<pre>${JSON.stringify(data.slice(0, 3), null, 2)}</pre>`;
+            } catch (error) {
+                statusDiv.innerHTML = `<span class="status error">❌ Erreur: ${error.message}</span>`;
+            }
+        }
+
+        async function testStats() {
+            const statusDiv = document.getElementById('stats-status');
+            const dataDiv = document.getElementById('stats-data');
+            
+            statusDiv.innerHTML = '<span class="status loading">⏳ Calcul...</span>';
+            dataDiv.innerHTML = '';
+
+            try {
+                const [locauxRes, visitesRes] = await Promise.all([
+                    fetch(LOCAUX_URL),
+                    fetch(VISITES_URL)
+                ]);
+
+                const locauxData = parseCSV(await locauxRes.text());
+                const visitesData = parseCSV(await visitesRes.text());
+
+                const stats = {
+                    totalBiens: locauxData.length,
+                    totalVisites: visitesData.length,
+                    biensDisponibles: locauxData.filter(b => b.Disponible === 'Oui').length,
+                    visitesProgammees: visitesData.filter(v => v['Visite prog'] === 'Oui').length,
+                };
+
+                statusDiv.innerHTML = '<span class="status success">✅ Calculé</span>';
+                dataDiv.innerHTML = `<pre>${JSON.stringify(stats, null, 2)}</pre>`;
+            } catch (error) {
+                statusDiv.innerHTML = `<span class="status error">❌ Erreur: ${error.message}</span>`;
+            }
+        }
+
+        function parseCSV(csvText) {
+            const lines = csvText.trim().split('\n');
+            if (lines.length < 2) return [];
+
+            const headers = parseCsvLine(lines[0]);
+            const data = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = parseCsvLine(lines[i]);
+                if (values.length === 0) continue;
+
+                const obj = {};
+                headers.forEach((header, index) => {
+                    obj[header.trim()] = values[index] || '';
+                });
+                data.push(obj);
+            }
+
+            return data;
+        }
+
+        function parseCsvLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                const nextChar = line[i + 1];
+
+                if (char === '"') {
+                    if (inQuotes && nextChar === '"') {
+                        current += '"';
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current.trim());
+            return result;
+        }
+
+        // Auto-test au chargement
+        window.onload = () => {
+            console.log('🧪 Page de test chargée');
+            console.log('📊 URL Locaux:', LOCAUX_URL);
+            console.log('📅 URL Visites:', VISITES_URL);
+        };
+    </script>
+</body>
+</html>

@@ -29,12 +29,20 @@ class ApiService {
         return this.sheetsApi.getRequests(forceRefresh);
     }
 
-    async getProperties(forceRefresh = false) {
-        return this.sheetsApi.getProperties(forceRefresh);
+    async getProperties(forceRefresh = false, filters = null) {
+        return this.sheetsApi.getProperties(forceRefresh, filters);
+    }
+
+    async getTotalCount(filters = null) {
+        return this.sheetsApi.getTotalCount(filters);
     }
 
     async getVisits(forceRefresh = false) {
         return this.sheetsApi.getVisits(forceRefresh);
+    }
+
+    async createVisit(visitData) {
+        return this.sheetsApi.createVisit(visitData);
     }
 
     async getStats(forceRefresh = false) {
@@ -47,6 +55,10 @@ class ApiService {
 
     async getImagesForPublication(publicationId) {
         return this.sheetsApi.getImagesForPublication(publicationId);
+    }
+
+    async getImagesForPublications(publicationIds) {
+        return this.sheetsApi.getImagesForPublications(publicationIds);
     }
 
     // Clients - extraits des visites
@@ -70,6 +82,10 @@ class ApiService {
 
     stopPolling() {
         this.sheetsApi.stopPolling();
+    }
+
+    async refreshData() {
+        return this.sheetsApi.refreshData();
     }
 
     // Events

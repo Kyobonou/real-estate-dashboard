@@ -7,7 +7,8 @@ import Layout from './components/Layout';
 import { NotificationProvider } from './contexts/NotificationContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import ScrollToTop from './components/ScrollToTop';
-import { whatsappGroupService } from './services/whatsappGroupService';
+import ProtectedRoute from './components/ProtectedRoute';
+import PerformancePanel from './components/PerformancePanel';
 
 // Lazy loading des pages (Publiques)
 const PublicHome = lazy(() => import('./pages/PublicHome'));
@@ -15,6 +16,7 @@ const PublicProperties = lazy(() => import('./pages/PublicProperties'));
 const PublicServices = lazy(() => import('./pages/PublicServices'));
 const PublicContact = lazy(() => import('./pages/PublicContact'));
 const PublicLayout = lazy(() => import('./components/PublicLayout'));
+const Login = lazy(() => import('./pages/Login'));
 
 // Lazy loading des pages (Dashboard)
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -59,6 +61,13 @@ const AppRoutes = () => {
     return (
         <ErrorBoundary resetKey={location.pathname}>
             <Routes>
+                {/* ---------- ROUTE PUBLIQUE LOGIN ---------- */}
+                <Route path="/login" element={
+                    <Suspense fallback={<PageLoader />}>
+                        <Login />
+                    </Suspense>
+                } />
+
                 {/* ---------- LOGIQUE MULTI-SITES ---------- */}
 
                 {/* Mode VITRINE : Uniquement le site public */}
@@ -105,7 +114,7 @@ const AppRoutes = () => {
                 {siteMode === 'app' && (
                     <>
                         <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                        <Route path="/dashboard" element={<Layout />}>
+                        <Route path="/dashboard" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                             <Route index element={
                                 <Suspense fallback={<PageLoader />}>
                                     <ErrorBoundary resetKey={location.pathname}>
@@ -232,7 +241,7 @@ const AppRoutes = () => {
                             } />
                         </Route>
 
-                        <Route path="/dashboard" element={<Layout />}>
+                        <Route path="/dashboard" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                             <Route index element={
                                 <Suspense fallback={<PageLoader />}>
                                     <ErrorBoundary resetKey={location.pathname}>
@@ -335,12 +344,22 @@ const AppRoutes = () => {
     );
 };
 
+
 function App() {
+    const [isPerfPanelOpen, setIsPerfPanelOpen] = React.useState(false);
+
     useEffect(() => {
-        // Initialize WhatsApp group service on app startup
-        whatsappGroupService.initialize().catch(err => {
-            console.warn('Failed to initialize WhatsApp group service:', err);
-        });
+        const handleKeyDown = (e) => {
+            if (e.ctrlKey && e.altKey && e.key === 'p') {
+                setIsPerfPanelOpen(prev => !prev);
+            }
+            if (e.key === 'Escape') {
+                setIsPerfPanelOpen(false);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
     return (
@@ -351,6 +370,10 @@ function App() {
                         <BrowserRouter>
                             <ScrollToTop />
                             <AppRoutes />
+                            <PerformancePanel 
+                                isOpen={isPerfPanelOpen} 
+                                onClose={() => setIsPerfPanelOpen(false)} 
+                            />
                         </BrowserRouter>
                     </NotificationProvider>
                 </ToastProvider>
@@ -360,3 +383,4 @@ function App() {
 }
 
 export default App;
+

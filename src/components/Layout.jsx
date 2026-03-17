@@ -20,12 +20,17 @@ import {
     Wand2,
     Trello,
     MessageCircle,
-    AlertCircle
+    AlertCircle,
+    FileBarChart,
+    RefreshCw
 } from 'lucide-react';
+import { supabase } from '../services/supabaseClient';
+
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import apiService from '../services/api';
 import { useNotifications } from '../contexts/NotificationContext';
+import { whatsappGroupService } from '../services/whatsappGroupService';
 import NotificationPanel from './NotificationPanel';
 import ChatAssistant from './ChatAssistant';
 import GlobalSearch from './GlobalSearch';
@@ -44,6 +49,12 @@ const Layout = () => {
     const { unreadCount } = useNotifications();
     const { theme, toggleTheme } = useTheme();
     const [scrolledDown, setScrolledDown] = useState(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
+    /* Init WhatsApp group service - dashboard only */
+    useEffect(() => {
+        whatsappGroupService.initialize().catch(() => {});
+    }, []);
 
     /* Track scroll for dynamic header */
     useEffect(() => {
@@ -81,14 +92,35 @@ const Layout = () => {
             setIsOnline(online);
         });
 
-        // Start polling for real-time data
-        apiService.startPolling(300000); // 5 minutes au lieu de 30s pour réduire la charge
+        // Supabase Realtime: auto-refresh properties on INSERT
+        const channel = supabase
+            .channel('locaux-realtime')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'locaux' }, () => {
+                apiService.getProperties(true).catch(() => {});
+            })
+            .subscribe();
 
         return () => {
             unsub();
-            apiService.stopPolling();
+            supabase.removeChannel(channel);
         };
     }, []);
+
+    const handleRefresh = async () => {
+        if (isRefreshing) return;
+        setIsRefreshing(true);
+        try {
+            await Promise.all([
+                apiService.getProperties(true),
+                apiService.getVisits(true),
+                apiService.getStats(true),
+            ]);
+        } catch (e) {
+            console.error('Refresh error', e);
+        } finally {
+            setIsRefreshing(false);
+        }
+    };
 
     // Close sidebar on mobile navigation
     useEffect(() => {
@@ -109,6 +141,8 @@ const Layout = () => {
         { path: '/dashboard/tools/ad-generator', icon: Wand2, label: 'Rédaction IA', roles: ['admin', 'agent'] },
         { path: '/dashboard/analytics', icon: TrendingUp, label: 'Analytiques', roles: ['admin'] },
     ].filter(item => !item.roles || item.roles.includes(user?.role || 'admin'));
+
+
 
     const allPages = [
         ...navItems,
@@ -264,6 +298,17 @@ const Layout = () => {
                     </div>
 
                     <div className="header-right">
+                        <motion.button
+                            className="icon-btn"
+                            onClick={handleRefresh}
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            title="Actualiser les données"
+                            disabled={isRefreshing}
+                        >
+                            <RefreshCw size={18} style={isRefreshing ? { animation: 'spin 0.8s linear infinite' } : {}} />
+                        </motion.button>
+
                         <motion.button
                             className="search-box"
                             whileHover={{ scale: 1.02 }}

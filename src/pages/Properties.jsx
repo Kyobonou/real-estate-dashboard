@@ -124,10 +124,10 @@ function scoreProperty(property, criteria, preNormalized = {}) {
         const isVente = pOffre.includes('vente') || (!isLocByPrice && !pOffre.includes('location') && price > 1_000_000);
 
         const cIsLoc = criteria.typeOffre === 'Location';
-        const cIsVente = criteria.typeOffre === 'Vente';
+        const cIsVente = criteria.typeOffre === 'Vente' || criteria.typeOffre === 'Achat';
 
-        if (cIsLoc && isVente) return 0; // Strict mismatch
-        if (cIsVente && isLoc) return 0; // Strict mismatch
+        if (cIsLoc && isVente) return 0; // Strict mismatch: location ≠ vente
+        if (cIsVente && isLoc) return 0; // Strict mismatch: achat/vente ≠ location
 
         if ((cIsLoc && isLoc) || (cIsVente && isVente)) score += 12; // High priority match
         // No penalty for ambiguous typeOffre — let other criteria decide
@@ -357,16 +357,14 @@ const PropertiesSkeleton = ({ viewMode }) => (
 );
 
 
-const PropertyDetailsModal = ({ property, isOpen, onClose, onToggleDisponible, onPrev, onNext, currentIdx, totalCount, variant = "modal" }) => {
+const PropertyDetailsModal = ({ property, isOpen, onClose, onToggleDisponible, onPrev, onNext, currentIdx, totalCount, variant = "modal", images = [] }) => {
     const { addToast } = useToast();
-    const [modalImages, setModalImages] = useState([]);
     const [activeImgIdx, setActiveImgIdx] = useState(0);
     const [galleryView, setGalleryView] = useState('carousel');
     const [msgCopied, setMsgCopied] = useState(false);
     const [toggling, setToggling] = useState(false);
     const [aiImproved, setAiImproved] = useState(false);
 
-    // Keyboard navigation: ← / → between properties, Escape closes
     useEffect(() => {
         if (!isOpen) return;
         const handleKey = (e) => {
@@ -388,19 +386,11 @@ const PropertyDetailsModal = ({ property, isOpen, onClose, onToggleDisponible, o
     };
 
     useEffect(() => {
-        if (!isOpen || !property?.publicationId) {
-            setModalImages([]);
-            setActiveImgIdx(0);
-            setGalleryView('carousel');
-            setMsgCopied(false);
-            setAiImproved(false);
-            return;
-        }
-        apiService.getImagesForPublication(property.publicationId).then(imgs => {
-            setModalImages(imgs);
-            setActiveImgIdx(0);
-            setGalleryView('carousel');
-        });
+        if (!isOpen) return;
+        setActiveImgIdx(0);
+        setGalleryView('carousel');
+        setMsgCopied(false);
+        setAiImproved(false);
     }, [isOpen, property?.publicationId]);
 
     // Extract best phone using utility
@@ -479,8 +469,8 @@ const PropertyDetailsModal = ({ property, isOpen, onClose, onToggleDisponible, o
 
                 <div className="property-details-header">
                     {(() => {
-                        const allUrls = modalImages.length > 0
-                            ? modalImages.map(i => i.lien_image).filter(Boolean)
+                        const allUrls = images.length > 0
+                            ? images.map(i => i.lien_image).filter(Boolean)
                             : (property.imageUrl ? [property.imageUrl] : []);
                         const hasImages = allUrls.length > 0;
                         return (
@@ -645,15 +635,29 @@ const PropertyDetailsModal = ({ property, isOpen, onClose, onToggleDisponible, o
                             </div>
                             {property.groupeWhatsApp && (
                                 <div className="info-item" style={{ gridColumn: '1 / -1' }}>
-                                    <MessageSquare size={18} style={{ color: '#25D366', flexShrink: 0 }} />
-                                    <div>
-                                        <span className="info-label">Groupe WhatsApp source</span>
-                                        <span className="info-value" style={{ fontSize: '0.82rem', wordBreak: 'break-all' }}>
-                                            {(property.groupName && !property.groupName.startsWith('Groupe '))
-                                                ? property.groupName
-                                                : property.groupeWhatsApp}
-                                        </span>
-                                    </div>
+                                    {property.groupeWhatsApp === 'FORMULAIRE_TALLY' ? (
+                                        <>
+                                            <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>📋</span>
+                                            <div>
+                                                <span className="info-label">Source</span>
+                                                <span className="info-value" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#7c3aed' }}>
+                                                    Formulaire Tally (soumission directe)
+                                                </span>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <MessageSquare size={18} style={{ color: '#25D366', flexShrink: 0 }} />
+                                            <div>
+                                                <span className="info-label">Groupe WhatsApp source</span>
+                                                <span className="info-value" style={{ fontSize: '0.82rem', wordBreak: 'break-all' }}>
+                                                    {(property.groupName && !property.groupName.startsWith('Groupe '))
+                                                        ? property.groupName
+                                                        : property.groupeWhatsApp}
+                                                </span>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -753,7 +757,7 @@ const PropertyDetailsModal = ({ property, isOpen, onClose, onToggleDisponible, o
 };
 
 // --- LIST VIEW COMPONENT (TABLE - style Visits) ---
-const PropertyListView = React.memo(({ properties, onViewDetails, handleContact, sortConfig, onSort }) => {
+const PropertyListView = React.memo(({ properties, onViewDetails, handleContact, sortConfig, onSort, onReset, hasFilters }) => {
     const SortHeader = ({ colKey, label, align = 'left' }) => {
         const isActive = sortConfig.key === colKey;
         const icon = isActive
@@ -769,6 +773,21 @@ const PropertyListView = React.memo(({ properties, onViewDetails, handleContact,
             </th>
         );
     };
+
+    if (properties.length === 0) {
+        return (
+            <EmptyState
+                variant={hasFilters ? 'filter' : 'building'}
+                title={hasFilters ? 'Aucune propriété ne correspond à vos filtres' : 'Aucun bien disponible'}
+                description={hasFilters
+                    ? 'Modifiez ou réinitialisez les filtres pour voir plus de résultats.'
+                    : 'Les nouvelles annonces WhatsApp apparaîtront ici automatiquement.'}
+                actionLabel={hasFilters ? 'Réinitialiser les filtres' : undefined}
+                onAction={hasFilters ? onReset : undefined}
+                size="medium"
+            />
+        );
+    }
 
     return (
         <div className="biens-list-container">
@@ -903,11 +922,19 @@ const PropertyListView = React.memo(({ properties, onViewDetails, handleContact,
     );
 });
 
-const PropertyCard = React.memo(React.forwardRef(({ property, index, onViewDetails, viewMode }, ref) => {
+const PropertyCard = React.memo(React.forwardRef(({ property, index, onViewDetails, viewMode, images = [] }, ref) => {
     const { addToast } = useToast();
     const freshness = useMemo(() => getFreshness(property.datePublicationRaw), [property.datePublicationRaw]);
     const contactPhone = useMemo(() => extractBestPhone(property), [property]);
-    const hasImage = Boolean(property.imageUrl);
+    const [imgIdx, setImgIdx] = useState(0);
+    const allUrls = useMemo(() => {
+        const fromImages = images.map(i => i.lien_image).filter(Boolean);
+        if (fromImages.length > 0) return fromImages;
+        return property.imageUrl ? [property.imageUrl] : [];
+    }, [images, property.imageUrl]);
+    const hasImage = allUrls.length > 0;
+    const prevImg = useCallback((e) => { e.stopPropagation(); setImgIdx(i => (i - 1 + allUrls.length) % allUrls.length); }, [allUrls.length]);
+    const nextImg = useCallback((e) => { e.stopPropagation(); setImgIdx(i => (i + 1) % allUrls.length); }, [allUrls.length]);
 
     const handleContact = useCallback((e) => {
         if (e && e.stopPropagation) e.stopPropagation();
@@ -921,8 +948,8 @@ const PropertyCard = React.memo(React.forwardRef(({ property, index, onViewDetai
     }, [contactPhone, property.typeBien, property.zone, property.commune, addToast]);
 
     const itemVariants = {
-        hidden: { opacity: 0, y: 15 },
-        show: { opacity: 1, y: 0 }
+        hidden: { opacity: 0, y: 10 },
+        show: { opacity: 1, y: 0, transition: { duration: 0.18 } }
     };
 
     // Icône de placeholder selon le type de bien
@@ -937,10 +964,10 @@ const PropertyCard = React.memo(React.forwardRef(({ property, index, onViewDetai
     return (
         <motion.div
             ref={ref}
-            layout={false} // Désactiver layout pour booster les perfs sur mobile si "rame"
+            layout={false}
             className="card property-card-v2"
+            data-offre={(property.typeOffre || '').toLowerCase().includes('location') ? 'location' : (property.typeOffre || '').toLowerCase().includes('vente') || (property.typeOffre || '').toLowerCase().includes('achat') ? 'vente' : undefined}
             variants={itemVariants}
-            whileHover={{ y: -4, transition: { duration: 0.2 } }}
             onClick={() => onViewDetails(property)}
         >
             {/* ── IMAGE SECTION ── */}
@@ -956,18 +983,31 @@ const PropertyCard = React.memo(React.forwardRef(({ property, index, onViewDetai
                     }}
                 >
                     {hasImage ? (
-                        <img
-                            src={property.imageUrl}
-                            alt={property.typeBien}
-                            loading="lazy"
-                            decoding="async"
-                            style={{
-                                position: 'absolute', inset: 0,
-                                width: '100%', height: '100%',
-                                objectFit: 'cover'
-                            }}
-                            onError={e => { e.target.style.display = 'none'; e.target.parentNode.style.background = 'linear-gradient(135deg, #1B4299, #4f46e5)'; }}
-                        />
+                        <>
+                            <img
+                                key={imgIdx}
+                                src={allUrls[imgIdx]}
+                                alt={property.typeBien}
+                                loading="lazy"
+                                decoding="async"
+                                style={{
+                                    position: 'absolute', inset: 0,
+                                    width: '100%', height: '100%',
+                                    objectFit: 'cover'
+                                }}
+                                onError={e => { e.target.style.display = 'none'; e.target.parentNode.style.background = 'linear-gradient(135deg, #1B4299, #4f46e5)'; }}
+                            />
+                            {allUrls.length > 1 && (
+                                <>
+                                    <button onClick={prevImg} style={{ position: 'absolute', left: 6, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: '50%', width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff', zIndex: 2 }}>
+                                        <ChevronLeft size={14} />
+                                    </button>
+                                    <button onClick={nextImg} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: '50%', width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff', zIndex: 2 }}>
+                                        <ChevronRight size={14} />
+                                    </button>
+                                </>
+                            )}
+                        </>
                     ) : (
                         /* Placeholder visuel quand pas d'image */
                         <div style={{
@@ -1006,15 +1046,35 @@ const PropertyCard = React.memo(React.forwardRef(({ property, index, onViewDetai
 
                 {/* Badges overlay */}
                 <div className="property-badges">
-                    {property._matchPct > 0 && (
-                        <span className={`match-score-badge ${property._matchPct >= 80 ? 'match-top' : property._matchPct >= 50 ? 'match-good' : 'match-low'}`}>
-                            <Sparkles size={10} />
-                            {property._matchPct}%
+                    {/* Gauche : match score ou badge offre */}
+                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                        {property._matchPct > 0 ? (
+                            <span className={`match-score-badge ${property._matchPct >= 80 ? 'match-top' : property._matchPct >= 50 ? 'match-good' : 'match-low'}`}>
+                                <Sparkles size={10} />
+                                {property._matchPct}%
+                            </span>
+                        ) : property.typeOffre ? (
+                            <span className={`badge-offer ${(property.typeOffre || '').toLowerCase().includes('location') ? 'location' : (property.typeOffre || '').toLowerCase().includes('vente') || (property.typeOffre || '').toLowerCase().includes('achat') ? 'vente' : ''}`}>
+                                {property.typeOffre}
+                            </span>
+                        ) : null}
+                        {property.groupeWhatsApp === 'FORMULAIRE_TALLY' && (
+                            <span style={{ fontSize: '0.6rem', fontWeight: 700, background: 'rgba(124,58,237,0.85)', color: '#fff', borderRadius: 5, padding: '2px 6px', backdropFilter: 'blur(4px)' }}>
+                                📋 Formulaire
+                            </span>
+                        )}
+                    </div>
+                    {/* Droite : photo count + disponibilité */}
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                        {allUrls.length > 0 && (
+                            <span style={{ fontSize: '0.6rem', fontWeight: 700, background: 'rgba(0,0,0,0.55)', color: '#fff', borderRadius: 5, padding: '2px 5px', display: 'flex', alignItems: 'center', gap: 3 }}>
+                                <Images size={9} /> {allUrls.length}
+                            </span>
+                        )}
+                        <span className={`badge ${property.disponible ? 'badge-success' : 'badge-danger'}`}>
+                            {property.status}
                         </span>
-                    )}
-                    <span className={`badge ${property.disponible ? 'badge-success' : 'badge-danger'}`}>
-                        {property.status}
-                    </span>
+                    </div>
                 </div>
             </div>
 
@@ -1080,7 +1140,7 @@ const Properties = () => {
     const location = useLocation();
     const [properties, setProperties] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [viewMode, setViewMode] = useState('list');
+    const [viewMode, setViewMode] = useState('grid');
     const [searchTerm, setSearchTerm] = useState('');
     const [searchInput, setSearchInput] = useState(''); // valeur affichée dans l'input (contrôlé)
     const [matchBanner, setMatchBanner] = useState(null);
@@ -1106,6 +1166,11 @@ const Properties = () => {
         meuble: 'all'
     });
     const [refreshing, setRefreshing] = useState(false);
+    const [imagesMap, setImagesMap] = useState({});
+    // Server-side filtered results (populated when active filters exist)
+    const [serverFilteredProperties, setServerFilteredProperties] = useState(null);
+    const [serverTotalCount, setServerTotalCount] = useState(null);
+    const [serverFiltering, setServerFiltering] = useState(false);
 
     // Lire les critères de matching depuis RequestsPage (navigation state)
     useEffect(() => {
@@ -1148,16 +1213,36 @@ const Properties = () => {
         return () => unsubscribe();
     }, []);
 
+    useEffect(() => {
+        // Déclencher le géocodage on-demand quand on passe en mode carte
+        if (viewMode === 'map' && geocodedProperties.length === 0 && properties.length > 0) {
+            geocodePropertiesAsync(properties);
+        }
+    }, [viewMode, properties.length, geocodedProperties.length]);
+
+    const loadImages = useCallback(async (props) => {
+        const keys = props.map(p => p.publicationId).filter(Boolean);
+        if (keys.length === 0) return;
+        try {
+            const map = await apiService.getImagesForPublications(keys);
+            setImagesMap(map || {});
+        } catch (_) {}
+    }, []);
+
+    const getImages = useCallback((p) => {
+        const key = p.publicationId || String(p.id);
+        const fromMap = imagesMap[key] || [];
+        if (fromMap.length > 0) return fromMap;
+        return p.imageUrl ? [{ lien_image: p.imageUrl }] : [];
+    }, [imagesMap]);
+
     const loadProperties = async () => {
         setLoading(true);
         try {
-            const response = await apiService.getProperties(true);
+            const response = await apiService.getProperties(false);
             if (response.success) {
                 setProperties(response.data);
-                // Pré-calculer géo
-                geocodingService.geocodeProperties(response.data).then(geocoded => {
-                    setGeocodedProperties(geocoded);
-                });
+                loadImages(response.data);
             }
         } catch (error) {
             console.error('Error fetching properties:', error);
@@ -1191,6 +1276,7 @@ const Properties = () => {
             if (response.success) {
                 setProperties(response.data);
                 geocodePropertiesAsync(response.data); // Re-geocode after refresh
+                loadImages(response.data);
                 addToast({ type: 'success', title: 'Actualisé', message: 'Données mises à jour depuis le serveur' });
             }
         } catch (error) {
@@ -1198,7 +1284,7 @@ const Properties = () => {
         } finally {
             setRefreshing(false);
         }
-    }, [addToast]);
+    }, [addToast, loadImages]);
 
     // Fonction de tri
     const handleSort = useCallback((key) => {
@@ -1286,6 +1372,20 @@ const Properties = () => {
         const isMatchMode = Boolean(matchBanner?.criteria);
         const searchLower = searchTerm.toLowerCase();
 
+        // When server-side filtering returned results (and we're not in match mode),
+        // use those as the base set. Local filters (price, pieces, meuble, status) still apply.
+        const baseProperties = (!isMatchMode && serverFilteredProperties !== null)
+            ? serverFilteredProperties.map(p => ({
+                ...p,
+                _norm_search_blob: normStr([p.refBien, p.commune, p.zone, p.typeBien, p.publiePar, p.groupeWhatsApp, p.caracteristiques, p.description].filter(Boolean).join(' ')),
+                _norm_full_prop_text: normStr([p.caracteristiques, p.description, p.zone, p.quartier, p.commune].filter(Boolean).join(' ')),
+                _norm_full_desc_blob: normStr([p.caracteristiques, p.zone, p.quartier, p.description, p.publiePar].filter(Boolean).join(' ')),
+                _norm_offre: normStr(p.typeOffre || ''),
+                _norm_type: normStr(p.typeBien || ''),
+                _norm_zone: normStr([p.zone, p.quartier].filter(Boolean).join(' ')),
+            }))
+            : preProcessedProperties;
+
         // Si on est en mode match, pré-calculer les vecteurs du criteria
         const preNormalizedCriteria = isMatchMode ? {
             cOffre: normStr(matchBanner.criteria.typeOffre || ''),
@@ -1296,7 +1396,7 @@ const Properties = () => {
                 .filter(w => w.length > 3 && !MATCH_STOP_WORDS.has(w) && !/^\d+$/.test(w)),
         } : {};
 
-        let items = preProcessedProperties.filter(property => {
+        let items = baseProperties.filter(property => {
             const matchesSearch = !searchTerm || property._norm_search_blob.includes(searchLower);
 
             const matchesStatus = filters.status === 'all' ||
@@ -1331,22 +1431,9 @@ const Properties = () => {
                     aValue = parseFloat(aValue) || 0;
                     bValue = parseFloat(bValue) || 0;
                 } else if (sortConfig.key === 'datePublication') {
-                    const parseDateStr = (d) => {
-                        if (!d || typeof d !== 'string') return 0;
-                        if (d.includes('/')) {
-                            const cleanStr = d.replace(/le\s+/gi, '').trim();
-                            const [datePart, timePart] = cleanStr.split(' ');
-                            const [day, month, year] = datePart.split('/');
-                            if (timePart) {
-                                const [hour, minute] = timePart.split(':');
-                                return new Date(year, month - 1, day, hour, minute || 0).getTime();
-                            }
-                            return new Date(year, month - 1, day).getTime();
-                        }
-                        return new Date(d).getTime() || 0;
-                    };
-                    aValue = parseDateStr(aValue);
-                    bValue = parseDateStr(bValue);
+                    // Use ISO raw date for reliable sorting
+                    aValue = new Date(a.datePublicationRaw || 0).getTime();
+                    bValue = new Date(b.datePublicationRaw || 0).getTime();
                 } else {
                     aValue = String(aValue || '').toLowerCase();
                     bValue = String(bValue || '').toLowerCase();
@@ -1386,18 +1473,14 @@ const Properties = () => {
                 return { ...p, _matchScore: s, _matchPct: Math.round((s / maxScore) * 100) };
             });
 
-            // Seuil 70% → fallback 50% → fallback score > 0
-            const ok70 = items.filter(p => p._matchPct >= 70);
-            const ok50 = items.filter(p => p._matchPct >= 50);
-            const okPos = items.filter(p => p._matchScore > 0);
-
-            items = ok70.length > 0 ? ok70 : ok50.length > 0 ? ok50 : okPos;
+            // Seuil strict 90% — ne propose que les biens vraiment compatibles
+            items = items.filter(p => p._matchPct >= 80);
 
             items.sort((a, b) => b._matchScore - a._matchScore);
         }
 
         return items;
-    }, [preProcessedProperties, searchTerm, filters, sortConfig, matchBanner]);
+    }, [preProcessedProperties, serverFilteredProperties, searchTerm, filters, sortConfig, matchBanner]);
 
     // Optimisation Vercel: Croisement efficace O(N) pour la carte au lieu de duplication O(N*M)
     const filteredGeocodedProperties = useMemo(() => {
@@ -1418,6 +1501,59 @@ const Properties = () => {
     useEffect(() => {
         setCurrentPage(1);
     }, [searchTerm, filters]);
+
+    // Debounced server-side filter fetch — only runs when meaningful filters are active.
+    // Skips in match-banner mode (scoring needs all data).
+    const debouncedServerFilter = useMemo(
+        () => debounce(async (activeFilters, matchMode) => {
+            if (matchMode) return; // match-score mode: skip server filter
+            const hasFilter = (
+                (activeFilters.commune && activeFilters.commune !== 'all') ||
+                (activeFilters.type && activeFilters.type !== 'all') ||
+                (activeFilters.status === 'Disponible') || // status filter maps to disponible
+                (activeFilters.search && activeFilters.search.length >= 2)
+            );
+            if (!hasFilter) {
+                setServerFilteredProperties(null);
+                setServerTotalCount(null);
+                return;
+            }
+            setServerFiltering(true);
+            try {
+                const serverFilters = {};
+                if (activeFilters.commune !== 'all') serverFilters.commune = activeFilters.commune;
+                if (activeFilters.type !== 'all') serverFilters.typeBien = activeFilters.type;
+                if (activeFilters.status === 'Disponible') serverFilters.disponible = true;
+                if (activeFilters.search && activeFilters.search.length >= 2) serverFilters.search = activeFilters.search;
+                serverFilters.page = 1;
+                serverFilters.pageSize = 200; // fetch up to 200 for local sort/dedup
+
+                const [response, count] = await Promise.all([
+                    apiService.getProperties(false, serverFilters),
+                    apiService.getTotalCount(serverFilters),
+                ]);
+                if (response.success) {
+                    setServerFilteredProperties(response.data);
+                    setServerTotalCount(count);
+                } else {
+                    setServerFilteredProperties(null);
+                    setServerTotalCount(null);
+                }
+            } catch (e) {
+                console.error('Server filter error:', e);
+                setServerFilteredProperties(null);
+                setServerTotalCount(null);
+            } finally {
+                setServerFiltering(false);
+            }
+        }, 300),
+        []
+    );
+
+    // Trigger server-side filter when filters or searchTerm change
+    useEffect(() => {
+        debouncedServerFilter({ ...filters, search: searchTerm }, Boolean(matchBanner?.criteria));
+    }, [filters, searchTerm, matchBanner]);
 
     // Debounced search (optimisation critique)
     const debouncedSearch = useMemo(
@@ -1535,7 +1671,12 @@ const Properties = () => {
                 <div className="properties-header">
                     <div className="header-left">
                         <h2>Biens Immobiliers</h2>
-                        <span className="properties-count">{filteredProperties.length} bien(s) trouvé(s) sur {properties.length}</span>
+                        <span className="properties-count">
+                            {serverTotalCount !== null
+                                ? `${serverTotalCount} propriétés trouvées`
+                                : `${filteredProperties.length} bien(s) trouvé(s) sur ${properties.length}`}
+                            {serverFiltering && <span style={{ marginLeft: 6, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>...</span>}
+                        </span>
                     </div>
                     <div className="header-actions">
                         <button className="btn btn-secondary" onClick={handleExport}>
@@ -1762,49 +1903,57 @@ const Properties = () => {
                         handleContact={handleTableContact}
                         sortConfig={sortConfig}
                         onSort={handleSort}
+                        hasFilters={Object.values(filters).some(v => v !== 'all' && v !== '' && v !== false) || Boolean(searchTerm)}
+                        onReset={resetFilters}
                     />
                 ) : (
+                    /* VUE GRILLE - Animations CSS légères (pas de AnimatePresence popLayout) */
                     <motion.div
                         className={`properties-container ${viewMode}`}
                         variants={{
                             hidden: { opacity: 0 },
-                            show: { opacity: 1, transition: { staggerChildren: 0.04 } }
+                            show: { opacity: 1, transition: { staggerChildren: 0.03, delayChildren: 0.05 } }
                         }}
                         initial="hidden"
                         animate="show"
+                        key={`grid-${currentPage}`}
                     >
-                        <AnimatePresence mode="popLayout">
-                            {paginatedProperties.map((property, index) => (
-                                <PropertyCard
-                                    key={property.id}
-                                    property={property}
-                                    index={index}
-                                    viewMode={viewMode}
-                                    onViewDetails={handleViewDetails}
-                                />
-                            ))}
-                        </AnimatePresence>
+                        {paginatedProperties.map((property, index) => (
+                            <PropertyCard
+                                key={property.id}
+                                property={property}
+                                index={index}
+                                viewMode={viewMode}
+                                onViewDetails={handleViewDetails}
+                                images={getImages(property)}
+                            />
+                        ))}
                     </motion.div>
                 )}
 
                 {filteredProperties.length === 0 && !loading && (() => {
+                    const isMatchMode = Boolean(matchBanner?.criteria);
                     const hasSearch = Boolean(searchTerm);
                     const hasFilters = Object.values(filters).some(v => v !== 'all' && v !== '' && v !== false);
-                    const variant = hasSearch ? 'search' : hasFilters ? 'filter' : 'building';
-                    const title = hasSearch ? `Aucun résultat pour « ${searchTerm} »`
+                    const variant = isMatchMode ? 'filter' : hasSearch ? 'search' : hasFilters ? 'filter' : 'building';
+                    const title = isMatchMode
+                        ? 'Aucun bien ne correspond suffisamment à cette demande'
+                        : hasSearch ? `Aucun résultat pour « ${searchTerm} »`
                         : hasFilters ? 'Aucun bien correspond à vos filtres'
-                            : 'Aucun bien disponible';
-                    const desc = hasSearch ? 'Essayez un autre terme de recherche ou élargissez vos critères.'
+                        : 'Aucun bien disponible';
+                    const desc = isMatchMode
+                        ? 'Les biens disponibles ne correspondent pas à ≥80% des critères demandés (localisation, type, budget, chambres). Revenez quand de nouvelles annonces arrivent.'
+                        : hasSearch ? 'Essayez un autre terme de recherche ou élargissez vos critères.'
                         : hasFilters ? 'Modifiez ou réinitialisez les filtres pour voir plus de résultats.'
-                            : 'Les nouvelles annonces WhatsApp apparaîtront ici automatiquement.';
+                        : 'Les nouvelles annonces WhatsApp apparaîtront ici automatiquement.';
                     return (
                         <EmptyState
                             variant={variant}
                             title={title}
                             description={desc}
                             showTips={hasSearch}
-                            actionLabel={(hasSearch || hasFilters) ? 'Réinitialiser' : undefined}
-                            onAction={(hasSearch || hasFilters) ? resetFilters : undefined}
+                            actionLabel={(isMatchMode || hasSearch || hasFilters) ? 'Réinitialiser' : undefined}
+                            onAction={(isMatchMode || hasSearch || hasFilters) ? resetFilters : undefined}
                             size="medium"
                         />
                     );
@@ -1902,6 +2051,7 @@ const Properties = () => {
                     onPrev={() => handleNavTo(selectedIndex - 1)}
                     onNext={() => handleNavTo(selectedIndex + 1)}
                     variant="side-panel"
+                    images={selectedProperty ? getImages(selectedProperty) : []}
                 />
             </motion.div>
         </PullToRefresh>

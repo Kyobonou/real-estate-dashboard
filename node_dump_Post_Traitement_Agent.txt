@@ -1,0 +1,18 @@
+const agentOutput=$('Agent Eden').first().json.output||'';
+const norm=$('Normaliser Filtrer Anti-Boucle').first().json;
+const agentSteps=$('Agent Eden').first().json;
+const outputLow=agentOutput.toLowerCase();
+const hasVisite=['visite confirmee','visite confirmée','rdv confirme','rdv confirmé','visite programmee','visite programmée'].some(function(kw){return outputLow.includes(kw);});
+const messageBody=(norm.messageBody||'').toLowerCase();
+const hasImageRequest=['image','images','photo','photos','video','vidéo','vidéos','videos','visuel','visuels'].some(function(kw){return messageBody.includes(kw);});
+let refs=[];
+try{const stepsStr=JSON.stringify(agentSteps);const refMatches=stepsStr.match(/\[REF:([^\]]+)\]/gi);if(refMatches){refs=refMatches.map(function(m){return m.replace('[REF:','').replace(']','');});}}catch(e){}
+const sd=$getWorkflowStaticData('global');
+const prospectKey='prospect_refs_'+(norm.cleanNumber||norm.remoteJid);
+if(refs.length>0){sd[prospectKey]={refs:refs,timestamp:Date.now()};}else if(sd[prospectKey]&&(Date.now()-sd[prospectKey].timestamp)<3600000){refs=sd[prospectKey].refs||[];}
+const refBien=refs.length>0?refs[0]:'';
+const allRefs=refs.join(', ');
+let bienDetails='';
+try{const stepsStr=JSON.stringify(agentSteps);const typeMatch=stepsStr.match(/Type:\s*([^|\\n]+)/i);const locMatch=stepsStr.match(/Localisation:\s*([^\\n]+)/i);const prixMatch=stepsStr.match(/Prix:\s*([^\\n]+)/i);const contactMatch=stepsStr.match(/\[Contact interne:\s*([^\]]+)\]/i);const parts=[];if(typeMatch)parts.push('Type: '+typeMatch[1].trim());if(locMatch)parts.push('Localisation: '+locMatch[1].trim());if(prixMatch)parts.push('Prix: '+prixMatch[1].trim());if(contactMatch)parts.push('Contact annonceur: '+contactMatch[1].trim());bienDetails=parts.join('\n');}catch(e){}
+if(!bienDetails&&refs.length>0){bienDetails='Référence(s): '+allRefs+'\nConsulter la table locaux pour les détails.';}
+return[{json:{hasVisite,hasImageRequest,ref_bien:refBien,all_refs:allRefs,bien_details:bienDetails,prospect_numero:norm.cleanNumber||norm.replyTo,prospect_nom:norm.pushName||'',agentOutput:agentOutput,logEntry:{numero_prospect:norm.cleanNumber||norm.replyTo||'',nom_prospect:norm.pushName||'',message_entrant:(norm.messageBody||'').substring(0,500),reponse_agent:agentOutput.substring(0,500),ref_mentionne:allRefs,visite_detectee:hasVisite,image_demandee:hasImageRequest,horodatage:new Date().toISOString()}}}];

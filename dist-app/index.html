@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8" />
+
+  <!-- PWA & Favicons -->
+  <link rel="icon" type="image/svg+xml" href="/pwa-icon.svg" />
+  <link rel="apple-touch-icon" href="/masked-icon.svg" />
+  <link rel="mask-icon" href="/masked-icon.svg" color="#667eea" />
+  <meta name="theme-color" content="#0f172a" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Force no-cache to prevent stale JS/CSS -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
+  <!-- Preconnect pour accélérer le chargement -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://udyfhzyvalansmhkynnc.supabase.co" crossorigin>
+
+  <!-- Google Fonts - chargement non-bloquant (display=swap) -->
+  <link rel="preload" as="style"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;1,400&display=swap"
+    onload="this.onload=null;this.rel='stylesheet'">
+  <noscript>
+    <link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;1,400&display=swap">
+  </noscript>
+
+  <!-- SEO Meta Tags -->
+  <meta name="description"
+    content="BOGBE'S GROUPE - Votre partenaire de confiance pour la recherche, l'achat, la vente et la gestion de biens immobiliers." />
+  <meta name="keywords" content="immobilier, achat, vente, location, gestion immobilière, bogbes, agence immobilière" />
+  <meta name="author" content="BOGBE'S GROUPE" />
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="BOGBE'S GROUPE - Agence Immobilière" />
+  <meta property="og:description"
+    content="Trouvez la propriété de vos rêves. Découvrez notre sélection exclusive de biens immobiliers." />
+  <meta property="og:site_name" content="BOGBE'S GROUPE" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="BOGBE'S GROUPE Immobilier" />
+  <meta name="twitter:description" content="Achat, vente, et location de biens immobiliers d'exception." />
+
+  <!-- Security Headers -->
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta http-equiv="X-Frame-Options" content="DENY" />
+
+  <title>BOGBE’S Dashboard - MULTI-SERVICES</title>
+
+  <style>
+    /* Loading indicator shown before React mounts */
+    #root-loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: #0f172a;
+      color: #f8fafc;
+      font-family: 'Inter', -apple-system, sans-serif;
+      gap: 1rem;
+    }
+
+    #root-loading .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(27, 66, 153, 0.2);
+      border-top-color: #1B4299;
+      border-radius: 50%;
+      animation: rootspin 0.8s linear infinite;
+    }
+
+    #root-loading p {
+      font-size: 0.875rem;
+      color: #cbd5e1;
+    }
+
+    @keyframes rootspin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+  <script type="module" crossorigin src="/assets/index-_2XJT-Tc.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/react-vendor-CVKrcTMR.js">
+  <link rel="modulepreload" crossorigin href="/assets/ui-vendor-i0mTZmsy.js">
+  <link rel="modulepreload" crossorigin href="/assets/firebase-vendor-5ApeYmIL.js">
+  <link rel="stylesheet" crossorigin href="/assets/index-B6qg29W7.css">
+<link rel="manifest" href="/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/registerSW.js"></script></head>
+
+<body>
+  <div id="root">
+    <!-- This content is shown while React loads; React replaces it on mount -->
+    <div id="root-loading">
+      <div class="spinner"></div>
+      <p>Chargement d'ImmoDash...</p>
+    </div>
+  </div>
+  <script>
+    // Diagnostic: if React hasn't mounted after 10 seconds, show a message
+    setTimeout(function () {
+      var loading = document.getElementById('root-loading');
+      if (loading) {
+        loading.innerHTML = '<div style="text-align:center;padding:2rem;">' +
+          '<p style="font-size:1.25rem;margin-bottom:1rem;">⚠️ L\'application met du temps à charger</p>' +
+          '<p style="font-size:0.875rem;color:#94a3b8;margin-bottom:1rem;">Vérifiez la console du navigateur (F12) pour les erreurs.</p>' +
+          '<button onclick="location.reload()" style="padding:0.75rem 1.5rem;background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;border-radius:8px;cursor:pointer;font-size:0.875rem;font-weight:600;">Recharger la page</button>' +
+          '</div>';
+      }
+    }, 10000);
+  </script>
+</body>
+
+</html>

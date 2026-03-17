@@ -65,6 +65,7 @@
         padding-right: 1rem;
         gap: 1rem;
         scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
     }
 
     .horizontal-swiper-mobile::-webkit-scrollbar {
@@ -74,6 +75,15 @@
     .horizontal-swiper-mobile>.card-panel {
         min-width: 85vw;
         scroll-snap-align: center;
+    }
+
+    /* FIX PERF: Désactiver les blurs sur mobile pour fluidité maximale */
+    .card-panel,
+    .stat-card-v3,
+    .welcome-icon {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        background-color: var(--bg-panel) !important;
     }
 }
 
@@ -89,8 +99,8 @@
 /* Cards (Base) */
 .card-panel {
     background: var(--glass-card);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg);
     padding: 1.5rem;
@@ -98,12 +108,13 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    transition: transform 0.25s var(--ease-smooth), box-shadow 0.25s var(--ease-smooth);
+    transition: transform 0.22s var(--ease-out-expo), box-shadow 0.22s var(--ease-out-expo);
+    will-change: transform;
 }
 
 .card-panel:hover {
     transform: translateY(-2px);
-    box-shadow: var(--el-hover);
+    box-shadow: var(--el-2);
     border-color: rgba(27, 66, 153, 0.2);
 }
 
@@ -112,8 +123,9 @@
     background: var(--glass-card);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--glass-border);
-    border-top: 3px solid var(--border-subtle);
+    border: 1px solid rgba(0, 0, 0, 0.07);
+    /* Top accent color via CSS custom prop — injecté en inline style par la carte */
+    border-top: 3px solid var(--stat-color, var(--brand-primary));
     border-radius: var(--radius-lg);
     padding: 1.5rem;
     display: flex;
@@ -121,14 +133,16 @@
     gap: 1.25rem;
     position: relative;
     overflow: hidden;
-    transition: transform 0.2s var(--ease-out-expo),
-        box-shadow 0.2s ease,
-        border-color 0.25s;
+    box-shadow: var(--shadow-card);
+    transition: transform 0.25s var(--ease-out-expo),
+        box-shadow 0.25s ease,
+        border-color 0.2s;
 }
 
 .stat-card-v3:hover {
     transform: translateY(-4px);
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--shadow-card-hover);
+    will-change: transform;
 }
 
 /* Shimmer effect on KPI card hover */
@@ -164,19 +178,21 @@
 }
 
 .stat-label {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.07em;
+    line-height: 1.2;
 }
 
 .stat-value {
-    font-size: 1.85rem;
-    font-weight: 800;
+    font-size: 1.9rem;
+    font-weight: 900;
     color: var(--text-primary);
-    line-height: 1.1;
-    letter-spacing: -0.03em;
+    line-height: 1.05;
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
 }
 
 .stat-trend {
@@ -244,6 +260,7 @@
     background: var(--bg-hover);
     border-color: var(--border-subtle);
     transform: translateX(2px);
+    will-change: transform;
 }
 
 .item-icon-box {
@@ -637,23 +654,30 @@
     transform: translateY(-4px);
     border-color: var(--brand-primary-light);
     box-shadow: var(--el-hover);
-}
-
-.stat-card-v3:hover {
-    box-shadow: var(--el-hover);
-    transform: translateY(-5px);
+    will-change: transform;
 }
 
 /* card-panel: softer base + elevation on hover */
 .card-panel {
-    box-shadow: var(--el-1);
+    box-shadow: var(--shadow-card);
+    border: 1px solid rgba(0, 0, 0, 0.07);
     transition: transform 0.25s var(--ease-out-expo),
-        box-shadow 0.25s ease;
+        box-shadow 0.25s ease,
+        border-color 0.2s ease;
 }
 
 .card-panel:hover {
-    box-shadow: var(--el-2);
+    box-shadow: var(--shadow-card-hover);
+    border-color: rgba(27, 66, 153, 0.14);
     transform: translateY(-2px);
+}
+
+body.dark .card-panel {
+    border-color: rgba(255, 255, 255, 0.07);
+}
+
+body.dark .card-panel:hover {
+    border-color: rgba(96, 165, 250, 0.18);
 }
 
 /* Welcome banner: animated gradient */

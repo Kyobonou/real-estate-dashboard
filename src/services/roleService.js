@@ -48,18 +48,21 @@ export function canAccessSettingsTab(role, tabId) {
     return perms.settingsTabs.includes(tabId);
 }
 
-// Read user role from Firestore, fallback to legacy mapping
+// Read user role from Firestore, fallback to email mapping, then 'admin' as last resort
 export async function getUserRole(uid, email) {
+    // Check email mapping first (fast, no network)
+    if (email && ROLE_MAPPING[email]) {
+        return ROLE_MAPPING[email];
+    }
     try {
         const userDoc = await getDoc(doc(db, 'users', uid));
         if (userDoc.exists()) {
             return userDoc.data().role || 'viewer';
         }
-        // Fallback to legacy mapping
-        return ROLE_MAPPING[email] || 'viewer';
+        return ROLE_MAPPING[email] || 'admin';
     } catch (error) {
         console.error('Error reading user role:', error);
-        return ROLE_MAPPING[email] || 'viewer';
+        return ROLE_MAPPING[email] || 'admin';
     }
 }
 

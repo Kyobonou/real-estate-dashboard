@@ -1,0 +1,5 @@
+VITE_SITE_MODE=app
+VITE_SITE_URL_VITRINE=https://immo-vitrine-ci.web.app
+VITE_SITE_URL_APP=https://immo-dashboard-ci.web.app
+VITE_APP_NAME=ImmoDash
+VITE_APP_VERSION=2.5.0

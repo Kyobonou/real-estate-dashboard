@@ -1,0 +1,142 @@
+try {
+  const raw = $input.first().json;
+  const source = $('Preparer Filtrer Groupe').first().json;
+
+  let extracted = {};
+  let parsed = false;
+
+  const candidates = [
+    () => raw?.choices?.[0]?.message?.content,
+    () => raw?.output_text,
+    () => raw?.message?.content,
+    () => raw?.text,
+    () => raw?.content,
+    () => raw?.output?.[0]?.content?.[0]?.text,
+    () => raw?.response,
+    () => typeof raw === 'string' ? raw : null
+  ];
+
+  for (const fn of candidates) {
+    if (parsed) break;
+    try {
+      const val = fn();
+      if (!val) continue;
+      if (typeof val === 'object' && val !== null && val.type_de_bien !== undefined) {
+        extracted = val; parsed = true; break;
+      }
+      if (typeof val === 'string') {
+        let clean = val.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+        const fb = clean.indexOf('{');
+        const lb = clean.lastIndexOf('}');
+        if (fb !== -1 && lb > fb) clean = clean.substring(fb, lb + 1);
+        const obj = JSON.parse(clean);
+        if (obj && typeof obj === 'object' && Object.keys(obj).length > 0) {
+          extracted = obj; parsed = true;
+        }
+      }
+    } catch(e) {
+      console.log('[PARSER] Candidate échoué:', e.message);
+    }
+  }
+
+  if (!parsed && (raw?.type_de_bien !== undefined || raw?.commune !== undefined)) {
+    extracted = raw; parsed = true;
+  }
+
+  if (!parsed) {
+    function findObj(obj, depth) {
+      if (!obj || typeof obj !== 'object' || depth > 6) return null;
+      if (obj.type_de_bien !== undefined || obj.commune !== undefined) return obj;
+      for (const k of Object.keys(obj)) {
+        const f = findObj(obj[k], depth + 1);
+        if (f) return f;
+      }
+      return null;
+    }
+    const found = findObj(raw, 0);
+    if (found) { extracted = found; parsed = true; }
+  }
+
+  if (!parsed || Object.keys(extracted).length === 0) {
+    console.log('[PARSER] REJETÉ: impossible de parser la réponse IA');
+    return [];
+  }
+
+  const typeBien = String(extracted.type_de_bien || '').trim();
+  const commune  = String(extracted.commune || '').trim();
+  const zone     = String(extracted.zone_geographique || '').trim();
+  const prix     = String(extracted.prix || '').trim();
+  const typeOffre= String(extracted.type_offre || '').trim();
+
+  if (!typeBien && !commune && !zone) {
+    console.log('[PARSER] REJETÉ: aucune info exploitable');
+    return [];
+  }
+
+  const communeFinale = commune || zone;
+
+  const typeValides = ['appartement','studio','chambre','maison','villa','duplex','triplex','terrain','bureau','magasin','boutique','entrepot','local','immeuble','parking','garage','penthouse','parcelle','lot'];
+  const typeLow = typeBien.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  if (typeBien && !typeValides.some(t => typeLow.includes(t))) {
+    console.log('[PARSER] Type non standard mais accepté:', typeBien);
+  }
+
+  let prixNormalise = parseInt(String(extracted.prix_normalise || '').replace(/[^0-9]/g, '')) || 0;
+  if (!prixNormalise && prix) {
+    const prixRaw = prix.toLowerCase();
+    const allDigits = prixRaw.replace(/[^\d]/g, '');
+    const num = parseInt(allDigits) || 0;
+    const isMillion = /million|milion/i.test(prixRaw);
+    prixNormalise = (isMillion && num < 10000) ? num * 1000000 : num;
+  }
+
+  const communeNorm = communeFinale.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  const quartierNorm = String(extracted.quartier || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  const chambresNorm = String(extracted.chambre || '').replace(/[^0-9]/g, '').trim();
+  const surfaceNorm = String(extracted.surface || '').replace(/[^0-9]/g, '').trim();
+
+  const telBrut = String(extracted.telephone || '').trim();
+  const telExpediteur = String(source.wasenderPhone || source.telephone || '').trim();
+  const telephoneBien = telBrut
+    ? telBrut.split(',')[0].replace(/[^0-9]/g, '').trim()
+    : '';
+
+  // Numéro propre du participant WhatsApp (priorité maximale pour contact)
+  const cleanedParticipantPn = String(source.cleanedParticipantPn || source.telephone || source.wasenderPhone || '').replace(/[^0-9]/g, '').trim();
+
+  console.log('[PARSER] VALIDÉ:', typeBien || 'type_inconnu', '|', communeFinale, '| Prix:', prix || 'N/A', '| Tel bien:', telephoneBien, '| cleanedParticipantPn:', cleanedParticipantPn);
+
+  return [{ json: {
+    type_de_bien: typeBien || 'non_specifie',
+    type_offre: typeOffre,
+    zone_geographique: zone,
+    commune: communeFinale,
+    quartier: String(extracted.quartier || '').trim(),
+    prix,
+    prix_normalise: prixNormalise,
+    surface: String(extracted.surface || '').trim(),
+    chambre: String(extracted.chambre || '').trim(),
+    meubles: String(extracted.meubles || 'Non').trim(),
+    caracteristiques: String(extracted.caracteristiques || '').substring(0, 1000).trim(),
+    telephone_bien: telephoneBien,
+    telephone_expediteur: telExpediteur.replace(/[^0-9]/g, ''),
+    cleanedParticipantPn: cleanedParticipantPn,
+    expediteur: String(source.expediteur || '').trim(),
+    publie_par: String(extracted.publie_par || source.expediteur || '').trim(),
+    disponible: extracted.disponible === 'Non' ? 'Non' : 'Oui',
+    _type_low: typeLow || 'non_specifie',
+    _commune_norm: communeNorm,
+    _quartier_norm: quartierNorm,
+    _chambres_norm: chambresNorm,
+    _surface_norm: surfaceNorm,
+    groupe_whatsapp_origine: String(source.groupe || '').trim(),
+    groupe_whatsapp_jid: String(source.groupe_jid || '').trim(),
+    message_initial: String(source.message || '').substring(0, 2000).trim(),
+    publication_id: String(source.messageId || '').trim(),
+    horodatage_source: source.horodatage || ''
+  }}];
+} catch(e) {
+  console.log('[PARSER] Erreur fatale:', e.message);
+  return [];
+}

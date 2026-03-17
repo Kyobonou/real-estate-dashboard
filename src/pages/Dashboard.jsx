@@ -124,6 +124,7 @@ const StatCardV3 = ({ title, value, icon: Icon, trend, trendValue, color }) => {
     return (
         <motion.div
             className="stat-card-v3"
+            style={{ '--stat-color': color }}
             whileHover={{ y: -6, boxShadow: `0 16px 40px ${color}30` }}
             transition={{ type: 'spring', stiffness: 300, damping: 20 }}
         >

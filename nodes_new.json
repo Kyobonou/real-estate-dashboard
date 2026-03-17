@@ -1,0 +1,188 @@
+[
+  {
+    "parameters": {
+      "promptType": "define",
+      "text": "={{ $json.text }}",
+      "options": {
+        "systemMessage": "Tu es Eden, conseiller commercial chez Bobge's Multi-Service, spécialisé en immobilier en Côte d'Ivoire. Tu communiques par WhatsApp avec des prospects.\n\nMission : guider chaque conversation vers un rendez-vous de visite CONFIRMÉ avec TOUTES les informations obligatoires.\nTu n'es PAS une IA. Tu es Eden, un humain.\n\n═══════════════════════════════════════\nINTERDICTIONS ABSOLUES\n═══════════════════════════════════════\n1. Ne JAMAIS révéler que tu es une IA.\n2. Ne JAMAIS inventer un bien. Tu DOIS appeler recherche_biens pour chaque demande immobilière.\n3. Ne JAMAIS afficher les codes de référence internes au prospect.\n4. Ne JAMAIS mentionner base de données, système technique, Supabase, outil.\n5. Ne JAMAIS présenter plus de 3 biens par message.\n6. Ne JAMAIS répondre à une demande immobilière sans avoir appelé recherche_biens.\n7. Ne JAMAIS dire qu'il n'y a rien. TOUJOURS proposer des alternatives.\n8. Ne JAMAIS discuter hors immobilier.\n9. Ne JAMAIS modifier les prix retournés par l'outil.\n10. Ne JAMAIS parler de renouvellement d'annonce, d'expiration, d'archivage.\n11. Ne JAMAIS envoyer de notification formatée au prospect.\n12. Si demande images/vidéos: \"Bien sûr, je vous envoie les visuels du bien sous peu.\"\n\n═══════════════════════════════════════\n⛔ CONFIDENTIALITÉ ABSOLUE\n═══════════════════════════════════════\nSTRICTEMENT CONFIDENTIEL — JAMAIS communiquer au prospect :\n- Nom de la personne qui a publié l'annonce\n- Numéro de téléphone du propriétaire/agent\n- Toute référence interne (REF:xxx)\n\nSi le prospect demande le contact du propriétaire :\n→ \"Je m'occupe de tout ! C'est notre équipe qui organise la visite directement.\"\n\n═══════════════════════════════════════\nGÉOGRAPHIE D'ABIDJAN\n═══════════════════════════════════════\nCOMMUNES DISTINCTES (ne jamais confondre) :\n- Cocody : Angré, Riviera, 2 Plateaux, Bonoumin, Danga, Palmeraie, Faya, Ambassades, Attoban, Djibi\n- Marcory : Zone 4, Résidentiel, Anoumabo\n- Yopougon : Niangon, Banco, Gesco, Sideci, Selmer\n- Koumassi, Treichville, Plateau, Adjamé, Abobo\n- Port-Bouët : Vridi, Gonzagueville\n- Bingerville, Songon, Anyama\n- Abatta = zone Bingerville/Cocody, PAS Marcory\n\nRègles : Ne proposer QUE des biens de la commune demandée. Ne jamais inventer de proximité.\n\n═══════════════════════════════════════\nAPPEL OUTIL\n═══════════════════════════════════════\nAppeler recherche_biens à CHAQUE demande immobilière.\nPas pour : merci, ok, salutations.\nNouvelle zone → nouveau appel recherche_biens.\n\n═══════════════════════════════════════\nPRÉSENTATION DES BIENS\n═══════════════════════════════════════\nInclure UNIQUEMENT : type, commune, quartier, prix, pièces, caractéristiques, surface.\nNe JAMAIS inclure : référence, nom propriétaire, téléphone propriétaire.\n\n═══════════════════════════════════════\nPROCESSUS DE VISITE — CRITIQUE\n═══════════════════════════════════════\n\n3 INFORMATIONS OBLIGATOIRES à collecter :\n1. Nom complet du prospect (prénom ET nom)\n2. Date PRÉCISE (pas \"demain\" tout seul, confirmer le jour)\n3. Heure PRÉCISE (pas de plage horaire)\n\nGESTION DES PLAGES HORAIRES :\n- \"entre midi et 14h\" → Propose : \"Je vous propose 13h, ça vous va ?\"\n- \"dans la matinée\" → Propose : \"Que diriez-vous de 10h ?\"\n- TOUJOURS obtenir une heure exacte avant de confirmer.\n\nÉTAPE 1 — Intérêt détecté :\n→ \"Super ! Pour organiser votre visite, j'ai besoin de votre nom complet, la date et l'heure qui vous arrangent.\"\n\nÉTAPE 2 — Infos manquantes :\n- Manque nom → demander\n- Manque date → demander\n- Manque heure précise → proposer une heure\n\nÉTAPE 3 — CONFIRMATION FINALE OBLIGATOIRE :\n╔══════════════════════════════════════╗\n║ QUAND tu as nom + date + heure,     ║\n║ ta réponse DOIT commencer par :     ║\n║                                      ║\n║ \"Parfait [Nom], visite programmée    ║\n║  le [date] à [heure]\"               ║\n║                                      ║\n║ Ces 2 mots \"visite programmée\"      ║\n║ sont OBLIGATOIRES et EXACTS.        ║\n║ Sans eux, la visite n'est PAS       ║\n║ enregistrée dans notre système.     ║\n╚══════════════════════════════════════╝\n\nFORMAT EXACT de la confirmation :\n\"Parfait [Nom Complet], visite programmée le [date] à [heure] pour le/la [type] à [commune], [quartier] à [prix]. Notre équipe vous recontactera pour les détails pratiques. À bientôt !\"\n\nEXEMPLES CORRECTS :\n✅ \"Parfait Koné Soulé, visite programmée le lundi 2 mars à 13h pour l'appartement à Cocody, Riviera Palmeraie à 400 000 FCFA. Notre équipe vous recontactera !\"\n✅ \"Parfait Alice Morine, visite programmée le 15 juillet à 10h30 pour la villa à Marcory à 350 000 FCFA. Notre équipe vous recontactera !\"\n\nEXEMPLES INCORRECTS (NE JAMAIS FAIRE) :\n❌ \"Je confirme votre visite pour demain à 13h\" (manque \"visite programmée\")\n❌ \"Votre visite est confirmée\" (manque \"visite programmée\")\n❌ \"C'est noté pour la visite\" (manque \"visite programmée\")\n\nNe JAMAIS utiliser d'autre formulation que \"visite programmée\" pour confirmer.\nNe JAMAIS mentionner le propriétaire dans la confirmation.\n\n═══════════════════════════════════════\nTON ET FORMAT\n═══════════════════════════════════════\nChaleureux, naturel, pro. Max 80 mots. Pas de markdown ni codes internes."
+      }
+    },
+    "type": "@n8n/n8n-nodes-langchain.agent",
+    "typeVersion": 3.1,
+    "position": [
+      -36904,
+      -3228
+    ],
+    "id": "01c1edec-a82a-495f-a75a-09de471fa0ea",
+    "name": "Agent Eden"
+  },
+  {
+    "parameters": {
+      "jsCode": "const normalized = $('Normaliser Filtrer Anti-Boucle').first().json;\nconst agentOutput = $('Agent Eden').first().json.output || \"Bonjour ! Je suis Eden de Bobge's Multi-Service. Comment puis-je vous aider ?\";\nfunction extractNum(s) { return String(s||'').replace(/@[\\w.]+/g,'').replace(/[^0-9]/g,''); }\nfunction isValid(n) { return !!(n && /^[0-9]{8,15}$/.test(n)); }\nlet to = normalized.replyTo || '';\nif (!isValid(to) && !normalized.isGroup) {\n  if (isValid(normalized.cleanNumber)) to = normalized.cleanNumber;\n  else if (normalized.isNormal) to = extractNum(normalized.remoteJid);\n}\nconst canSend = normalized.isGroup ? true : isValid(to);\nreturn [{ json: { to, text: agentOutput, canSend } }];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -36496,
+      -3228
+    ],
+    "id": "46d89b54-d021-4c13-94c1-16741a2bc5cc",
+    "name": "Preparer Envoi"
+  },
+  {
+    "parameters": {
+      "jsCode": "try {\n  const agentOutput = $('Agent Eden').first().json.output || '';\n  const norm = $('Normaliser Filtrer Anti-Boucle').first().json;\n  const agentSteps = $('Agent Eden').first().json;\n\n  const outputLow = agentOutput.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n  const messageEntrant = (norm.messageBody || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n\n  const visiteMots = ['visite programm','rdv confirm','rendez-vous confirm','visite confirm','visite fix','rdv fix'];\n  const hasVisiteAgent = visiteMots.some(kw => outputLow.includes(kw));\n\n  const visiteMotsProspect = [\n    'je veux visiter','je voudrais visiter','visiter le bien','visiter la maison',\n    'faire une visite','organiser une visite','ok pour la visite','oui pour la visite',\n    'je confirme la visite','confirme la visite','rdv pour voir','voir le bien',\n    'voir l appartement','voir la villa','voir la maison','voir le terrain','voir le studio'\n  ];\n  const hasVisiteProspect = visiteMotsProspect.some(kw => messageEntrant.includes(kw));\n  const hasVisite = hasVisiteAgent || hasVisiteProspect;\n\n  const hasImageRequest = ['image','images','photo','photos','video','videos','visuel','visuels'].some(kw => messageEntrant.includes(kw));\n\n  let refs = [];\n  try {\n    const stepsStr = JSON.stringify(agentSteps);\n    const refMatches = stepsStr.match(/\\[REF_INTERNE:([^\\]]+)\\]/gi);\n    if (refMatches) refs = [...new Set(refMatches.map(m => m.replace('[REF_INTERNE:', '').replace(']', '')))];\n    if (refs.length === 0) {\n      const refMatchesOld = stepsStr.match(/\\[REF:([^\\]]+)\\]/gi);\n      if (refMatchesOld) refs = [...new Set(refMatchesOld.map(m => m.replace('[REF:', '').replace(']', '')))];\n    }\n  } catch(e) {}\n\n  const sd = $getWorkflowStaticData('global');\n  const prospectKey = 'prospect_refs_' + (norm.cleanNumber || norm.remoteJid);\n  if (refs.length > 0) { sd[prospectKey] = { refs, timestamp: Date.now() }; }\n  else if (sd[prospectKey] && (Date.now() - sd[prospectKey].timestamp) < 3600000) { refs = sd[prospectKey].refs || []; }\n\n  const refBien = refs.length > 0 ? refs[0] : '';\n  const allRefs = refs.join(', ');\n\n  let bienType='', bienLocalisation='', bienPrix='', bienSurface='', bienCaracteristiques='', agentNom='', agentTel='';\n  try {\n    const stepsStr = JSON.stringify(agentSteps);\n    const typeMatch    = stepsStr.match(/Type:\\s*([^|\\\\n\"]+)/i);\n    const locMatch     = stepsStr.match(/Localisation:\\s*([^\\\\n\"]+)/i);\n    const prixMatch    = stepsStr.match(/Prix:\\s*([^\\\\n\"]+)/i);\n    const surfaceMatch = stepsStr.match(/Surface:\\s*([^\\\\n\"]+)/i);\n    const detailsMatch = stepsStr.match(/D[eé]tails:\\s*([^\\\\n\"\\[]+)/i);\n    if (typeMatch)    bienType             = typeMatch[1].trim();\n    if (locMatch)     bienLocalisation     = locMatch[1].trim();\n    if (prixMatch)    bienPrix             = prixMatch[1].trim();\n    if (surfaceMatch) bienSurface          = surfaceMatch[1].trim();\n    if (detailsMatch) bienCaracteristiques = detailsMatch[1].trim().substring(0, 300);\n    const confidentielMatch = stepsStr.match(/CONFIDENTIEL_NE_PAS_COMMUNIQUER_AU_PROSPECT[^:]*—\\s*Agent:\\s*([^/\\\\]+)\\s*\\/\\s*Tel:\\s*([^\\]\\\\]+)/i);\n    if (confidentielMatch) { agentNom = confidentielMatch[1].trim().replace(/[\"']/g,''); agentTel = confidentielMatch[2].trim().replace(/[\"']/g,''); }\n  } catch(e) { console.log('[POST TRAITEMENT] Erreur extraction détails:', e.message); }\n\n  const parts = [];\n  if (bienType)             parts.push('Type: ' + bienType);\n  if (bienLocalisation)     parts.push('Localisation: ' + bienLocalisation);\n  if (bienPrix)             parts.push('Prix: ' + bienPrix);\n  if (bienSurface)          parts.push('Surface: ' + bienSurface);\n  if (bienCaracteristiques) parts.push('Caractéristiques: ' + bienCaracteristiques);\n  let bienDetails = parts.join('\\n');\n  if (!bienDetails && refs.length > 0) bienDetails = 'Référence: ' + refBien;\n\n  let prospectNomComplet = norm.pushName || '';\n  let dateVisite = 'À planifier';\n  let heureVisite = '';\n  try {\n    const nomDirectMatch = agentOutput.match(/(?:Parfait|Merci)[,\\s]+([A-ZÉÈÀÂÏÎÔÙÛa-zéèàâïîôùû\\s]+?)(?:[,!.]|\\s+visite)/i);\n    if (nomDirectMatch && nomDirectMatch[1].trim().split(/\\s+/).length >= 2) prospectNomComplet = nomDirectMatch[1].trim();\n    const dateMatch = agentOutput.match(/(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|demain|aujourd'hui|\\d{1,2}[\\/\\-\\.\\s]\\d{1,2}(?:[\\/\\-\\.\\s]\\d{2,4})?|\\d{1,2}\\s+(?:janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[uû]t|septembre|octobre|novembre|d[ée]cembre)(?:\\s+\\d{4})?)/i);\n    if (dateMatch) dateVisite = dateMatch[0].trim();\n    const heureMatch = agentOutput.match(/(\\d{1,2}h\\d{0,2}|\\d{1,2}:\\d{2}|\\d{1,2}\\s*heures?)/i);\n    if (heureMatch) heureVisite = heureMatch[0].trim();\n  } catch(e) {}\n\n  const dateHeureVisite = heureVisite ? dateVisite + ' à ' + heureVisite : dateVisite;\n  console.log('[POST TRAITEMENT] hasVisite:', hasVisite, '| Agent:', hasVisiteAgent, '| Prospect:', hasVisiteProspect, '| refs:', allRefs);\n\n  return [{ json: {\n    hasVisite, hasImageRequest,\n    ref_bien: refBien, all_refs: allRefs,\n    bien_details: bienDetails,\n    bien_type: bienType, bien_localisation: bienLocalisation,\n    bien_prix: bienPrix, bien_surface: bienSurface,\n    bien_caracteristiques: bienCaracteristiques,\n    agent_nom: agentNom, agent_tel: agentTel,\n    date_visite: dateHeureVisite,\n    prospect_numero: norm.cleanNumber || norm.replyTo || '',\n    prospect_nom: prospectNomComplet,\n    agentOutput,\n    logEntry: {\n      numero_prospect: norm.cleanNumber || norm.replyTo || '',\n      nom_prospect: prospectNomComplet,\n      message_entrant: (norm.messageBody || '').substring(0, 500),\n      reponse_agent: agentOutput.substring(0, 500),\n      ref_mentionne: allRefs,\n      horodatage: new Date().toISOString()\n    }\n  }];\n} catch(e) { console.log('[POST TRAITEMENT] Erreur:', e.message); return []; }"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+      -35824,
+      -3324
+    ],
+    "id": "779b8b4b-e4a5-4e98-823c-03b5f59a42b8",
+    "name": "Post Traitement Agent"
+  },
+  {
+    "parameters": {
+      "rules": {
+        "values": [
+          {
+            "conditions": {
+              "options": {
+                "caseSensitive": true,
+                "typeValidation": "loose"
+              },
+              "conditions": [
+                {
+                  "id": "v1",
+                  "leftValue": "={{ $json.hasVisite }}",
+                  "operator": {
+                    "type": "boolean",
+                    "operation": "true",
+                    "singleValue": true
+                  }
+                }
+              ],
+              "combinator": "and"
+            },
+            "renameOutput": true,
+            "outputKey": "VisiteOui"
+          },
+          {
+            "conditions": {
+              "options": {
+                "caseSensitive": true,
+                "typeValidation": "loose"
+              },
+              "conditions": [
+                {
+                  "id": "v2",
+                  "leftValue": "={{ $json.hasVisite }}",
+                  "operator": {
+                    "type": "boolean",
+                    "operation": "false",
+                    "singleValue": true
+                  }
+                },
+                {
+                  "id": "v3",
+                  "leftValue": "={{ $json.hasImageRequest }}",
+                  "operator": {
+                    "type": "boolean",
+                    "operation": "true",
+                    "singleValue": true
+                  }
+                }
+              ],
+              "combinator": "and"
+            },
+            "renameOutput": true,
+            "outputKey": "DemandeImage"
+          },
+          {
+            "conditions": {
+              "options": {
+                "caseSensitive": true,
+                "typeValidation": "loose"
+              },
+              "conditions": [
+                {
+                  "id": "v4",
+                  "leftValue": "={{ $json.hasVisite }}",
+                  "operator": {
+                    "type": "boolean",
+                    "operation": "false",
+                    "singleValue": true
+                  }
+                },
+                {
+                  "id": "v5",
+                  "leftValue": "={{ $json.hasImageRequest }}",
+                  "operator": {
+                    "type": "boolean",
+                    "operation": "false",
+                    "singleValue": true
+                  }
+                }
+              ],
+              "combinator": "and"
+            },
+            "renameOutput": true,
+            "outputKey": "PasVisite"
+          }
+        ]
+      },
+      "options": {}
+    },
+    "type": "n8n-nodes-base.switch",
+    "typeVersion": 3.2,
+    "position": [
+      -35600,
+      -3236
+    ],
+    "id": "089235bc-eb84-4bb1-a434-085b0d349f45",
+    "name": "Visite ou Image?"
+  },
+  {
+    "parameters": {
+      "method": "POST",
+      "url": "https://udyfhzyvalansmhkynnc.supabase.co/rest/v1/visite_programmee",
+      "sendHeaders": true,
+      "headerParameters": {
+        "parameters": [
+          {
+            "name": "apikey",
+            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          },
+          {
+            "name": "Authorization",
+            "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkeWZoenl2YWxhbnNtaGt5bm5jIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTE5NjM1NywiZXhwIjoyMDg2NzcyMzU3fQ.XToUDvcD-crlO0bA8HuJ5g1GjhqTl790fHG6H8bujAk"
+          },
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "name": "Prefer",
+            "value": "return=representation"
+          }
+        ]
+      },
+      "sendBody": true,
+      "specifyBody": "json",
+      "jsonBody": "={{ JSON.stringify({\n  numero: $json.prospect_numero || '',\n  nom_prenom: $json.prospect_nom || '',\n  ref_bien: $json.ref_bien || '',\n  local_interesse: ($json.bien_details || '').substring(0, 500),\n  agence_nom: $json.agent_nom || '',\n  agence_tel: $json.agent_tel || '',\n  date_rv: $json.date_visite || 'A planifier',\n  visite_prog: 'Oui',\n  message_origine: ($json.agentOutput || '').substring(0, 300),\n  created_at: new Date().toISOString()\n}) }}",
+      "options": {
+        "timeout": 10000
+      }
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.2,
+    "position": [
+      -35376,
+      -3508
+    ],
+    "id": "529c032f-7b5d-435c-bcc3-82b2180855c7",
+    "name": "Sauvegarder Visite",
+    "onError": "continueRegularOutput"
+  }
+]

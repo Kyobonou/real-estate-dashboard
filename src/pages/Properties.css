@@ -304,19 +304,32 @@
 
 .property-image-wrapper {
     position: relative;
-    height: 135px;
+    height: 185px;
     overflow: hidden;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+/* Gradient overlay on property images for text readability */
+.property-image-wrapper::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 60%;
+    background: linear-gradient(to top, rgba(10, 15, 30, 0.55) 0%, transparent 100%);
+    pointer-events: none;
 }
 
 @media (max-width: 768px) {
     .property-image-wrapper {
-        height: 160px;
+        height: 190px;
     }
 }
 
 @media (max-width: 480px) {
     .property-image-wrapper {
-        height: 180px;
+        height: 200px;
     }
 }
 
@@ -324,11 +337,11 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    transition: transform 0.5s;
+    transition: transform 0.6s var(--ease-out-expo);
 }
 
 .property-card-v2:hover .property-image {
-    transform: scale(1.05);
+    transform: scale(1.07);
 }
 
 .property-badges {
@@ -342,38 +355,58 @@
 }
 
 .property-badges .badge {
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    border: none;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     font-size: 0.7rem;
-    padding: 0.2rem 0.5rem;
-    background-color: var(--slate-800);
-    /* Fallback */
+    font-weight: 700;
+    padding: 0.25rem 0.6rem;
+    letter-spacing: 0.02em;
 }
 
 .property-badges .badge-success {
-    background-color: #10b981;
+    background-color: rgba(16, 185, 129, 0.9);
     color: white;
 }
 
 .property-badges .badge-danger {
-    background-color: #ef4444;
+    background-color: rgba(239, 68, 68, 0.9);
     color: white;
 }
 
+/* Badge offre différencié par type */
 .badge-offer {
     display: inline-flex;
     align-items: center;
-    padding: 0.2rem 0.5rem;
+    padding: 0.25rem 0.6rem;
     border-radius: var(--radius-full);
     font-size: 0.7rem;
     font-weight: 700;
     color: white;
-    background: var(--brand-primary);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    letter-spacing: 0.02em;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.badge-offer.location {
+    background-color: rgba(220, 38, 38, 0.88); /* rouge pour location */
+}
+
+.badge-offer.vente,
+.badge-offer.achat {
+    background-color: rgba(27, 66, 153, 0.88); /* bleu pour vente/achat */
+}
+
+/* Fallback (type inconnu) */
+.badge-offer:not(.location):not(.vente):not(.achat) {
+    background-color: rgba(100, 116, 139, 0.88);
 }
 
 .property-content {
-    padding: 0.625rem;
+    padding: 0.875rem 0.875rem 0.625rem;
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -412,10 +445,12 @@
 }
 
 .property-price {
-    font-size: 0.9375rem;
-    font-weight: 700;
-    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--brand-primary);
     margin-bottom: 0.5rem;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
 }
 
 .property-features {
@@ -430,12 +465,18 @@
     display: flex;
     align-items: center;
     gap: 0.25rem;
-    padding: 0.2rem 0.5rem;
+    padding: 0.2rem 0.55rem;
     background-color: var(--bg-app);
-    border: none;
+    border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm);
-    font-size: 0.75rem;
+    font-size: 0.73rem;
+    font-weight: 500;
     color: var(--text-secondary);
+    transition: border-color 0.15s ease;
+}
+
+.property-card-v2:hover .feature-tag {
+    border-color: rgba(27, 66, 153, 0.2);
 }
 
 .property-footer {
@@ -744,8 +785,8 @@
 }
 
 .lv-offre-location {
-    background: rgba(16, 185, 129, 0.12);
-    color: #059669;
+    background: rgba(220, 38, 38, 0.12);
+    color: #dc2626;
 }
 
 .lv-offre-vente {
@@ -1698,7 +1739,7 @@
 }
 
 .biens-offre-badge.offre-location {
-    background: var(--success);
+    background: var(--danger, #dc2626);
 }
 
 .biens-offre-badge.offre-vente {
@@ -2389,4 +2430,98 @@
     .property-features {
         font-size: 0.75rem;
     }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PREMIUM UI UPGRADES — Properties v2.1
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Card hover : glow de marque au survol */
+.property-card-v2:hover {
+    box-shadow:
+        0 0 0 1px rgba(27, 66, 153, 0.15),
+        0 8px 24px rgba(27, 66, 153, 0.10),
+        0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+/* Prix en couleur rouge pour location, bleu pour vente */
+.property-card-v2[data-offre="location"] .property-price {
+    color: var(--danger, #dc2626);
+}
+.property-card-v2[data-offre="vente"] .property-price,
+.property-card-v2[data-offre="achat"] .property-price {
+    color: var(--brand-primary);
+}
+
+/* Toolbar search input: bordure visible et focus premium */
+.search-input {
+    border: 1px solid var(--border-subtle) !important;
+    background-color: var(--bg-panel) !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.search-input:focus-within {
+    border-color: var(--brand-primary) !important;
+    box-shadow: 0 0 0 3px var(--brand-primary-light) !important;
+}
+
+/* Amélioration du header de propriété (titre + prix inline) */
+.property-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+}
+
+.property-header .property-price {
+    flex-shrink: 0;
+    margin-bottom: 0;
+    font-size: 0.875rem;
+}
+
+/* Property footer buttons plus premium */
+.property-footer .btn-secondary {
+    border-color: var(--border-subtle);
+    color: var(--text-secondary);
+    background: var(--bg-app);
+}
+
+.property-footer .btn-secondary:hover {
+    border-color: var(--brand-primary);
+    color: var(--brand-primary);
+    background: var(--brand-primary-light);
+}
+
+/* Image placeholder (no image state) */
+.property-no-image {
+    background: linear-gradient(135deg, var(--slate-100) 0%, var(--slate-200) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+}
+
+body.dark .property-no-image {
+    background: linear-gradient(135deg, var(--slate-800) 0%, var(--slate-700) 100%);
+}
+
+/* Toolbar: view toggle bouton actif plus premium */
+.view-btn.active {
+    background: white;
+    color: var(--brand-primary);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.12), 0 0 0 1px rgba(27, 66, 153, 0.12);
+}
+
+body.dark .view-btn.active {
+    background: var(--slate-700);
+    color: var(--brand-primary);
+}
+
+/* Pagination : bouton page active premium */
+.pagination-btn.active {
+    background: var(--gradient-primary) !important;
+    color: white !important;
+    box-shadow: var(--glow-primary) !important;
+    border-color: transparent !important;
 }

@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { FixedSizeList as VirtualList } from 'react-window';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
 import {
@@ -584,6 +585,140 @@ const RequestCard = ({ req, keywords, isPrivateMsg, viewMode, itemVariants }) =>
 };
 
 
+// ─── VIRTUALIZED LIST WRAPPER ─────────────────────────────────────────────────
+
+const VIRTUAL_THRESHOLD = 20;    // only virtualize above this count
+const LIST_ITEM_HEIGHT = 320;    // estimated px per card in list mode
+
+const VirtualizedRequestList = ({ items, viewMode, activeTab, itemVariants, containerVariants }) => {
+    const containerRef = useRef(null);
+    const [containerWidth, setContainerWidth] = useState(0);
+
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const ro = new ResizeObserver(entries => setContainerWidth(entries[0].contentRect.width));
+        ro.observe(el);
+        setContainerWidth(el.clientWidth);
+        return () => ro.disconnect();
+    }, []);
+
+    // Grid view: use windowed slice + "show more" (drag gestures + CSS grid are incompatible with react-window)
+    if (viewMode === 'grid') {
+        return (
+            <GridWindowedRequests
+                items={items}
+                activeTab={activeTab}
+                itemVariants={itemVariants}
+                containerVariants={containerVariants}
+            />
+        );
+    }
+
+    // List view: single column — use FixedSizeList when items > threshold
+    const isPrivateMsg = activeTab === 'prive';
+
+    if (items.length < VIRTUAL_THRESHOLD) {
+        return (
+            <motion.div
+                className="requests-list-container"
+                variants={containerVariants}
+                initial="hidden"
+                animate="show"
+            >
+                <AnimatePresence mode="popLayout">
+                    {items.map((req, idx) => (
+                        <RequestCard
+                            key={req.id || req.message_id || idx}
+                            req={req}
+                            keywords={AGENT_DEMAND_KEYWORDS}
+                            isPrivateMsg={isPrivateMsg}
+                            viewMode="list"
+                            itemVariants={itemVariants}
+                        />
+                    ))}
+                </AnimatePresence>
+            </motion.div>
+        );
+    }
+
+    const Row = ({ index, style }) => {
+        const req = items[index];
+        return (
+            <div style={{ ...style, padding: '0 0 12px 0', boxSizing: 'border-box' }}>
+                <RequestCard
+                    req={req}
+                    keywords={AGENT_DEMAND_KEYWORDS}
+                    isPrivateMsg={isPrivateMsg}
+                    viewMode="list"
+                    itemVariants={itemVariants}
+                />
+            </div>
+        );
+    };
+
+    return (
+        <div ref={containerRef} style={{ width: '100%' }}>
+            <VirtualList
+                height={Math.min(700, items.length * LIST_ITEM_HEIGHT)}
+                itemCount={items.length}
+                itemSize={LIST_ITEM_HEIGHT}
+                width="100%"
+                style={{ overflowX: 'hidden' }}
+            >
+                {Row}
+            </VirtualList>
+        </div>
+    );
+};
+
+// Grid windowing: render in pages of 30 + "show more" button
+const GRID_PAGE_SIZE = 30;
+
+const GridWindowedRequests = ({ items, activeTab, itemVariants, containerVariants }) => {
+    const [visibleCount, setVisibleCount] = useState(GRID_PAGE_SIZE);
+    const isPrivateMsg = activeTab === 'prive';
+    const visibleItems = items.slice(0, visibleCount);
+    const hasMore = visibleCount < items.length;
+
+    // Reset when items change (filter/search)
+    useEffect(() => { setVisibleCount(GRID_PAGE_SIZE); }, [items]);
+
+    return (
+        <>
+            <motion.div
+                className="requests-grid"
+                variants={containerVariants}
+                initial="hidden"
+                animate="show"
+            >
+                <AnimatePresence mode="popLayout">
+                    {visibleItems.map((req, idx) => (
+                        <RequestCard
+                            key={req.id || req.message_id || idx}
+                            req={req}
+                            keywords={AGENT_DEMAND_KEYWORDS}
+                            isPrivateMsg={isPrivateMsg}
+                            viewMode="grid"
+                            itemVariants={itemVariants}
+                        />
+                    ))}
+                </AnimatePresence>
+            </motion.div>
+            {hasMore && (
+                <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
+                    <button
+                        className="btn btn-secondary"
+                        onClick={() => setVisibleCount(c => Math.min(c + GRID_PAGE_SIZE, items.length))}
+                    >
+                        Afficher plus ({items.length - visibleCount} restants)
+                    </button>
+                </div>
+            )}
+        </>
+    );
+};
+
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 const RequestsPage = () => {
@@ -800,25 +935,13 @@ const RequestsPage = () => {
                         size="medium"
                     />
                 ) : (
-                    <motion.div
-                        className={viewMode === 'grid' ? 'requests-grid' : 'requests-list-container'}
-                        variants={containerVariants}
-                        initial="hidden"
-                        animate="show"
-                    >
-                        <AnimatePresence mode="popLayout">
-                            {filteredItems.map((req, idx) => (
-                                <RequestCard
-                                    key={req.id || req.message_id || idx}
-                                    req={req}
-                                    keywords={AGENT_DEMAND_KEYWORDS}
-                                    isPrivateMsg={activeTab === 'prive'}
-                                    viewMode={viewMode}
-                                    itemVariants={itemVariants}
-                                />
-                            ))}
-                        </AnimatePresence>
-                    </motion.div>
+                    <VirtualizedRequestList
+                        items={filteredItems}
+                        viewMode={viewMode}
+                        activeTab={activeTab}
+                        itemVariants={itemVariants}
+                        containerVariants={containerVariants}
+                    />
                 )}
             </div>
 

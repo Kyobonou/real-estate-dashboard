@@ -145,6 +145,18 @@ export function extractPhoneFromMessage(text) {
     return '';
 }
 
+/**
+ * Alias: formatPhoneDisplay — format for display (human-readable)
+ * Delegates to displayPhone() which is the canonical implementation.
+ */
+export const formatPhoneDisplay = displayPhone;
+
+/**
+ * Alias: formatWhatsAppLink — returns a wa.me URL for a given phone
+ * Delegates to whatsappLink() which is the canonical implementation.
+ */
+export const formatWhatsAppLink = whatsappLink;
+
 export function extractBestPhone(obj) {
     if (!obj) return '';
 

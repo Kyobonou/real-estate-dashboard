@@ -1,0 +1,1 @@
+={{ JSON.stringify({ numero: $json.prospect_numero||'', nom_prenom: $json.prospect_nom||'', ref_bien: $json.ref_bien||'', bien_details: ($json.bien_details||'').substring(0,500), visite_prog:'Oui', created_at: new Date().toISOString() }) }}

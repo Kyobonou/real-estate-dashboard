@@ -348,7 +348,35 @@ class SupabaseService {
 
     // === CORE METHODS ===
 
-    async getProperties(forceRefresh = false) {
+    // Returns total count of locaux rows matching optional server-side filters
+    async getTotalCount(filters = null) {
+        try {
+            let query = supabase.from('locaux').select('*', { count: 'exact', head: true });
+            if (filters) {
+                if (filters.commune && filters.commune !== 'all') query = query.eq('commune', filters.commune);
+                if (filters.typeOffre && filters.typeOffre !== 'all') query = query.eq('type_offre', filters.typeOffre);
+                if (filters.typeBien && filters.typeBien !== 'all') query = query.ilike('type_de_bien', `%${filters.typeBien}%`);
+                if (filters.disponible) query = query.eq('disponible', true);
+                if (filters.search) {
+                    const s = filters.search;
+                    query = query.or(`commune.ilike.%${s}%,type_de_bien.ilike.%${s}%,quartier.ilike.%${s}%`);
+                }
+            }
+            const { count, error } = await query;
+            if (error) throw error;
+            return count || 0;
+        } catch (e) {
+            console.error('getTotalCount Error:', e);
+            return 0;
+        }
+    }
+
+    async getProperties(forceRefresh = false, filters = null) {
+        // When server-side filters are provided, skip cache and fetch only matching rows
+        if (filters) {
+            return this._getPropertiesFiltered(filters);
+        }
+
         if (!forceRefresh) {
             const cached = this._getCached('properties');
             if (cached) return cached;
@@ -360,32 +388,16 @@ class SupabaseService {
 
         const fetchPromise = (async () => {
             try {
-                // Supabase REST API is capped at 1000 rows per request.
-                // We paginate to fetch ALL records from locaux.
-                const PAGE_SIZE = 1000;
-                let allData = [];
-                let page = 0;
-                let keepGoing = true;
+                // Fetch the most recent 3000 rows for client-side display.
+                // Older or filtered data is handled by the server-side filter path (_getPropertiesFiltered).
+                const { data, error: pageError } = await supabase
+                    .from('locaux')
+                    .select('*')
+                    .order('date_publication', { ascending: false })
+                    .limit(3000);
 
-                while (keepGoing) {
-                    const from = page * PAGE_SIZE;
-                    const to = from + PAGE_SIZE - 1;
-                    const { data: pageData, error: pageError } = await supabase
-                        .from('locaux')
-                        .select('*')
-                        .order('date_publication', { ascending: false })
-                        .range(from, to);
-
-                    if (pageError) throw pageError;
-                    if (!pageData || pageData.length === 0) break;
-
-                    allData = allData.concat(pageData);
-                    keepGoing = pageData.length === PAGE_SIZE; // continue if full page returned
-                    page++;
-                }
-
-                const data = allData;
-                console.debug(`[locaux] Fetched ${data.length} rows in ${page} page(s)`);
+                if (pageError) throw pageError;
+                console.debug(`[locaux] Fetched ${data?.length ?? 0} rows`);
                 if (!data) throw new Error('No data');
 
 
@@ -502,19 +514,30 @@ class SupabaseService {
                 // Enrich with WhatsApp group names
                 const enriched = await whatsappGroupService.enrichWithGroupNames(trueProperties, 'groupeWhatsApp');
 
+                // WaSender decrypted-media URLs are ephemeral (expire in hours).
+                // Only trust ImgBB (i.ibb.co), Supabase Storage, and similar permanent hosts.
+                const isPermanentUrl = (url) => {
+                    if (!url) return false;
+                    return !url.includes('wasenderapi.com/decrypted-media');
+                };
+
                 // Enrich with images from the `images` table (batch fetch, single query)
-                const pubIds = enriched.filter(p => p.publicationId).map(p => p.publicationId);
-                const imagesMap = pubIds.length > 0 ? await this.getImagesForPublications(pubIds) : {};
+                // For old locaux without publication_id, use the integer id as fallback key
+                const lookupKeys = enriched.map(p => p.publicationId || String(p.id)).filter(Boolean);
+                const imagesMap = lookupKeys.length > 0 ? await this.getImagesForPublications(lookupKeys) : {};
                 const enrichedWithImages = enriched.map(p => {
-                    const linkedImages = imagesMap[p.publicationId] || [];
-                    const extraUrls = linkedImages.map(i => i.lien_image).filter(Boolean);
+                    const lookupKey = p.publicationId || String(p.id);
+                    const linkedImages = imagesMap[lookupKey] || [];
+                    // Only keep permanent URLs (skip expired WaSender temp links)
+                    const validImages = linkedImages.filter(i => isPermanentUrl(i.lien_thumb || i.lien_image));
+                    const extraUrls = validImages.map(i => i.lien_thumb || i.lien_image).filter(Boolean);
+                    const primaryUrl = isPermanentUrl(p.imageUrl) ? p.imageUrl : '';
                     return {
                         ...p,
-                        images: linkedImages,
+                        images: validImages,
                         imageUrls: extraUrls,
-                        // locaux.lien_image (set by Uploader node) takes priority, then images table
-                        imageUrl: p.imageUrl || extraUrls[0] || '',
-                        photoCount: linkedImages.length || (p.imageUrl ? 1 : 0),
+                        imageUrl: primaryUrl || extraUrls[0] || '',
+                        photoCount: validImages.length || (primaryUrl ? 1 : 0),
                     };
                 });
 
@@ -532,6 +555,121 @@ class SupabaseService {
 
         this._pendingRequests['properties'] = fetchPromise;
         return fetchPromise;
+    }
+
+    // Filtered server-side fetch — used when user has active filters in Properties page.
+    // Bypasses cache. Applies Supabase query conditions for commune, typeOffre, typeBien,
+    // search text, disponible, and pagination (page + pageSize).
+    async _getPropertiesFiltered(filters) {
+        try {
+            const pageSize = filters.pageSize || 20;
+            const page = (filters.page || 1) - 1; // 0-indexed
+            const from = page * pageSize;
+            const to = from + pageSize - 1;
+
+            let query = supabase
+                .from('locaux')
+                .select('*')
+                .order('date_publication', { ascending: false })
+                .range(from, to);
+
+            if (filters.commune && filters.commune !== 'all') {
+                query = query.eq('commune', filters.commune);
+            }
+            if (filters.typeOffre && filters.typeOffre !== 'all') {
+                query = query.eq('type_offre', filters.typeOffre);
+            }
+            if (filters.typeBien && filters.typeBien !== 'all') {
+                query = query.ilike('type_de_bien', `%${filters.typeBien}%`);
+            }
+            if (filters.disponible) {
+                query = query.eq('disponible', true);
+            }
+            if (filters.search) {
+                const s = filters.search;
+                query = query.or(`commune.ilike.%${s}%,type_de_bien.ilike.%${s}%,quartier.ilike.%${s}%`);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+
+            const transformed = (data || []).map(p => {
+                const isDispo = p.disponible !== false && !(typeof p.disponible === 'string' && p.disponible.toLowerCase() === 'non');
+                const isMeuble = (p.meubles && typeof p.meubles === 'string' && p.meubles.toLowerCase() === 'oui') || p.meubles === true;
+                const rawPrice = this.parsePrice(p.prix || '0');
+                return {
+                    id: p.id,
+                    refBien: p.ref_bien || '',
+                    publicationId: p.publication_id || '',
+                    contentHash: p.content_hash || '',
+                    typeBien: this.normalizePropertyType(p.type_de_bien),
+                    typeOffre: p.type_offre || '',
+                    zone: p.zone_geographique || '',
+                    commune: p.commune || '',
+                    quartier: p.quartier || '',
+                    locationLabel: [p.commune, p.quartier].filter(Boolean).join(' - ') || p.zone_geographique || '',
+                    prix: p.prix || '0',
+                    rawPrice,
+                    telephoneBien: p.telephone_bien || p.telephone || '',
+                    telephoneExpediteur: p.telephone_expediteur || p.telephone || '',
+                    telephone: p.telephone || '',
+                    message_initial: p.message_initial || '',
+                    caracteristiques: p.caracteristiques || '',
+                    description: p.message_initial || p.caracteristiques || '',
+                    features: p.caracteristiques ? p.caracteristiques.split(/,|\||\n/).map(s => s.trim()) : [],
+                    publiePar: p.publie_par || '',
+                    expediteur: p.expediteur || '',
+                    surface: p.surface || '',
+                    meubles: p.meubles || 'Non',
+                    meuble: isMeuble,
+                    chambre: p.chambre || 0,
+                    chambres: parseInt(p.chambre) || 0,
+                    disponible: isDispo,
+                    groupeWhatsApp: p.groupe_whatsapp_origine || '',
+                    imageUrl: p.lien_image || '',
+                    datePublication: this.formatDateShort(p.date_publication),
+                    datePublicationRaw: p.date_publication || null,
+                    status: isDispo ? 'Disponible' : 'Occupé',
+                    prixFormate: this.formatPrice(rawPrice, p.message_initial || p.caracteristiques),
+                    dateExpiration: p.date_expiration || null,
+                    renewalStatus: p.status || 'active',
+                    relanceCount: p.relance_count || 0,
+                    lastRelanceDate: p.date_derniere_relance || null
+                };
+            });
+
+            // Exclude demand-type entries (misclassified by AI)
+            const filtered = transformed.filter(p => !_isDemand(p.description));
+
+            // Enrich with images from `images` table — safe fallback if it fails
+            let enriched = filtered;
+            try {
+                const isPermanentUrl = (url) => url && !url.includes('wasenderapi.com/decrypted-media');
+                const lookupKeys = filtered.map(p => p.publicationId || String(p.id)).filter(Boolean);
+                const imagesMap = lookupKeys.length > 0 ? await this.getImagesForPublications(lookupKeys) : {};
+                enriched = filtered.map(p => {
+                    const lookupKey = p.publicationId || String(p.id);
+                    const linkedImages = imagesMap[lookupKey] || [];
+                    const validImages = linkedImages.filter(i => isPermanentUrl(i.lien_thumb || i.lien_image));
+                    const extraUrls = validImages.map(i => i.lien_thumb || i.lien_image).filter(Boolean);
+                    const primaryUrl = isPermanentUrl(p.imageUrl) ? p.imageUrl : '';
+                    return {
+                        ...p,
+                        images: validImages,
+                        imageUrls: extraUrls,
+                        imageUrl: primaryUrl || extraUrls[0] || '',
+                        photoCount: validImages.length || (primaryUrl ? 1 : 0),
+                    };
+                });
+            } catch (imgErr) {
+                console.warn('Image enrichment skipped in filtered path:', imgErr.message);
+            }
+
+            return { success: true, data: enriched, source: 'supabase_filtered' };
+        } catch (error) {
+            console.error('_getPropertiesFiltered Error:', error);
+            return { success: false, error: this._getErrorMessage(error), data: [] };
+        }
     }
 
     async getImagesProperties(forceRefresh = false) {
@@ -721,6 +859,32 @@ class SupabaseService {
         }
     }
 
+    async createVisit(visitData) {
+        try {
+            const payload = {
+                nom_prenom: visitData.nomPrenom,
+                numero: visitData.numero,
+                date_rv: visitData.dateRv,
+                local_interesse: visitData.localInteresse || '',
+                ref_bien: visitData.refBien || '',
+                visite_prog: visitData.visiteProg || false,
+                created_at: new Date().toISOString()
+            };
+
+            const { data, error } = await supabase
+                .from('visite_programmee')
+                .insert([payload])
+                .select();
+
+            if (error) throw error;
+            this._invalidate('visits');
+            return { success: true, data: data[0] };
+        } catch (error) {
+            console.error('createVisit Error:', error);
+            return { success: false, error: this._getErrorMessage(error) };
+        }
+    }
+
     async getPipeline(forceRefresh = false) {
         try {
             const visitsRes = await this.getVisits();
@@ -755,81 +919,89 @@ class SupabaseService {
     }
 
     async getClients(forceRefresh = false) {
-        // Logic reused from getVisits + aggregation locally
-        // (Similar to googleSheetsApi version)
+        // Direct query selecting only needed columns — avoids N+1 pattern.
+        // Groups visits by client phone/name client-side (unavoidable without RPC).
         try {
-            const visitsRes = await this.getVisits();
-            if (!visitsRes.success) return { success: false, data: [] };
+            const { data, error } = await supabase
+                .from('visite_programmee')
+                .select('nom_prenom, numero, date_rv, local_interesse, ref_bien, visite_prog')
+                .order('date_rv', { ascending: false });
 
-            const visits = visitsRes.data;
-            const clientsMap = new Map();
+            if (error) throw error;
 
-            visits.forEach(visit => {
-                if (!visit.nomPrenom) return;
+            const clientMap = {};
+            for (const visit of data || []) {
+                if (!visit.nom_prenom) continue;
                 const cleanPhone = visit.numero ? visit.numero.replace(/\s/g, '').replace(/-/g, '') : '';
-                const key = cleanPhone || visit.nomPrenom.toLowerCase().trim();
+                const key = cleanPhone || visit.nom_prenom.toLowerCase().trim();
 
-                if (!clientsMap.has(key)) {
-                    clientsMap.set(key, {
-                        nomPrenom: visit.nomPrenom,
+                if (!clientMap[key]) {
+                    clientMap[key] = {
+                        nomPrenom: visit.nom_prenom,
                         numero: visit.numero,
                         totalVisites: 0,
                         visitesConfirmees: 0,
-                        zonesInteret: new Set(),
-                        biensInteret: new Set(),  // NEW: track interested property refs
-                        visites: [],
-                        premiereVisite: null,
                         derniereVisite: null,
-                        statut: 'Nouveau'
-                    });
+                        premiereVisite: null,
+                        zonesInteret: new Set(),
+                        biensInteret: new Set(),
+                        visites: [],
+                    };
                 }
-                const client = clientsMap.get(key);
+                const client = clientMap[key];
+                const isScheduled = (visit.visite_prog && typeof visit.visite_prog === 'string' && visit.visite_prog.toLowerCase() === 'oui') || visit.visite_prog === true;
+
                 client.totalVisites++;
-                if (visit.visiteProg) client.visitesConfirmees++;
-                if (visit.localInteresse) client.zonesInteret.add(visit.localInteresse.split(',')[0].trim());
-                if (visit.refBien) client.biensInteret.add(visit.refBien);  // NEW: track by ref_bien
-                client.visites.push(visit);
+                if (isScheduled) client.visitesConfirmees++;
+                if (visit.local_interesse) client.zonesInteret.add(visit.local_interesse.split(',')[0].trim());
+                if (visit.ref_bien) client.biensInteret.add(visit.ref_bien);
 
-                const vDate = visit.parsedDate;
-                if (vDate) {
-                    if (!client.premiereVisite || vDate < client.premiereVisite) client.premiereVisite = vDate;
-                    if (!client.derniereVisite || vDate > client.derniereVisite) client.derniereVisite = vDate;
+                const vDate = visit.date_rv ? new Date(visit.date_rv) : null;
+                const validDate = vDate && !isNaN(vDate.getTime()) ? vDate : null;
+                if (validDate) {
+                    if (!client.premiereVisite || validDate < client.premiereVisite) client.premiereVisite = validDate;
+                    if (!client.derniereVisite || validDate > client.derniereVisite) client.derniereVisite = validDate;
                 }
-            });
 
-            // Status logic
-            const clients = Array.from(clientsMap.values()).map((c, idx) => {
+                client.visites.push({
+                    nomPrenom: visit.nom_prenom,
+                    numero: visit.numero,
+                    dateRv: visit.date_rv,
+                    localInteresse: visit.local_interesse || '',
+                    refBien: visit.ref_bien || '',
+                    visiteProg: isScheduled,
+                    parsedDate: validDate,
+                });
+            }
+
+            const clients = Object.values(clientMap).map((c, idx) => {
                 let statut = 'Nouveau';
                 if (c.visitesConfirmees > 0 || c.totalVisites > 2) statut = 'Actif';
-
                 if (c.derniereVisite) {
                     const threeMonthsAgo = new Date();
                     threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
                     if (c.derniereVisite < threeMonthsAgo) statut = 'Inactif';
                 }
-
                 return {
                     id: idx + 1,
                     nomPrenom: c.nomPrenom,
                     numero: c.numero,
-                    statut: statut,
+                    statut,
                     totalVisites: c.totalVisites,
                     visitesConfirmees: c.visitesConfirmees,
                     zonesInteret: Array.from(c.zonesInteret),
-                    biensInteret: Array.from(c.biensInteret),  // NEW: list of interested property refs
+                    biensInteret: Array.from(c.biensInteret),
                     visites: c.visites,
                     premiereVisite: c.premiereVisite,
-                    derniereVisite: c.derniereVisite
+                    derniereVisite: c.derniereVisite,
                 };
             });
 
             clients.sort((a, b) => (b.derniereVisite || 0) - (a.derniereVisite || 0));
             return { success: true, data: clients };
-
         } catch (error) {
             console.error('Supabase Clients Error:', error);
-            const errorMessage = this._getErrorMessage(error);
-            return { success: false, error: errorMessage, data: [] };
+            return { success: false, error: this._getErrorMessage(error), data: [] };
         }
     }
 
@@ -1001,6 +1173,16 @@ class SupabaseService {
     }
 
     // === AUTH ===
+
+    // Fixed app secret used for token checksum — not a full crypto HMAC, but prevents trivial tampering.
+    _tokenSalt() { return 'immo2026'; }
+
+    _makeToken(payload) {
+        const salt = this._tokenSalt();
+        const checksum = btoa(JSON.stringify(payload) + salt).slice(-8);
+        return btoa(JSON.stringify({ ...payload, cs: checksum }));
+    }
+
     async login(email, password) {
         // Fallback legacy login for smooth transition
         const validUsers = [
@@ -1010,17 +1192,23 @@ class SupabaseService {
         ];
         const user = validUsers.find(u => u.email === email && u.password === password);
         if (user) {
-            const token = btoa(JSON.stringify({ email: user.email, role: user.role, exp: Date.now() + 86400000 }));
+            const payload = { email: user.email, role: user.role, exp: Date.now() + 86400000 };
+            const token = this._makeToken(payload);
             return { success: true, token, user: { name: user.name, email: user.email, role: user.role, avatar: user.avatar } };
         }
         return { success: false, error: 'Email ou mot de passe incorrect' };
     }
 
+    // Returns the decoded payload if the token is valid and unexpired, or null otherwise.
     validateToken(token) {
         try {
-            const payload = JSON.parse(atob(token));
-            return payload.exp > Date.now();
-        } catch { return false; }
+            const decoded = JSON.parse(atob(token));
+            if (!decoded || decoded.exp < Date.now()) return null; // missing or expired
+            const { cs, ...payload } = decoded;
+            const expectedCs = btoa(JSON.stringify(payload) + this._tokenSalt()).slice(-8);
+            if (cs !== expectedCs) return null; // tampered
+            return payload;
+        } catch { return null; }
     }
 
     getToken() { return localStorage.getItem('auth_token'); }
@@ -1055,6 +1243,20 @@ class SupabaseService {
         if (this.pollingInterval) clearInterval(this.pollingInterval);
     }
 
+    // Realtime subscription on locaux — triggers 'newProperty' event for live catalog sync
+    subscribeToNewProperties(callback) {
+        const channel = supabase
+            .channel('locaux-catalogue')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'locaux' }, (payload) => {
+                console.log('[Realtime] Nouveau bien:', payload.new?.ref_bien);
+                // Invalidate cache so next getProperties() fetches fresh data
+                delete this._cache['properties'];
+                if (callback) callback(payload.new);
+            })
+            .subscribe();
+        return () => supabase.removeChannel(channel);
+    }
+
     async pollData() {
         // Fetch new data and notify listeners 'dataUpdate'
         try {
@@ -1070,6 +1272,31 @@ class SupabaseService {
                 });
             }
         } catch (e) { console.error("Poll error", e); }
+    }
+
+    /**
+     * Manually refresh all core data sources (force-bypass cache).
+     * Returns a combined result object.
+     */
+    async refreshData() {
+        try {
+            const [properties, visits, stats] = await Promise.all([
+                this.getProperties(true),
+                this.getVisits(true),
+                this.getStats(true),
+            ]);
+            if (properties.success && visits.success) {
+                this.notifyListeners('dataUpdate', {
+                    properties: properties.data,
+                    visits: visits.data,
+                    stats: stats?.data,
+                });
+            }
+            return { success: true };
+        } catch (e) {
+            console.error('refreshData error', e);
+            return { success: false, error: e.message };
+        }
     }
 }
 

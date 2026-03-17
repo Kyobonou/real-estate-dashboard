@@ -145,10 +145,51 @@ const ExpiringProperties = () => {
                 <div className="properties-header">
                     <div className="header-left">
                         <h2><AlertCircle size={28} style={{ marginRight: '0.75rem' }} />Annonces à Renouveler</h2>
+                        <Skeleton width="80px" height="22px" style={{ borderRadius: '999px' }} />
                     </div>
+                    <Skeleton width="120px" height="38px" style={{ borderRadius: '8px' }} />
                 </div>
+                {/* Filter pills skeleton */}
+                <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                    {[100, 160, 140].map((w, i) => (
+                        <Skeleton key={i} width={`${w}px`} height="32px" style={{ borderRadius: '999px' }} />
+                    ))}
+                </div>
+                {/* Card skeletons */}
                 <div style={{ display: 'grid', gap: '1rem' }}>
-                    {[1, 2, 3].map(i => <Skeleton key={i} height={140} />)}
+                    {Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} style={{
+                            background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-subtle)',
+                            borderRadius: 'var(--radius-md)',
+                            padding: '1rem 1.25rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.75rem',
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <Skeleton width="56px" height="22px" style={{ borderRadius: '4px' }} />
+                                <Skeleton width="140px" height="16px" />
+                                <Skeleton width="80px" height="16px" style={{ marginLeft: 'auto' }} />
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    <Skeleton width="55%" height="22px" />
+                                    <Skeleton width="40%" height="16px" />
+                                    <Skeleton width="70%" height="14px" />
+                                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                                        <Skeleton width="60px" height="22px" style={{ borderRadius: '999px' }} />
+                                        <Skeleton width="80px" height="22px" style={{ borderRadius: '999px' }} />
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '110px' }}>
+                                    <Skeleton width="110px" height="34px" style={{ borderRadius: '8px' }} />
+                                    <Skeleton width="110px" height="34px" style={{ borderRadius: '8px' }} />
+                                    <Skeleton width="110px" height="34px" style={{ borderRadius: '8px' }} />
+                                </div>
+                            </div>
+                        </div>
+                    ))}
                 </div>
             </div>
         );
